@@ -23,7 +23,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Bump version
+      - name: Prepare version
         run: |
           if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
             echo "::error::Invalid version '$VERSION'. Must be a valid semver string (e.g. 0.1.0)."
@@ -32,16 +32,7 @@ jobs:
           sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" package.json
           sed -i '' "s/^version = .*/version = \"$VERSION\"/" src-tauri/Cargo.toml
           sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
-          git config user.email "${{ github.actor }}@users.noreply.github.com"
-          git config user.name "${{ github.actor }}"
-          git commit -am "Bump v$VERSION"
-          git push origin "${{ github.ref_name }}"
-          echo "version bumped to $VERSION"
-
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref_name }}
-          fetch-depth: 0
+          echo "version prepared to $VERSION"
 
       - name: Install bun
         uses: oven-sh/setup-bun@v2
@@ -78,3 +69,13 @@ jobs:
           releaseBody: "See the assets to download and install this version. See CHANGELOG or release notes for details."
           releaseDraft: true
           prerelease: false
+
+      - name: Commit version
+        if: success()
+        run: |
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git config user.name "${{ github.actor }}"
+          git add package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json
+          git commit -m "Bump v$VERSION"
+          git push origin "${{ github.ref_name }}"
+          echo "version committed as v$VERSION"
