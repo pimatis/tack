@@ -7,6 +7,7 @@ on:
         description: "Release version to build (e.g. 0.2.0). Tag will be v{VERSION}."
         required: true
         type: string
+        default: "0.1.0"
 
 env:
   VERSION: ${{ github.event.inputs.version }}
@@ -32,6 +33,10 @@ jobs:
 
       - name: Sync version
         run: |
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Invalid version '$VERSION'. Must be a valid semver string (e.g. 0.1.0)."
+            exit 1
+          fi
           sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" package.json
           sed -i '' "s/^version = .*/version = \"$VERSION\"/" src-tauri/Cargo.toml
           sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
