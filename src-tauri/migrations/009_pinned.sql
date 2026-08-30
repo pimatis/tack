@@ -1,0 +1,2 @@
+-- pinned tasks
+ALTER TABLE tasks ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;

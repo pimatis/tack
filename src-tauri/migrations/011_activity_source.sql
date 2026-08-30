@@ -1,0 +1,1 @@
+ALTER TABLE activity_log ADD COLUMN source TEXT NOT NULL DEFAULT 'gui';

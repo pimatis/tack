@@ -1,0 +1,399 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn-svelte/tailwind.css';
+
+/* local SF Pro Display (self-hosted, keeps @import ordering valid) */
+@font-face {
+	font-family: 'SF Pro Display';
+	font-style: normal;
+	font-weight: 400;
+	src: local('SF Pro Display'), url('/fonts/SFPRODISPLAYREGULAR.woff') format('woff');
+}
+@font-face {
+	font-family: 'SF Pro Display';
+	font-style: normal;
+	font-weight: 500;
+	src: local('SF Pro Display'), url('/fonts/SFPRODISPLAYMEDIUM.woff') format('woff');
+}
+@font-face {
+	font-family: 'SF Pro Display';
+	font-style: italic;
+	font-weight: 600;
+	src: local('SF Pro Display'), url('/fonts/SFPRODISPLAYSEMIBOLDITALIC.woff') format('woff');
+}
+@font-face {
+	font-family: 'SF Pro Display';
+	font-style: normal;
+	font-weight: 700;
+	src: local('SF Pro Display'), url('/fonts/SFPRODISPLAYBOLD.woff') format('woff');
+}
+
+@custom-variant dark (&:is(.dark *));
+@plugin '@tailwindcss/typography';
+
+/* shared */
+:root {
+	font-family: 'SF Pro Display', sans-serif;
+	--radius: 0.75rem;
+	--shadow-x: 0px;
+	--shadow-y: 1px;
+	--shadow-blur: 2px;
+	--shadow-spread: 0px;
+	--shadow-opacity: 0.06;
+	--shadow-color: #000000;
+	--shadow-2xs: 0px 1px 2px 0px hsl(0 0% 0% / 0.03);
+	--shadow-xs: 0px 1px 2px 0px hsl(0 0% 0% / 0.03);
+	--shadow-sm: 0px 1px 2px 0px hsl(0 0% 0% / 0.05), 0px 1px 1px -1px hsl(0 0% 0% / 0.05);
+	--shadow: 0px 1px 2px 0px hsl(0 0% 0% / 0.05), 0px 1px 1px -1px hsl(0 0% 0% / 0.05);
+	--shadow-md: 0px 1px 2px 0px hsl(0 0% 0% / 0.06), 0px 1px 3px -1px hsl(0 0% 0% / 0.06);
+	--shadow-lg: 0px 1px 2px 0px hsl(0 0% 0% / 0.06), 0px 2px 4px -1px hsl(0 0% 0% / 0.06);
+	--shadow-xl: 0px 1px 3px 0px hsl(0 0% 0% / 0.06), 0px 4px 6px -1px hsl(0 0% 0% / 0.06);
+	--shadow-2xl: 0px 1px 3px 0px hsl(0 0% 0% / 0.15);
+	--tracking-normal: 0em;
+	--spacing: 0.28rem;
+
+	/* light theme */
+	--background: oklch(0.98 0 0);
+	--foreground: oklch(0.149 0 0);
+	--card: oklch(1 0 0);
+	--card-foreground: oklch(0.149 0 0);
+	--popover: oklch(1 0 0);
+	--popover-foreground: oklch(0.149 0 0);
+	--primary: oklch(0.149 0 0);
+	--primary-foreground: oklch(0.985 0 0);
+	--secondary: oklch(0.96 0 0);
+	--secondary-foreground: oklch(0.149 0 0);
+	--muted: oklch(0.96 0 0);
+	--muted-foreground: oklch(0.55 0 0);
+	--accent: oklch(0.96 0 0);
+	--accent-foreground: oklch(0.149 0 0);
+	--destructive: oklch(0.6293 0.2199 24.8413);
+	--destructive-foreground: oklch(0.985 0 0);
+	--border: oklch(0.92 0 0);
+	--input: oklch(0.92 0 0);
+	--chart-1: oklch(0.25 0 0);
+	--chart-2: oklch(0.35 0 0);
+	--chart-3: oklch(0.45 0 0);
+	--chart-4: oklch(0.55 0 0);
+	--chart-5: oklch(0.65 0 0);
+	--sidebar: oklch(0.97 0 0);
+	--sidebar-foreground: oklch(0.149 0 0);
+	--sidebar-primary: oklch(0.149 0 0);
+	--sidebar-primary-foreground: oklch(0.985 0 0);
+	--sidebar-accent: oklch(0.95 0 0);
+	--sidebar-accent-foreground: oklch(0.149 0 0);
+	--sidebar-border: oklch(0.92 0 0);
+}
+
+/* dark theme */
+.dark {
+	--background: oklch(0.149 0 0);
+	--foreground: oklch(0.985 0 0);
+	--card: oklch(0.17 0 0);
+	--card-foreground: oklch(0.985 0 0);
+	--popover: oklch(0.17 0 0);
+	--popover-foreground: oklch(0.985 0 0);
+	--primary: oklch(0.985 0 0);
+	--primary-foreground: oklch(0.149 0 0);
+	--secondary: oklch(0.22 0 0);
+	--secondary-foreground: oklch(0.985 0 0);
+	--muted: oklch(0.18 0 0);
+	--muted-foreground: oklch(0.7 0 0);
+	--accent: oklch(0.22 0 0);
+	--accent-foreground: oklch(0.985 0 0);
+	--destructive: oklch(0.6293 0.2199 24.8413);
+	--destructive-foreground: oklch(0.985 0 0);
+	--border: oklch(0.27 0 0);
+	--input: oklch(0.27 0 0);
+	--chart-1: oklch(0.7508 0 0);
+	--chart-2: oklch(0.65 0 0);
+	--chart-3: oklch(0.5486 0 0);
+	--chart-4: oklch(0.4495 0 0);
+	--chart-5: oklch(0.3485 0 0);
+	--sidebar: oklch(0.14 0 0);
+	--sidebar-foreground: oklch(0.985 0 0);
+	--sidebar-primary: oklch(0.985 0 0);
+	--sidebar-primary-foreground: oklch(0.149 0 0);
+	--sidebar-accent: oklch(0.22 0 0);
+	--sidebar-accent-foreground: oklch(0.985 0 0);
+	--sidebar-border: oklch(0.27 0 0);
+}
+
+@theme inline {
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-chart-1: var(--chart-1);
+	--color-chart-2: var(--chart-2);
+	--color-chart-3: var(--chart-3);
+	--color-chart-4: var(--chart-4);
+	--color-chart-5: var(--chart-5);
+	--color-sidebar: var(--sidebar);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-border: var(--sidebar-border);
+
+	--font-sans: var(--font-sans);
+	--font-mono: var(--font-mono);
+	--font-serif: var(--font-serif);
+
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) + 4px);
+
+	--shadow-2xs: var(--shadow-2xs);
+	--shadow-xs: var(--shadow-xs);
+	--shadow-sm: var(--shadow-sm);
+	--shadow: var(--shadow);
+	--shadow-md: var(--shadow-md);
+	--shadow-lg: var(--shadow-lg);
+	--shadow-xl: var(--shadow-xl);
+	--shadow-2xl: var(--shadow-2xl);
+}
+
+@layer base {
+	* {
+		@apply border-border;
+	}
+
+	/* no native browser focus rings anywhere */
+	:focus,
+	:focus-visible {
+		outline: none;
+	}
+	button:focus-visible,
+	[role='button']:focus-visible,
+	a:focus-visible,
+	input:focus-visible,
+	textarea:focus-visible,
+	select:focus-visible,
+	summary:focus-visible,
+	[tabindex]:focus-visible {
+		outline: none;
+		box-shadow: none;
+	}
+
+	body {
+		@apply bg-background text-foreground;
+	}
+}
+
+@layer components {
+	.prose {
+		@apply text-[13px] leading-relaxed text-foreground/80;
+	}
+	.prose h1 {
+		@apply mt-4 mb-2 text-[18px] font-semibold text-foreground;
+	}
+	.prose h2 {
+		@apply mt-3 mb-1.5 text-[16px] font-semibold text-foreground;
+	}
+	.prose h3 {
+		@apply mt-3 mb-1 text-[14px] font-semibold text-foreground;
+	}
+	.prose h4 {
+		@apply mt-2 mb-1 text-[13px] font-semibold text-foreground;
+	}
+	.prose h5 {
+		@apply mt-2 mb-1 text-[13px] font-medium text-foreground;
+	}
+	.prose h6 {
+		@apply mt-2 mb-1 text-[12px] font-medium text-muted-foreground;
+	}
+	.prose p {
+		@apply my-2;
+	}
+	.prose ul {
+		@apply my-2 list-disc space-y-1 pl-5;
+	}
+	.prose ol {
+		@apply my-2 list-decimal space-y-1 pl-5;
+	}
+	.prose li {
+		@apply text-[13px] text-foreground/80;
+	}
+	.prose a {
+		@apply text-foreground underline decoration-foreground/30 underline-offset-2 transition-colors hover:decoration-foreground/60;
+	}
+	.prose strong {
+		@apply font-semibold text-foreground;
+	}
+	.prose em {
+		@apply italic;
+	}
+	.prose del {
+		@apply text-muted-foreground line-through;
+	}
+	.prose code {
+		@apply rounded bg-muted/50 px-1.5 py-0.5 font-mono text-[12px] text-foreground/90;
+	}
+	.prose pre {
+		@apply my-3 overflow-x-auto rounded-lg border border-border bg-muted/30 p-3;
+	}
+	.prose pre code {
+		@apply bg-transparent p-0 text-[12px] text-foreground/80;
+	}
+	.prose blockquote {
+		@apply my-2 border-l-2 border-border pl-3 text-muted-foreground italic;
+	}
+	.prose hr {
+		@apply my-3 border-border;
+	}
+}
+
+/* === drag and drop visual feedback === */
+
+/* floating ghost preview - follows cursor during drag */
+.dnd-ghost {
+	font-family: 'SF Pro Display', sans-serif;
+	font-size: 13px;
+	color: var(--foreground);
+	line-height: 1.5;
+}
+
+.dnd-ghost * {
+	pointer-events: none !important;
+}
+
+/* dragged item - ghost state: dimmed, blurred, clearly "not active" */
+.dragging,
+.svelte-dnd-dragging {
+	opacity: 0.22;
+	cursor: grabbing;
+	filter: blur(2px) grayscale(60%);
+	transition:
+		opacity 100ms ease-out,
+		filter 100ms ease-out;
+	will-change: opacity, filter;
+}
+
+/* drop zone - subtle primary tint with inner glow when hovered */
+.drag-over {
+	background-color: color-mix(in oklch, var(--primary) 6%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--primary) 12%, transparent);
+	transition:
+		background-color 80ms ease-out,
+		box-shadow 80ms ease-out;
+}
+
+/* override library's aggressive default outlines */
+.svelte-dnd-drop-target,
+.svelte-dnd-invalid-target {
+	outline: none;
+}
+
+.svelte-dnd-placeholder {
+	border: 1.5px dashed var(--border);
+	border-radius: var(--radius-sm);
+	opacity: 0.5;
+}
+
+/* ensure positioning context for pseudo-element indicators */
+.drop-before,
+.drop-after,
+.drop-left,
+.drop-right,
+.svelte-dnd-droppable {
+	position: relative;
+}
+
+/* drop position indicator - dashed line showing exact insertion point */
+.drop-before::before,
+.drop-after::after {
+	content: '';
+	position: absolute;
+	left: 6px;
+	right: 6px;
+	height: 2px;
+	background-color: transparent !important;
+	background-image: repeating-linear-gradient(
+		90deg,
+		var(--primary) 0,
+		var(--primary) 4px,
+		transparent 4px,
+		transparent 8px
+	);
+	border-radius: 0 !important;
+	opacity: 0.9;
+	z-index: 20;
+	pointer-events: none;
+	box-shadow: 0 0 8px color-mix(in oklch, var(--primary) 30%, transparent);
+}
+
+.drop-before::before {
+	top: -1px;
+}
+
+.drop-after::after {
+	bottom: -1px;
+}
+
+/* horizontal drop indicators - same dashed style, vertical orientation */
+.drop-left::before,
+.drop-right::after {
+	content: '';
+	position: absolute;
+	top: 6px;
+	bottom: 6px;
+	width: 2px;
+	background-color: transparent !important;
+	background-image: repeating-linear-gradient(
+		0deg,
+		var(--primary) 0,
+		var(--primary) 4px,
+		transparent 4px,
+		transparent 8px
+	);
+	border-radius: 0 !important;
+	opacity: 0.9;
+	z-index: 20;
+	pointer-events: none;
+	box-shadow: 0 0 8px color-mix(in oklch, var(--primary) 30%, transparent);
+}
+
+.drop-left::before {
+	left: -1px;
+}
+
+.drop-right::after {
+	right: -1px;
+}
+
+/* grab cursor for draggable elements */
+.svelte-dnd-draggable,
+.svelte-dnd-touch-feedback {
+	cursor: grab;
+	touch-action: none;
+	user-select: none;
+}
+
+.svelte-dnd-draggable:active {
+	cursor: grabbing;
+}
+
+/* prevent text selection and enforce grabbing cursor during drag */
+.dnd-active,
+.dnd-active * {
+	user-select: none !important;
+	-webkit-user-select: none !important;
+	cursor: grabbing !important;
+}
