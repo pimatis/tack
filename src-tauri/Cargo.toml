@@ -1,3 +1,6 @@
+[workspace]
+members = ["cli"]
+
 [package]
 name = "tack"
 version = "0.1.2"
@@ -18,10 +21,6 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [[bin]]
 name = "tack-app"
 path = "src/main.rs"
-
-[[bin]]
-name = "tack"
-path = "src/cli/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

@@ -4682,7 +4682,7 @@ dependencies = [
 
 [[package]]
 name = "tack"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -4700,6 +4700,20 @@ dependencies = [
  "tauri-plugin-sql",
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
+ "uuid",
+]
+
+[[package]]
+name = "tack-cli"
+version = "0.1.2"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "clap",
+ "dirs 5.0.1",
+ "rusqlite",
+ "serde",
+ "serde_json",
  "uuid",
 ]
 

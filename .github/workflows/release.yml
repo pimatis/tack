@@ -32,6 +32,7 @@ jobs:
           fi
           sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" package.json
           sed -i '' "s/^version = .*/version = \"$VERSION\"/" src-tauri/Cargo.toml
+          sed -i '' "s/^version = .*/version = \"$VERSION\"/" src-tauri/cli/Cargo.toml
           sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
           echo "version prepared to $VERSION"
 
@@ -52,10 +53,9 @@ jobs:
 
       - name: Build CLI sidecar
         run: |
-          cd src-tauri
-          cargo build --bin tack --release --target "$TARGET"
-          mkdir -p bin
-          cp "target/$TARGET/release/tack" "bin/tack-cli-$TARGET"
+          cargo build --manifest-path src-tauri/cli/Cargo.toml --release --target "$TARGET"
+          mkdir -p src-tauri/bin
+          cp "src-tauri/target/$TARGET/release/tack" "src-tauri/bin/tack-cli-$TARGET"
 
       - name: Install frontend dependencies
         run: bun install
@@ -79,7 +79,7 @@ jobs:
         run: |
           git config user.email "${{ github.actor }}@users.noreply.github.com"
           git config user.name "${{ github.actor }}"
-          git add package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json
+          git add package.json src-tauri/Cargo.toml src-tauri/cli/Cargo.toml src-tauri/tauri.conf.json
           git commit -m "Bump v$VERSION"
           git push origin "${{ github.ref_name }}"
           echo "version committed as v$VERSION"
