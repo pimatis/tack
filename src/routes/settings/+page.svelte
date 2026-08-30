@@ -16,6 +16,7 @@
 	import BackupSection from '../../components/settings/BackupSection.svelte';
 	import ShortcutsSection from '../../components/settings/ShortcutsSection.svelte';
 	import WorkspaceSection from '../../components/settings/WorkspaceSection.svelte';
+	import CliSection from '../../components/settings/CliSection.svelte';
 
 	let settings = $state<Settings>(getSettings());
 	let stats = $state({ projects: 0, tasks: 0, done: 0, labels: 0 });
@@ -119,8 +120,9 @@
 					<ShortcutsSection />
 				</Tabs.Content>
 
-				<Tabs.Content value="workspace" class="mt-6">
+				<Tabs.Content value="workspace" class="mt-6 space-y-6">
 					<WorkspaceSection {stats} />
+					<CliSection />
 				</Tabs.Content>
 			</Tabs.Root>
 
