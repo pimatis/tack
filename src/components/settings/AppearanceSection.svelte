@@ -57,17 +57,6 @@
 
 <Separator />
 
-<!-- compact mode -->
-<div class="flex items-center justify-between">
-	<div>
-		<p class="text-[13px] font-medium">Compact mode</p>
-		<p class="text-xs text-muted-foreground">Reduce row padding for denser task lists</p>
-	</div>
-	<Switch checked={settings.compactMode} onCheckedChange={(v) => update('compactMode', v)} />
-</div>
-
-<Separator />
-
 <!-- default view mode -->
 <div class="flex items-center justify-between">
 	<div>

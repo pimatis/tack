@@ -189,7 +189,6 @@ pub fn restore_backup(db_path: &Path, name: &str) -> Result<()> {
 
     // flush live wal into main db file before overwriting it
     if db_path.exists() {
-        // ponytail: checkpoint does not block concurrent sqlx writers, tiny race window
         // remains on the file copy; single-user desktop app keeps this acceptable
         let conn = open_conn(db_path)?;
         let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");

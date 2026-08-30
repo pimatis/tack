@@ -30,9 +30,14 @@ export const SHORTCUTS: ShortcutDefinition[] = [
 		keys: [{ key: 'n' }]
 	},
 	{
+		id: 'toggle-sidebar',
+		label: 'Toggle sidebar',
+		keys: [{ key: 'b', mod: metaOrCtrl }]
+	},
+	{
 		id: 'toggle-view',
 		label: 'Toggle list / board view',
-		keys: [{ key: 'b', mod: metaOrCtrl }]
+		keys: [{ key: '\\', mod: metaOrCtrl }]
 	},
 	{
 		id: 'select-all',

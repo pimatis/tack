@@ -7,6 +7,7 @@
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import MarkdownRenderer from './MarkdownRenderer.svelte';
+	import { normalizePrefix, isValidPrefix } from '$lib/prefix';
 
 	type Props = { open?: boolean; project: Project | null; onUpdated?: (project: Project) => void };
 	let { open = $bindable(false), project, onUpdated }: Props = $props();
@@ -37,9 +38,9 @@
 			error = 'Project name is required';
 			return;
 		}
-		const normalizedPrefix = prefix.trim().toUpperCase();
-		if (!/^[A-Z0-9]{2,10}$/.test(normalizedPrefix)) {
-			error = 'Prefix must be 2-10 letters or numbers';
+		const normalizedPrefix = normalizePrefix(prefix);
+		if (!isValidPrefix(normalizedPrefix)) {
+			error = 'Prefix must be 2-4 letters or numbers';
 			return;
 		}
 		submitting = true;
@@ -98,7 +99,7 @@
 					<Input
 						bind:value={prefix}
 						placeholder="WEB"
-						maxlength={10}
+						maxlength={4}
 						class="h-7 w-20 text-[12px] font-medium uppercase"
 					/>
 				</div>

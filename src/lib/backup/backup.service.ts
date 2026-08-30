@@ -31,7 +31,6 @@ export function deleteBackup(name: string): Promise<void> {
 	return invoke<void>('delete_backup', { name });
 }
 
-// ponytail: scheduler only runs while the app is open, missed intervals fire on next launch
 export async function runScheduledBackup(): Promise<string | null> {
 	const { backupEnabled, backupIntervalHours, backupKeepCount } = getSettings();
 	if (!backupEnabled) return null;

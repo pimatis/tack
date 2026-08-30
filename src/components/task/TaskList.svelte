@@ -15,7 +15,6 @@
 		appSettings,
 		labelMap,
 		selectedIds,
-		compactMode,
 		onToggleSelect,
 		onChangePriority,
 		onChangeStatus,
@@ -32,7 +31,6 @@
 		appSettings: Settings;
 		labelMap: Map<string, Label>;
 		selectedIds: Set<string>;
-		compactMode: boolean;
 		onToggleSelect: (taskId: string, shiftKey: boolean) => void;
 		onChangePriority: (task: Task, priority: TaskPriority) => void;
 		onChangeStatus: (task: Task, status: TaskStatus) => void;
@@ -66,7 +64,6 @@
 							{appSettings}
 							{labelMap}
 							{selectedIds}
-							{compactMode}
 							{onToggleSelect}
 							{onChangePriority}
 							{onChangeStatus}

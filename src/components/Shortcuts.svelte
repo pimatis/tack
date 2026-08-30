@@ -14,6 +14,10 @@
 		return false;
 	}
 
+	function anyModPressed(e: KeyboardEvent): boolean {
+		return e.metaKey || e.ctrlKey || e.altKey;
+	}
+
 	let behaviors = $state<ShortcutBehavior[]>([]);
 
 	const api = {
@@ -29,9 +33,11 @@
 
 	function handleKeydown(e: KeyboardEvent) {
 		for (const def of SHORTCUTS) {
-			const combo = def.keys.find(
-				(k) => k.key === e.key && modActive(e, k.mod) === (k.mod !== undefined)
-			);
+			const combo = def.keys.find((k) => {
+				if (k.key !== e.key) return false;
+				if (k.mod === undefined) return !anyModPressed(e);
+				return modActive(e, k.mod);
+			});
 			if (!combo) continue;
 			const matches = behaviors.filter((b) => b.id === def.id && (!b.enabled || b.enabled()));
 			if (matches.length === 0) continue;

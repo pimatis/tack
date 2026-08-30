@@ -7,6 +7,7 @@
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import MarkdownRenderer from './MarkdownRenderer.svelte';
+	import { generatePrefix, normalizePrefix, isValidPrefix } from '$lib/prefix';
 
 	type Props = {
 		open?: boolean;
@@ -22,8 +23,13 @@
 	let submitting = $state(false);
 	let nameRef = $state<HTMLInputElement | null>(null);
 
+	// auto-generate prefix from name
 	$effect(() => {
 		if (open) requestAnimationFrame(() => nameRef?.focus());
+	});
+
+	$effect(() => {
+		if (open) prefix = generatePrefix(name);
 	});
 
 	function reset() {
@@ -37,14 +43,14 @@
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
 		const trimmedName = name.trim();
-		const normalizedPrefix = prefix.trim().toUpperCase();
+		const normalizedPrefix = normalizePrefix(prefix);
 
 		if (!trimmedName) {
 			error = 'Project name is required';
 			return;
 		}
-		if (!/^[A-Z0-9]{2,10}$/.test(normalizedPrefix)) {
-			error = 'Prefix must be 2-10 letters or numbers';
+		if (!isValidPrefix(normalizedPrefix)) {
+			error = 'Prefix must be 2-4 letters or numbers';
 			return;
 		}
 
@@ -106,7 +112,8 @@
 					<Input
 						bind:value={prefix}
 						placeholder="WEB"
-						maxlength={10}
+						maxlength={4}
+						disabled
 						class="h-7 w-20 text-[12px] font-medium uppercase"
 					/>
 				</div>

@@ -12,6 +12,7 @@
 	import type { SidebarItemConfig, SidebarItemId } from '$lib/types/settings';
 	import { setSettings } from '$lib/stores/settings';
 	import { sortableItem, useDndActive, reorderArray, type DragDropState } from '$lib/dnd';
+	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as ContextMenu from '$lib/components/ui/context-menu/index.js';
@@ -275,6 +276,13 @@
 		void loadLabels();
 		void loadAllData();
 		void checkForUpdates();
+
+		const registry = getShortcutRegistry();
+		const unregisterToggleSidebar = registry?.register({
+			id: 'toggle-sidebar',
+			run: () => toggleSidebar()
+		});
+
 		return () => {
 			window.removeEventListener('projects-changed', refreshProjects);
 			window.removeEventListener('tasks-changed', refreshAll);
@@ -287,6 +295,7 @@
 			window.removeEventListener('filter-upcoming', setFilterActive);
 			window.removeEventListener('filter-overdue', setFilterActive);
 			window.removeEventListener('clear-filters', clearActiveState);
+			unregisterToggleSidebar?.();
 		};
 	});
 </script>
@@ -299,7 +308,7 @@
 	<!-- drag region for macOS traffic lights -->
 	<div class="h-7 shrink-0" data-tauri-drag-region></div>
 	<!-- header: workspace name + quick actions -->
-	<div class="flex h-12 shrink-0 items-center justify-between px-2.5">
+	<div class="flex h-12 shrink-0 items-center {settings?.sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-2.5'}">
 		{#if !settings?.sidebarCollapsed}
 			<div class="flex items-center gap-2">
 				<svg
@@ -328,7 +337,7 @@
 			<Button
 				variant="ghost"
 				size="icon-sm"
-				class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+				class="text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
 				onclick={toggleSidebar}
 				aria-label="Expand sidebar"
 			>
@@ -418,14 +427,19 @@
 
 	<ScrollArea class="min-h-0 flex-1">
 		<!-- home -->
-		<div class="px-1.5">
-			<a
+		<div class="{settings?.sidebarCollapsed ? 'flex justify-center px-0 mb-1' : 'px-1.5'}">
+			<Button
+				variant="ghost"
 				href="/"
-				class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-sidebar-foreground/90 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+				size={settings?.sidebarCollapsed ? 'icon-sm' : 'default'}
+				class={settings?.sidebarCollapsed
+					? 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground'
+					: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-foreground'}
 				onclick={(e) => {
 					e.preventDefault();
 					void goHomeThenDispatch('clear-filters');
 				}}
+				aria-label="Home"
 			>
 				<svg
 					class="shrink-0 text-muted-foreground"
@@ -439,7 +453,7 @@
 					/></svg
 				>
 				{#if !settings?.sidebarCollapsed}<span>Home</span>{/if}
-			</a>
+			</Button>
 		</div>
 
 		<!-- dynamic filter items (reorderable via settings) -->
@@ -786,12 +800,13 @@
 		{:else}
 			<!-- collapsed: show pinned only -->
 			{#if isItemVisible('pinned')}
-				<div class="px-1.5">
-					<button
-						type="button"
-						class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {pinnedActive
+				<div class="flex justify-center px-0">
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						class="text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground {pinnedActive
 							? 'bg-sidebar-accent text-sidebar-foreground'
-							: 'text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-foreground'}"
+							: ''}"
 						onclick={() => void goHomeThenDispatch('filter-pinned')}
 						aria-label="Pinned"
 					>
@@ -807,7 +822,7 @@
 								d="M16.735 2.835a2 2 0 0 0-2.615-.186l-2.913 2.185a9 9 0 0 1-4.127 1.71l-2.177.31c-.73.105-1.265.891-.913 1.662.331.723 1.385 2.629 4.36 5.72l-4.178 4.178a1 1 0 1 0 1.414 1.414l4.178-4.178c3.091 2.975 4.997 4.029 5.72 4.36.77.352 1.557-.183 1.661-.913l.311-2.177a9 9 0 0 1 1.71-4.127L21.35 9.88a2 2 0 0 0-.186-2.615z"
 							/>
 						</svg>
-					</button>
+					</Button>
 				</div>
 			{/if}
 		{/if}
@@ -982,7 +997,7 @@
 	{/if}
 
 	<!-- trash + settings -->
-	<div class="shrink-0 border-t border-sidebar-border/40 px-2 py-1.5">
+	<div class="shrink-0 border-t border-sidebar-border/40 {settings?.sidebarCollapsed ? 'px-0' : 'px-2'} py-1.5 {settings?.sidebarCollapsed ? 'flex flex-col items-center gap-1' : ''}">
 		{#if updateAvailable && !settings?.sidebarCollapsed}
 			<button
 				type="button"
@@ -998,9 +1013,14 @@
 				<span class="truncate">Update to {updateVersion} is available</span>
 			</button>
 		{/if}
-		<a
+		<Button
+			variant="ghost"
 			href="/trash"
-			class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-sidebar-foreground/90 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+			size={settings?.sidebarCollapsed ? 'icon-sm' : 'default'}
+			class={settings?.sidebarCollapsed
+				? 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground'
+				: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-foreground'}
+			aria-label="Trash"
 		>
 			<svg
 				class="shrink-0 text-muted-foreground"
@@ -1014,10 +1034,15 @@
 				/></svg
 			>
 			{#if !settings?.sidebarCollapsed}<span>Trash</span>{/if}
-		</a>
-		<a
+		</Button>
+		<Button
+			variant="ghost"
 			href="/settings"
-			class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-sidebar-foreground/90 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+			size={settings?.sidebarCollapsed ? 'icon-sm' : 'default'}
+			class={settings?.sidebarCollapsed
+				? 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground'
+				: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-foreground'}
+			aria-label="Settings"
 		>
 			<svg
 				class="shrink-0 text-muted-foreground"
@@ -1031,7 +1056,7 @@
 				/></svg
 			>
 			{#if !settings?.sidebarCollapsed}<span>Settings</span>{/if}
-		</a>
+		</Button>
 	</div>
 </aside>
 

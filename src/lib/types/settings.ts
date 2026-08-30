@@ -11,7 +11,6 @@ export type SidebarItemConfig = {
 export type Settings = {
 	theme: Theme;
 	sidebarCollapsed: boolean;
-	compactMode: boolean;
 	defaultViewMode: 'list' | 'board';
 	defaultStatus: 'todo' | 'in_progress';
 	defaultPriority: 0 | 1 | 2 | 3 | 4;
@@ -36,7 +35,6 @@ export const defaultSidebarItems: SidebarItemConfig[] = [
 export const defaultSettings: Settings = {
 	theme: 'dark',
 	sidebarCollapsed: false,
-	compactMode: false,
 	defaultViewMode: 'list',
 	defaultStatus: 'todo',
 	defaultPriority: 0,

@@ -114,7 +114,6 @@
 			appSettings={state.appSettings}
 			labelMap={state.labelMap}
 			selectedIds={state.selectedIds}
-			compactMode={state.appSettings.compactMode}
 			onToggleSelect={(id, shift) => state.toggleSelect(id, shift)}
 			onChangePriority={(t, p) => state.changePriority(t, p)}
 			onChangeStatus={(t, s) => state.changeStatus(t, s)}

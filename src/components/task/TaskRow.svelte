@@ -21,7 +21,6 @@
 		appSettings,
 		labelMap,
 		selectedIds,
-		compactMode,
 		onToggleSelect,
 		onChangePriority,
 		onChangeStatus,
@@ -36,7 +35,6 @@
 		appSettings: Settings;
 		labelMap: Map<string, Label>;
 		selectedIds: Set<string>;
-		compactMode: boolean;
 		onToggleSelect: (taskId: string, shiftKey: boolean) => void;
 		onChangePriority: (task: Task, priority: TaskPriority) => void;
 		onChangeStatus: (task: Task, status: TaskStatus) => void;
@@ -56,9 +54,7 @@
 				container: `list-${task.status}`,
 				onDrop: (state: DragDropState<Task>) => onListDrop(state, task)
 			}}
-			class="group/task -mx-2 flex items-center gap-2.5 rounded-lg px-2 {compactMode
-				? 'py-1'
-				: 'py-1.5'} cursor-grab transition-colors hover:bg-muted/40 active:cursor-grabbing {selectedIds.has(
+			class="group/task -mx-2 flex items-center gap-2.5 rounded-lg px-2 py-1.5 cursor-grab transition-colors hover:bg-muted/40 active:cursor-grabbing {selectedIds.has(
 				task.id
 			)
 				? 'bg-primary/8'

@@ -3,6 +3,7 @@
 	import { listen } from '@tauri-apps/api/event';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
+	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { getSettings, setSettings, applyTheme } from '$lib/stores/settings';
 	import type { Settings, Theme } from '$lib/types/settings';
 	import { findAll as findAllProjects } from '$lib/repositories/project.repository';
@@ -17,6 +18,7 @@
 	import ShortcutsSection from '../../components/settings/ShortcutsSection.svelte';
 	import WorkspaceSection from '../../components/settings/WorkspaceSection.svelte';
 	import CliSection from '../../components/settings/CliSection.svelte';
+	import AboutSection from '../../components/settings/AboutSection.svelte';
 
 	let settings = $state<Settings>(getSettings());
 	let stats = $state({ projects: 0, tasks: 0, done: 0, labels: 0 });
@@ -123,13 +125,15 @@
 				<Tabs.Content value="workspace" class="mt-6 space-y-6">
 					<WorkspaceSection {stats} />
 					<CliSection />
+					<Separator class="bg-border/40" />
+					<AboutSection {appVersion} />
 				</Tabs.Content>
 			</Tabs.Root>
 
 			<footer class="mt-8 flex items-center justify-between border-t border-border/60 pt-4">
 				<p class="text-xs text-muted-foreground">Tack</p>
 				<p class="text-xs text-muted-foreground">
-					{#if appVersion}version {appVersion}{:else}version …{/if}
+					{#if appVersion}Version {appVersion}{:else}Version ...{/if}
 				</p>
 			</footer>
 		</div>
