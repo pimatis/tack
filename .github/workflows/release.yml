@@ -9,6 +9,9 @@ on:
         type: string
         default: "0.1.0"
 
+permissions:
+  contents: write
+
 env:
   VERSION: ${{ github.event.inputs.version }}
 
