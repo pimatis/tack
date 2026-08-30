@@ -160,7 +160,7 @@ const PATH_CANDIDATES: [&str; 2] = ["/usr/local/bin", "/opt/homebrew/bin"];
 
 fn bundled_cli_bin(app: &tauri::AppHandle) -> Option<PathBuf> {
     let resource_dir = app.path().resource_dir().ok()?;
-    let cli_bin = resource_dir.join("tack");
+    let cli_bin = resource_dir.join("tack-cli");
     cli_bin.exists().then_some(cli_bin)
 }
 
