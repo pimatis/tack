@@ -992,10 +992,10 @@
 				<svg class="shrink-0 text-primary" width="14" height="14" viewBox="0 0 24 24" fill="none"
 					><path
 						fill="currentColor"
-						d="M8.94 2.48a1.5 1.5 0 0 1 2.5-.097l1.92 2.56a5 5 0 0 1 2.04 4.553l-.035.27 2.18-2.18a1.5 1.5 0 0 1 2.122 2.122l-5.586 5.585a1.5 1.5 0 0 1-2.122-2.122l2.18-2.18-.27.034a5 5 0 0 1-4.553-2.04L4.183 6.44a1.5 1.5 0 0 1 2.498-1.663l1.12 1.68-.02-.27a5 5 0 0 1 2.04-4.553z"
+						d="M20 14.5a1.5 1.5 0 0 1 1.5 1.5v4a2.5 2.5 0 0 1-2.5 2.5H5A2.5 2.5 0 0 1 2.5 20v-4a1.5 1.5 0 0 1 3 0v3.5h13V16a1.5 1.5 0 0 1 1.5-1.5m-8-13A1.5 1.5 0 0 1 13.5 3v9.036l1.682-1.682a1.5 1.5 0 0 1 2.121 2.12l-4.066 4.067a1.75 1.75 0 0 1-2.474 0l-4.066-4.066a1.5 1.5 0 0 1 2.121-2.121l1.682 1.682V3A1.5 1.5 0 0 1 12 1.5"
 					/></svg
 				>
-				<span class="truncate">update to {updateVersion} is available</span>
+				<span class="truncate">Update to {updateVersion} is available</span>
 			</button>
 		{/if}
 		<a

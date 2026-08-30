@@ -99,7 +99,7 @@
 				{#if uiState.status === 'checking'}
 					Looking for a newer version of Tack…
 				{:else if uiState.status === 'available' && uiState.update}
-					version {uiState.update.version} is ready to install. This usually takes less than a minute.
+					Version {uiState.update.version} is ready to install. This usually takes less than a minute.
 				{:else if uiState.status === 'downloading'}
 					Fetching version {pendingUpdate?.version ?? ''}…
 				{:else if uiState.status === 'installing'}
@@ -109,7 +109,7 @@
 				{:else if uiState.status === 'error'}
 					{uiState.message}
 				{:else}
-					You are on version {currentVersion || '0.1.0'}.
+					You are on version {currentVersion || 'Unknown'}.
 				{/if}
 			</Dialog.Description>
 		</Dialog.Header>
@@ -133,8 +133,8 @@
 					<span>Checking for updates…</span>
 				</div>
 			{:else if uiState.status === 'available'}
-				<Button variant="outline" size="sm" onclick={() => (open = false)}>not now</Button>
-				<Button size="sm" onclick={() => void startDownload()}>update now</Button>
+				<Button variant="outline" size="sm" onclick={() => (open = false)}>Not now</Button>
+				<Button size="sm" onclick={() => void startDownload()}>Update now</Button>
 			{:else if uiState.status === 'downloading' || uiState.status === 'installing'}
 				<div class="flex items-center gap-2 text-[13px] text-muted-foreground">
 					<Spinner class="size-3.5" />
@@ -147,10 +147,10 @@
 					</span>
 				</div>
 			{:else if uiState.status === 'installed'}
-				<Button variant="outline" size="sm" onclick={() => (open = false)}>later</Button>
-				<Button size="sm" onclick={() => void restartNow()}>restart now</Button>
+				<Button variant="outline" size="sm" onclick={() => (open = false)}>Later</Button>
+				<Button size="sm" onclick={() => void restartNow()}>Restart now</Button>
 			{:else if uiState.status === 'error'}
-				<Button variant="outline" size="sm" onclick={() => (open = false)}>close</Button>
+				<Button variant="outline" size="sm" onclick={() => (open = false)}>Close</Button>
 			{/if}
 		</Dialog.Footer>
 	</Dialog.Content>
