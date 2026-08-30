@@ -56,6 +56,13 @@ jobs:
         with:
           workspaces: "./src-tauri -> target"
 
+      - name: Build CLI sidecar
+        run: |
+          cd src-tauri
+          cargo build --bin tack --release
+          mkdir -p bin
+          cp target/release/tack "bin/tack-cli-$(rustc -vV | sed -n 's/host: //p')"
+
       - name: Install frontend dependencies
         run: bun install
 

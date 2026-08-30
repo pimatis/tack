@@ -6,7 +6,7 @@
 	"build": {
 		"beforeDevCommand": "bun run dev",
 		"devUrl": "http://localhost:1420",
-		"beforeBuildCommand": "bun run build && (cd src-tauri && cargo build --bin tack --release && mkdir -p bin && cp target/release/tack bin/tack-cli-$(rustc -vV | sed -n 's/host: //p'))",
+		"beforeBuildCommand": "bun run build",
 		"frontendDist": "../build"
 	},
 	"app": {
