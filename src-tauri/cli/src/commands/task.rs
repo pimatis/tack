@@ -183,6 +183,7 @@ pub fn list(
 }
 
 pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
     let task = conn.query_row(
         "SELECT t.id, t.number, t.title, t.description, t.status, t.priority, t.due_date, t.end_date, t.pinned,
                 t.project_id, p.name, p.prefix, t.created_at, t.updated_at

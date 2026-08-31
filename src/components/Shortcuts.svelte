@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { setShortcutRegistry } from '../lib/shortcuts/registry.js';
-	import { SHORTCUTS } from '../lib/shortcuts/shortcuts.js';
 	import type { ShortcutKey } from '../lib/shortcuts/shortcuts.js';
 	import type { ShortcutBehavior } from '../lib/shortcuts/registry.js';
+	import { getSettings } from '$lib/stores/settings.js';
 
 	let { children }: { children?: import('svelte').Snippet } = $props();
 
@@ -32,14 +32,17 @@
 	setShortcutRegistry(api);
 
 	function handleKeydown(e: KeyboardEvent) {
-		for (const def of SHORTCUTS) {
-			const combo = def.keys.find((k) => {
+		// ignore keys while another app has focus
+		if (!document.hasFocus()) return;
+		const shortcuts = getSettings().shortcuts;
+		for (const [id, keys] of Object.entries(shortcuts)) {
+			const combo = keys.find((k) => {
 				if (k.key !== e.key) return false;
 				if (k.mod === undefined) return !anyModPressed(e);
 				return modActive(e, k.mod);
 			});
 			if (!combo) continue;
-			const matches = behaviors.filter((b) => b.id === def.id && (!b.enabled || b.enabled()));
+			const matches = behaviors.filter((b) => b.id === id && (!b.enabled || b.enabled()));
 			if (matches.length === 0) continue;
 			e.preventDefault();
 			e.stopPropagation();

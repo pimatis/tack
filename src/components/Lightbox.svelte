@@ -14,12 +14,14 @@
 	$effect(() => {
 		if (!url) return;
 		const onKeydown = (e: KeyboardEvent) => {
+			if (!document.hasFocus()) return;
 			if (e.key === 'Escape') {
 				onClose();
 				e.stopPropagation();
 			}
 		};
 		const onPointerDown = (e: PointerEvent) => {
+			if (!document.hasFocus()) return;
 			if (!ref) return;
 			if (ref.contains(e.target as Node)) {
 				e.stopPropagation();

@@ -5,7 +5,13 @@
 	import CommandPalette from '../components/CommandPalette.svelte';
 	import Shortcuts from '../components/Shortcuts.svelte';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
-	import { initSettings, getSettings, setSettings, applyTheme } from '$lib/stores/settings';
+	import {
+		initSettings,
+		getSettings,
+		setSettings,
+		applyTheme,
+		loadSettingsFromDb
+	} from '$lib/stores/settings';
 	import { startBackupScheduler } from '$lib/backup/backup.service';
 
 	const { children } = $props();
@@ -14,6 +20,9 @@
 	let settings = $state(initSettings());
 
 	onMount(() => {
+		// keep in sync with cli changes (tack settings set) while the app is running
+		void loadSettingsFromDb();
+		const syncInterval = window.setInterval(() => void loadSettingsFromDb(), 3000);
 		const stopBackups = startBackupScheduler();
 
 		const onSettingsChanged = () => {
@@ -27,6 +36,7 @@
 		};
 		mediaQuery.addEventListener('change', handleThemeChange);
 		return () => {
+			window.clearInterval(syncInterval);
 			stopBackups();
 			mediaQuery.removeEventListener('change', handleThemeChange);
 			window.removeEventListener('settings-changed', onSettingsChanged);

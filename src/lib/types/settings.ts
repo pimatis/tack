@@ -1,3 +1,6 @@
+import { SHORTCUTS } from '$lib/shortcuts/shortcuts';
+import type { ShortcutKey } from '$lib/shortcuts/shortcuts';
+
 export type Theme = 'dark' | 'light' | 'system';
 
 export type SidebarItemId =
@@ -20,6 +23,7 @@ export type Settings = {
 	backupIntervalHours: number;
 	backupKeepCount: number;
 	sidebarItems: SidebarItemConfig[];
+	shortcuts: Record<string, ShortcutKey[]>;
 };
 
 export const defaultSidebarItems: SidebarItemConfig[] = [
@@ -43,5 +47,9 @@ export const defaultSettings: Settings = {
 	backupEnabled: true,
 	backupIntervalHours: 24,
 	backupKeepCount: 7,
-	sidebarItems: [...defaultSidebarItems]
+	sidebarItems: [...defaultSidebarItems],
+	shortcuts: Object.fromEntries(SHORTCUTS.map((s) => [s.id, s.keys])) as Record<
+		string,
+		ShortcutKey[]
+	>
 };

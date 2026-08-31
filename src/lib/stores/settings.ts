@@ -40,7 +40,9 @@ function load(): Settings {
 		return {
 			...defaultSettings,
 			...parsed,
-			sidebarItems: migrateSidebarItems(parsed.sidebarItems)
+			sidebarItems: migrateSidebarItems(parsed.sidebarItems),
+			// merge so newly added shortcuts appear with defaults for existing users
+			shortcuts: { ...defaultSettings.shortcuts, ...(parsed.shortcuts ?? {}) }
 		};
 	} catch {
 		return { ...defaultSettings };
@@ -63,8 +65,70 @@ export function setSettings(updates: Partial<Settings>): Settings {
 	current = { ...current, ...updates };
 	save(current);
 	applyTheme(current.theme);
+	persistToDb(updates);
 	window.dispatchEvent(new Event('settings-changed'));
 	return current;
+}
+
+// mirror changed settings into the db so the cli (tack settings get/set) stays in sync
+function persistToDb(updates: Partial<Settings>): void {
+	void (async () => {
+		try {
+			// dynamic import keeps tauri modules out of the server-side bundle
+			const { getDb } = await import('$lib/db/client');
+			const db = await getDb();
+			for (const [key, value] of Object.entries(updates)) {
+				const str = typeof value === 'object' ? JSON.stringify(value) : String(value);
+				await db.execute(
+					'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $2',
+					[key, str]
+				);
+			}
+		} catch {
+			// db unavailable (browser dev) - keep localStorage as source of truth
+		}
+	})();
+}
+
+function parseDbValue(key: string, value: string): unknown {
+	if (key === 'sidebarItems' || key === 'shortcuts') return JSON.parse(value);
+	if (value === 'true') return true;
+	if (value === 'false') return false;
+	const num = Number(value);
+	if (value !== '' && !Number.isNaN(num)) return num;
+	return value;
+}
+
+// apply settings changed via the cli (tack settings set) on top of localStorage
+export async function loadSettingsFromDb(): Promise<void> {
+	try {
+		// dynamic import keeps tauri modules out of the server-side bundle
+		const { getDb } = await import('$lib/db/client');
+		const db = await getDb();
+		const rows = await db.select<{ key: string; value: string }[]>(
+			'SELECT key, value FROM settings'
+		);
+		const merged: Partial<Settings> = {};
+		for (const row of rows) {
+			if (!(row.key in current)) continue;
+			try {
+				merged[row.key as keyof Settings] = parseDbValue(row.key, row.value) as never;
+			} catch {
+				// skip unparsable values
+			}
+		}
+		// only apply + notify when something actually changed
+		const changed = Object.entries(merged).some(
+			([key, value]) => JSON.stringify(current[key as keyof Settings]) !== JSON.stringify(value)
+		);
+		if (!changed) return;
+		current = { ...current, ...merged };
+		save(current);
+		applyTheme(current.theme);
+		window.dispatchEvent(new Event('settings-changed'));
+	} catch {
+		// db unavailable (browser dev)
+	}
 }
 
 export function initSettings(): Settings {

@@ -1,4 +1,4 @@
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use std::path::PathBuf;
 
 pub type Result<T> = std::result::Result<T, String>;
@@ -232,4 +232,48 @@ pub fn resolve_project_id(conn: &Connection, project: Option<&str>, prefix: Opti
         return Ok(Some(id));
     }
     Ok(None)
+}
+
+// resolve a task by its uuid id or display number
+pub fn resolve_task_id(conn: &Connection, input: &str) -> Result<String> {
+    let is_uuid = input.len() == 36 && input.bytes().filter(|b| *b == b'-').count() == 4;
+    if is_uuid {
+        return Ok(input.to_string());
+    }
+
+    let (prefix, number_str) = match input.split_once('-') {
+        Some((p, n)) if !p.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => (Some(p), n),
+        _ => {
+            let bare = input.strip_prefix('#').unwrap_or(input);
+            if bare.bytes().all(|b| b.is_ascii_digit()) {
+                (None, bare)
+            } else {
+                return Err(format!("Task {} is neither an id nor a number", input));
+            }
+        }
+    };
+    let number: i32 = number_str
+        .parse()
+        .map_err(|_| format!("Task {} is neither an id nor a number", input))?;
+
+    let id: Option<String> = match prefix {
+        Some(pfx) => conn
+            .query_row(
+                "SELECT t.id FROM tasks t JOIN projects p ON t.project_id = p.id
+                 WHERE p.prefix = ?1 COLLATE NOCASE AND t.number = ?2",
+                params![pfx, number],
+                |row| row.get(0),
+            )
+            .optional(),
+        None => conn
+            .query_row(
+                "SELECT t.id FROM tasks t WHERE t.number = ?1 AND t.project_id IS NULL",
+                params![number],
+                |row| row.get(0),
+            )
+            .optional(),
+    }
+    .map_err(|e| e.to_string())?;
+
+    id.ok_or_else(|| format!("Task {} not found", input))
 }

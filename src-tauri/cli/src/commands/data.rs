@@ -138,7 +138,7 @@ pub fn import(conn: &Connection, json: bool, file_path: &str) -> Result<()> {
 
     for a in &data.attachments {
         conn.execute(
-            "INSERT INTO task_attachments (id, task_id, file_name, file_data, mime_type, file_size, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO task_attachments (id, task_id, file_name, file_path, mime_type, file_size, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 get_str(a, "id"), get_str(a, "task_id"), get_str(a, "file_name"),
                 "", get_str(a, "mime_type"), get_int(a, "file_size"), get_str(a, "created_at"),
