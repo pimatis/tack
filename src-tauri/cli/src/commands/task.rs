@@ -217,6 +217,34 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
         None => format!("#{}", number),
     };
 
+    // attachments: app saves files to disk and stores the path; cli-added ones live as base64 in db
+    let attachments: Vec<(String, String, String, String, i64, String)> = conn
+        .prepare(
+            "SELECT id, file_name, file_path, mime_type, file_size, created_at
+             FROM task_attachments WHERE task_id = ?1 ORDER BY created_at ASC",
+        )
+        .map_err(|e| e.to_string())?
+        .query_map(params![id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, String>(5)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    let display_path = |p: &str| {
+        if p.starts_with("data:") {
+            "(stored in database)".to_string()
+        } else {
+            p.to_string()
+        }
+    };
+
     if json {
         let labels: Vec<String> = conn
             .prepare("SELECT l.name FROM task_labels tl JOIN labels l ON tl.label_id = l.id WHERE tl.task_id = ?1")
@@ -251,6 +279,14 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
                     "prefix": project_prefix,
                 },
                 "labels": labels,
+                "attachments": attachments.iter().map(|a| json!({
+                    "id": a.0,
+                    "file_name": a.1,
+                    "file_path": display_path(&a.2),
+                    "mime_type": a.3,
+                    "file_size": a.4,
+                    "created_at": a.5,
+                })).collect::<Vec<_>>(),
                 "subtasks_total": subtask_count,
                 "subtasks_completed": completed,
                 "created_at": created,
@@ -284,6 +320,20 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
             .collect();
         if !labels.is_empty() {
             println!("Labels:      {}", labels.join(", "));
+        }
+
+        if !attachments.is_empty() {
+            println!("Attachments:");
+            for a in &attachments {
+                let size = if a.4 < 1024 {
+                    format!("{} B", a.4)
+                } else if a.4 < 1024 * 1024 {
+                    format!("{} KB", a.4 / 1024)
+                } else {
+                    format!("{:.1} MB", a.4 as f64 / (1024.0 * 1024.0))
+                };
+                println!("  {} ({}, {}) -> {}", a.1, a.3, size, display_path(&a.2));
+            }
         }
 
         let subtask_count: i32 = conn.query_row(

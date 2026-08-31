@@ -65,6 +65,7 @@
 	let uploading = $state(false);
 	let previewMode = $state(false);
 	let lightboxUrl = $state<string | null>(null);
+	let lightboxRef = $state<HTMLDivElement | null>(null);
 
 	const statusLabels: Record<TaskStatus, string> = {
 		todo: 'Todo',
@@ -98,6 +99,33 @@
 
 	$effect(() => {
 		if (open) requestAnimationFrame(() => titleRef?.focus());
+	});
+
+	// escape closes the lightbox first, then the dialog (independent of focus)
+	$effect(() => {
+		if (!open) return;
+		const onKeydown = (e: KeyboardEvent) => {
+			if (e.key === 'Escape' && lightboxUrl) {
+				lightboxUrl = null;
+				e.stopPropagation();
+			}
+		};
+		document.addEventListener('keydown', onKeydown, { capture: true });
+		return () => document.removeEventListener('keydown', onKeydown, { capture: true });
+	});
+
+	// clicks on the lightbox close it first, never the dialog (independent of focus)
+	$effect(() => {
+		if (!open) return;
+		const onPointerDown = (e: PointerEvent) => {
+			if (!lightboxUrl || !lightboxRef) return;
+			if (lightboxRef.contains(e.target as Node)) {
+				e.stopPropagation();
+				lightboxUrl = null;
+			}
+		};
+		document.addEventListener('pointerdown', onPointerDown, { capture: true });
+		return () => document.removeEventListener('pointerdown', onPointerDown, { capture: true });
 	});
 
 	function reset() {
@@ -231,7 +259,14 @@
 </script>
 
 <Dialog.Root bind:open>
-	<Dialog.Content class="max-w-lg gap-0 p-0" showCloseButton={false}>
+	<Dialog.Content
+		class="max-w-lg gap-0 p-0"
+		showCloseButton={false}
+		onInteractOutside={(e) => {
+			// keep the dialog open while the lightbox is showing
+			if (lightboxUrl) e.preventDefault();
+		}}
+	>
 		<Dialog.Title class="sr-only">Create task</Dialog.Title>
 		<form onsubmit={handleSubmit} class="flex flex-col">
 			<!-- header: badge + breadcrumb + close -->
@@ -481,10 +516,18 @@
 
 {#if lightboxUrl}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-8"
+		bind:this={lightboxRef}
+		class="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-8"
 		onclick={() => (lightboxUrl = null)}
+		onpointerdowncapture={(e) => {
+			e.stopPropagation();
+			lightboxUrl = null;
+		}}
 		onkeydown={(e) => {
-			if (e.key === 'Escape') lightboxUrl = null;
+			if (e.key === 'Escape') {
+				lightboxUrl = null;
+				e.stopPropagation();
+			}
 		}}
 		role="button"
 		tabindex="-1"

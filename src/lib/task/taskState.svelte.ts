@@ -607,7 +607,7 @@ export class TaskPageState {
 		const unregisterSelectAll = registry.register({
 			id: 'select-all',
 			enabled: () => this.filteredTasks.length > 0 && !isTypingTarget(),
-			run: () => this.selectAll()
+			run: () => this.toggleSelectAll()
 		});
 
 		const unregisterToggleView = registry.register({

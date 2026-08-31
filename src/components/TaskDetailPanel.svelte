@@ -79,6 +79,7 @@
 	let attachments = $state<TaskAttachment[]>([]);
 	let attachmentUrls = $state<Record<string, string>>({});
 	let lightboxUrl = $state<string | null>(null);
+	let lightboxRef = $state<HTMLDivElement | null>(null);
 	let pendingAttachments = $state<
 		{ fileName: string; fileData: string; mimeType: string; fileSize: number }[]
 	>([]);
@@ -150,7 +151,35 @@
 	});
 
 	$effect(() => {
-		if (open) requestAnimationFrame(() => titleRef?.focus());
+		// keep focus inside the panel, also return it after the lightbox closes
+		if (open && !lightboxUrl) requestAnimationFrame(() => titleRef?.focus());
+	});
+
+	// escape closes the lightbox first, then the panel (independent of focus)
+	$effect(() => {
+		if (!open) return;
+		const onKeydown = (e: KeyboardEvent) => {
+			if (e.key === 'Escape' && lightboxUrl) {
+				lightboxUrl = null;
+				e.stopPropagation();
+			}
+		};
+		document.addEventListener('keydown', onKeydown, { capture: true });
+		return () => document.removeEventListener('keydown', onKeydown, { capture: true });
+	});
+
+	// clicks on the lightbox close it first, never the panel (independent of focus)
+	$effect(() => {
+		if (!open) return;
+		const onPointerDown = (e: PointerEvent) => {
+			if (!lightboxUrl || !lightboxRef) return;
+			if (lightboxRef.contains(e.target as Node)) {
+				e.stopPropagation();
+				lightboxUrl = null;
+			}
+		};
+		document.addEventListener('pointerdown', onPointerDown, { capture: true });
+		return () => document.removeEventListener('pointerdown', onPointerDown, { capture: true });
 	});
 
 	async function loadTaskLabels(taskId: string) {
@@ -534,6 +563,10 @@
 		role="dialog"
 		aria-modal="true"
 		aria-label="Task detail"
+		tabindex="-1"
+		onkeydown={(e) => {
+			if (e.key === 'Escape') close();
+		}}
 	>
 		{#if task}
 			<form
@@ -1358,10 +1391,18 @@
 
 	{#if lightboxUrl}
 		<div
-			class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-8"
+			bind:this={lightboxRef}
+			class="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-8"
 			onclick={() => (lightboxUrl = null)}
+			onpointerdowncapture={(e) => {
+				e.stopPropagation();
+				lightboxUrl = null;
+			}}
 			onkeydown={(e) => {
-				if (e.key === 'Escape') lightboxUrl = null;
+				if (e.key === 'Escape') {
+					lightboxUrl = null;
+					e.stopPropagation();
+				}
 			}}
 			role="button"
 			tabindex="-1"

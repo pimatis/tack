@@ -9,6 +9,7 @@
 	import DueDateBadge from './DueDateBadge.svelte';
 	import TaskContextMenu from './TaskContextMenu.svelte';
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
+	import { autofocus } from '$lib/actions/autofocus';
 	import type { Task, TaskStatus, TaskPriority } from '$lib/types/task';
 	import type { Project } from '$lib/types/project';
 	import type { Label } from '$lib/types/label';
@@ -108,6 +109,11 @@
 		role="dialog"
 		aria-modal="true"
 		aria-label="Day detail"
+		use:autofocus
+		tabindex="-1"
+		onkeydown={(e) => {
+			if (e.key === 'Escape') close();
+		}}
 	>
 		<!-- header -->
 		<div class="flex items-start justify-between px-5 pt-5 pb-4">

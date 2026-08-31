@@ -10,10 +10,10 @@
 
 	const { children } = $props();
 
-	let settings = $state(getSettings());
+	// load persisted settings before any child component reads them
+	let settings = $state(initSettings());
 
 	onMount(() => {
-		settings = initSettings();
 		const stopBackups = startBackupScheduler();
 
 		const onSettingsChanged = () => {

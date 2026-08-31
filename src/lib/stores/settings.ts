@@ -69,7 +69,8 @@ export function setSettings(updates: Partial<Settings>): Settings {
 
 export function initSettings(): Settings {
 	current = load();
-	applyTheme(current.theme);
+	// skip on server render where window/document are unavailable
+	if (typeof window !== 'undefined') applyTheme(current.theme);
 	return current;
 }
 
