@@ -1,17 +1,10 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { Spinner } from '$lib/components/ui/spinner/index.js';
-	import {
-		checkForUpdate,
-		downloadAndInstall,
-		relaunchApp
-	} from '$lib/updater/update.service';
+	import { checkForUpdate, downloadAndInstall, relaunchApp } from '$lib/updater/update.service';
 	import type { Update } from '$lib/updater/update.service';
 
-	let {
-		appVersion = ''
-	}: { appVersion?: string } = $props();
+	let { appVersion = '' }: { appVersion?: string } = $props();
 
 	type CheckState =
 		| { status: 'idle' }
@@ -61,17 +54,6 @@
 			};
 		}
 	}
-
-	async function handleRelaunch() {
-		try {
-			await relaunchApp();
-		} catch {
-			checkState = {
-				status: 'error',
-				message: 'Could not restart automatically. Please close and reopen Tack manually.'
-			};
-		}
-	}
 </script>
 
 <!-- version info -->
@@ -99,7 +81,12 @@
 		{:else if checkState.status === 'up-to-date'}
 			<div class="flex items-center justify-between">
 				<div class="flex items-center gap-2 text-[13px] text-muted-foreground">
-					<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" class="text-emerald-500"
+					<svg
+						width="15"
+						height="15"
+						viewBox="0 0 24 24"
+						fill="currentColor"
+						class="text-emerald-500"
 						><path
 							fill="currentColor"
 							d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2m3.535 6.381-4.95 4.95-2.12-2.121a1 1 0 0 0-1.415 1.414l2.758 2.758a1.1 1.1 0 0 0 1.556 0l5.586-5.586a1 1 0 0 0-1.415-1.415"
@@ -122,19 +109,22 @@
 					</p>
 				</div>
 				<div class="flex shrink-0 items-center gap-2">
-					<Button variant="ghost" size="sm" class="h-7 text-xs" onclick={() => (checkState = { status: 'idle' })}>
+					<Button
+						variant="ghost"
+						size="sm"
+						class="h-7 text-xs"
+						onclick={() => (checkState = { status: 'idle' })}
+					>
 						Dismiss
 					</Button>
-					<Button size="sm" onclick={() => void handleDownload()}>
-						Download &amp; install
-					</Button>
+					<Button size="sm" onclick={() => void handleDownload()}>Download &amp; install</Button>
 				</div>
 			</div>
 		{:else if checkState.status === 'downloading'}
 			<div class="space-y-2">
 				<div class="flex items-center justify-between text-[13px]">
 					<span class="text-muted-foreground">Downloading update...</span>
-					<span class="tabular-nums text-muted-foreground">{progressPct}%</span>
+					<span class="text-muted-foreground tabular-nums">{progressPct}%</span>
 				</div>
 				<div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
 					<div

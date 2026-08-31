@@ -107,6 +107,8 @@ enum TaskAction {
         priority: Option<i32>,
         #[arg(long, help = "Due date (YYYY-MM-DD)")]
         due_date: Option<String>,
+        #[arg(long, help = "End date (YYYY-MM-DD)")]
+        end_date: Option<String>,
         #[arg(long)]
         description: Option<String>,
     },
@@ -142,6 +144,8 @@ enum TaskAction {
         priority: Option<i32>,
         #[arg(long, help = "Due date (YYYY-MM-DD), use empty string to clear")]
         due_date: Option<String>,
+        #[arg(long, help = "End date (YYYY-MM-DD), use empty string to clear")]
+        end_date: Option<String>,
     },
     /// Delete a task
     Delete {
@@ -388,9 +392,10 @@ fn main() {
             }
         },
         Commands::Task { action } => match action {
-            TaskAction::Create { title, project, project_prefix, status, priority, due_date, description } => {
+            TaskAction::Create { title, project, project_prefix, status, priority, due_date, end_date, description } => {
                 let dd = due_date.as_deref().filter(|s| !s.is_empty());
-                commands::task::create(&conn, json, &title, project.as_deref(), project_prefix.as_deref(), status.as_deref(), priority, dd, description.as_deref())
+                let ed = end_date.as_deref().filter(|s| !s.is_empty());
+                commands::task::create(&conn, json, &title, project.as_deref(), project_prefix.as_deref(), status.as_deref(), priority, dd, ed, description.as_deref())
             }
             TaskAction::List { project, project_prefix, status, priority, pinned, since } => {
                 commands::task::list(&conn, json, project.as_deref(), project_prefix.as_deref(), status.as_deref(), priority, pinned, since.as_deref())
@@ -398,9 +403,8 @@ fn main() {
             TaskAction::Show { id } => {
                 commands::task::show(&conn, json, &id)
             }
-            TaskAction::Update { id, title, description, status, priority, due_date } => {
-                let dd = due_date.as_deref().filter(|s| !s.is_empty());
-                commands::task::update(&conn, json, &id, title.as_deref(), description.as_deref(), status.as_deref(), priority, dd)
+            TaskAction::Update { id, title, description, status, priority, due_date, end_date } => {
+                commands::task::update(&conn, json, &id, title.as_deref(), description.as_deref(), status.as_deref(), priority, due_date.as_deref(), end_date.as_deref())
             }
             TaskAction::Delete { id } => {
                 commands::task::delete(&conn, json, &id)

@@ -36,9 +36,7 @@
 		if (!q) return tasks;
 		// fts match (title, description, subtasks) with in-memory fallback while pending
 		if (ftsIds) return tasks.filter((t) => ftsIds?.has(t.id));
-		return tasks.filter(
-			(t) => `${t.title} ${t.description ?? ''}`.toLowerCase().includes(q)
-		);
+		return tasks.filter((t) => `${t.title} ${t.description ?? ''}`.toLowerCase().includes(q));
 	});
 
 	$effect(() => {

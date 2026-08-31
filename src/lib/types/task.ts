@@ -11,6 +11,7 @@ export type Task = {
 	status: TaskStatus;
 	priority: TaskPriority;
 	dueDate?: string | null;
+	endDate?: string | null;
 	sortOrder?: number;
 	pinned?: boolean;
 	labelIds?: string[];

@@ -27,7 +27,7 @@
 			} else {
 				uiState = { status: 'error', message: "You're on the latest version already." };
 			}
-		} catch (e) {
+		} catch {
 			uiState = {
 				status: 'error',
 				message: 'Could not reach the update server. Check your connection and try again.'
@@ -46,7 +46,7 @@
 			// installation finished - restart automatically so the new version takes effect
 			uiState = { status: 'installing' };
 			await relaunchApp();
-		} catch (e) {
+		} catch {
 			uiState = {
 				status: 'error',
 				message: 'The update failed to download. Please try again.'
@@ -57,7 +57,7 @@
 	async function restartNow() {
 		try {
 			await relaunchApp();
-		} catch (e) {
+		} catch {
 			uiState = {
 				status: 'error',
 				message: 'The app could not restart automatically. Please close and reopen Tack manually.'

@@ -11,6 +11,7 @@ pub fn create(
     status: Option<&str>,
     priority: Option<i32>,
     due_date: Option<&str>,
+    end_date: Option<&str>,
     description: Option<&str>,
 ) -> Result<()> {
     let project_id = resolve_project_id(conn, project, project_prefix)?;
@@ -38,9 +39,9 @@ pub fn create(
     .map_err(|e| format!("Failed to assign task number: {}", e))?;
 
     conn.execute(
-        "INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, sort_order, pinned, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, 0, ?9, ?10)",
-        params![id, number, project_id, title, description, final_status, final_priority, due_date, now, now],
+        "INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, sort_order, pinned, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, 0, ?10, ?11)",
+        params![id, number, project_id, title, description, final_status, final_priority, due_date, end_date, now, now],
     ).map_err(|e| format!("Failed to create task: {}", e))?;
 
     log_activity(conn, &id, "created", None, None, None, "cli")?;
@@ -56,6 +57,7 @@ pub fn create(
                 "status": final_status,
                 "priority": final_priority,
                 "due_date": due_date,
+                "end_date": end_date,
                 "project_id": project_id,
                 "created_at": now,
             }
@@ -82,7 +84,7 @@ pub fn list(
     let project_id = resolve_project_id(conn, project, project_prefix)?;
 
     let mut sql = String::from(
-        "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.pinned, p.prefix, t.updated_at, t.created_at
+        "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at
          FROM tasks t
          LEFT JOIN projects p ON t.project_id = p.id
          WHERE t.deleted_at IS NULL",
@@ -113,7 +115,7 @@ pub fn list(
     let mut stmt = conn.prepare(&sql).map_err(|e| format!("Failed to query tasks: {}", e))?;
 
     let arg_refs: Vec<&dyn rusqlite::ToSql> = args.iter().map(|a| a.as_ref()).collect();
-    let rows: Vec<(String, i32, String, String, i32, Option<String>, i32, Option<String>, String, String)> = stmt
+    let rows: Vec<(String, i32, String, String, i32, Option<String>, Option<String>, i32, Option<String>, String, String)> = stmt
         .query_map(&arg_refs[..], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -122,10 +124,11 @@ pub fn list(
                 row.get::<_, String>(3)?,
                 row.get::<_, i32>(4)?,
                 row.get::<_, Option<String>>(5)?,
-                row.get::<_, i32>(6)?,
-                row.get::<_, Option<String>>(7)?,
-                row.get::<_, String>(8)?,
+                row.get::<_, Option<String>>(6)?,
+                row.get::<_, i32>(7)?,
+                row.get::<_, Option<String>>(8)?,
                 row.get::<_, String>(9)?,
+                row.get::<_, String>(10)?,
             ))
         })
         .map_err(|e| format!("Failed to query tasks: {}", e))?
@@ -134,7 +137,7 @@ pub fn list(
 
     if json {
         let items: Vec<serde_json::Value> = rows.iter().map(|r| {
-            let prefix = &r.7;
+            let prefix = &r.8;
             let number = r.1;
             let display_number = match prefix {
                 Some(p) => format!("{}-{}", p, number),
@@ -148,17 +151,18 @@ pub fn list(
                 "status": r.3,
                 "priority": r.4,
                 "due_date": r.5,
-                "pinned": r.6 == 1,
+                "end_date": r.6,
+                "pinned": r.7 == 1,
                 "project_prefix": prefix,
-                "updated_at": r.8,
-                "created_at": r.9,
+                "updated_at": r.9,
+                "created_at": r.10,
             })
         }).collect();
         println!("{}", serde_json::to_string_pretty(&json!({ "tasks": items }))
             .map_err(|e| e.to_string())?);
     } else {
         let table_rows: Vec<Vec<String>> = rows.iter().map(|r| {
-            let prefix = &r.7;
+            let prefix = &r.8;
             let display_number = match prefix {
                 Some(p) => format!("{}-{}", p, r.1),
                 None => format!("#{}", r.1),
@@ -170,7 +174,7 @@ pub fn list(
                 status_label(&r.3).to_string(),
                 priority_label(r.4).to_string(),
                 r.5.clone().unwrap_or("-".to_string()),
-                if r.6 == 1 { "yes".to_string() } else { "-".to_string() },
+                if r.7 == 1 { "yes".to_string() } else { "-".to_string() },
             ]
         }).collect();
         print_table(&["ID", "NUMBER", "TITLE", "STATUS", "PRIORITY", "DUE DATE", "PINNED"], &table_rows);
@@ -180,7 +184,7 @@ pub fn list(
 
 pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
     let task = conn.query_row(
-        "SELECT t.id, t.number, t.title, t.description, t.status, t.priority, t.due_date, t.pinned,
+        "SELECT t.id, t.number, t.title, t.description, t.status, t.priority, t.due_date, t.end_date, t.pinned,
                 t.project_id, p.name, p.prefix, t.created_at, t.updated_at
          FROM tasks t
          LEFT JOIN projects p ON t.project_id = p.id
@@ -195,17 +199,18 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
                 row.get::<_, String>(4)?,
                 row.get::<_, i32>(5)?,
                 row.get::<_, Option<String>>(6)?,
-                row.get::<_, i32>(7)?,
-                row.get::<_, Option<String>>(8)?,
+                row.get::<_, Option<String>>(7)?,
+                row.get::<_, i32>(8)?,
                 row.get::<_, Option<String>>(9)?,
                 row.get::<_, Option<String>>(10)?,
-                row.get::<_, String>(11)?,
+                row.get::<_, Option<String>>(11)?,
                 row.get::<_, String>(12)?,
+                row.get::<_, String>(13)?,
             ))
         },
     ).map_err(|_| format!("Task {} not found", id))?;
 
-    let (tid, number, title, desc, status, priority, due, pinned, _project_id, project_name, project_prefix, created, updated) = task;
+    let (tid, number, title, desc, status, priority, due, end, pinned, _project_id, project_name, project_prefix, created, updated) = task;
 
     let display_number = match &project_prefix {
         Some(p) => format!("{}-{}", p, number),
@@ -239,6 +244,7 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
                 "status": status,
                 "priority": priority,
                 "due_date": due,
+                "end_date": end,
                 "pinned": pinned == 1,
                 "project": {
                     "name": project_name,
@@ -259,6 +265,7 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
         println!("Status:      {}", status_label(&status));
         println!("Priority:    {}", priority_label(priority));
         println!("Due date:    {}", due.unwrap_or("-".to_string()));
+        println!("End date:    {}", end.unwrap_or("-".to_string()));
         println!("Pinned:      {}", if pinned == 1 { "yes" } else { "no" });
         if let Some(pname) = project_name {
             println!("Project:     {} ({})", pname, project_prefix.unwrap_or_default());
@@ -306,9 +313,10 @@ pub fn update(
     status: Option<&str>,
     priority: Option<i32>,
     due_date: Option<&str>,
+    end_date: Option<&str>,
 ) -> Result<()> {
     let current = conn.query_row(
-        "SELECT title, description, status, priority, due_date FROM tasks WHERE id = ?1",
+        "SELECT title, description, status, priority, due_date, end_date FROM tasks WHERE id = ?1",
         params![id],
         |row| {
             Ok((
@@ -317,22 +325,29 @@ pub fn update(
                 row.get::<_, String>(2)?,
                 row.get::<_, i32>(3)?,
                 row.get::<_, Option<String>>(4)?,
+                row.get::<_, Option<String>>(5)?,
             ))
         },
     ).map_err(|_| format!("Task {} not found", id))?;
 
-    let (cur_title, cur_desc, cur_status, cur_priority, cur_due) = current;
+    let (cur_title, cur_desc, cur_status, cur_priority, cur_due, cur_end) = current;
 
     let new_title = title.unwrap_or(&cur_title);
     let new_desc = description.map(Some).unwrap_or(cur_desc.as_deref());
     let new_status = status.unwrap_or(&cur_status);
     let new_priority = priority.unwrap_or(cur_priority);
-    let new_due = due_date.map(Some).unwrap_or(cur_due.as_deref());
+    // empty string clears the date, None keeps the current value
+    let new_due = due_date
+        .map(|s| if s.is_empty() { None } else { Some(s) })
+        .unwrap_or(cur_due.as_deref());
+    let new_end = end_date
+        .map(|s| if s.is_empty() { None } else { Some(s) })
+        .unwrap_or(cur_end.as_deref());
 
     let now = now_iso();
     let result = conn.execute(
-        "UPDATE tasks SET title = ?1, description = ?2, status = ?3, priority = ?4, due_date = ?5, updated_at = ?6 WHERE id = ?7",
-        params![new_title, new_desc, new_status, new_priority, new_due, now, id],
+        "UPDATE tasks SET title = ?1, description = ?2, status = ?3, priority = ?4, due_date = ?5, end_date = ?6, updated_at = ?7 WHERE id = ?8",
+        params![new_title, new_desc, new_status, new_priority, new_due, new_end, now, id],
     ).map_err(|e| format!("Failed to update task: {}", e))?;
 
     if result == 0 {
@@ -385,7 +400,7 @@ pub fn delete(conn: &Connection, json: bool, id: &str) -> Result<()> {
 
 pub fn duplicate(conn: &Connection, json: bool, id: &str) -> Result<()> {
     let original = conn.query_row(
-        "SELECT title, description, status, priority, project_id, due_date FROM tasks WHERE id = ?1",
+        "SELECT title, description, status, priority, project_id, due_date, end_date FROM tasks WHERE id = ?1",
         params![id],
         |row| {
             Ok((
@@ -395,14 +410,15 @@ pub fn duplicate(conn: &Connection, json: bool, id: &str) -> Result<()> {
                 row.get::<_, i32>(3)?,
                 row.get::<_, Option<String>>(4)?,
                 row.get::<_, Option<String>>(5)?,
+                row.get::<_, Option<String>>(6)?,
             ))
         },
     ).map_err(|_| format!("Task {} not found", id))?;
 
-    let (title, desc, status, priority, project_id, due_date) = original;
+    let (title, desc, status, priority, project_id, due_date, end_date) = original;
     let copy_title = format!("{} (copy)", title);
 
-    create(conn, json, &copy_title, project_id.as_deref(), None, Some(&status), Some(priority), due_date.as_deref(), desc.as_deref())?;
+    create(conn, json, &copy_title, project_id.as_deref(), None, Some(&status), Some(priority), due_date.as_deref(), end_date.as_deref(), desc.as_deref())?;
     Ok(())
 }
 

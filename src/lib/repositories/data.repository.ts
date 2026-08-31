@@ -119,7 +119,15 @@ export async function importData(data: ExportData): Promise<void> {
 		const row = a as Record<string, unknown>;
 		await db.execute(
 			'INSERT INTO task_attachments (id, task_id, file_name, file_path, mime_type, file_size, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-			[row.id, row.task_id, row.file_name, row.file_path ?? '', row.mime_type, row.file_size, row.created_at]
+			[
+				row.id,
+				row.task_id,
+				row.file_name,
+				row.file_path ?? '',
+				row.mime_type,
+				row.file_size,
+				row.created_at
+			]
 		);
 	}
 

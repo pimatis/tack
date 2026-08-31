@@ -7,13 +7,13 @@
 		hasFilters,
 		filteredCount,
 		totalCount,
-		viewMode = $bindable<'list' | 'board'>()
+		viewMode = $bindable<'list' | 'board' | 'calendar'>()
 	}: {
 		pinnedFilter: boolean;
 		hasFilters: boolean;
 		filteredCount: number;
 		totalCount: number;
-		viewMode: 'list' | 'board';
+		viewMode: 'list' | 'board' | 'calendar';
 	} = $props();
 </script>
 
@@ -25,9 +25,7 @@
 		<div class="flex items-center gap-1.5 text-[12px] text-muted-foreground">
 			<span class="size-1.5 rounded-full bg-foreground/30"></span>
 			<span>
-				{hasFilters || pinnedFilter
-					? `${filteredCount} of ${totalCount}`
-					: totalCount}
+				{hasFilters || pinnedFilter ? `${filteredCount} of ${totalCount}` : totalCount}
 				{totalCount === 1 ? 'task' : 'tasks'}
 			</span>
 		</div>
@@ -82,6 +80,31 @@
 				{/snippet}
 			</Tooltip.Trigger>
 			<Tooltip.Content side="bottom">Board view</Tooltip.Content>
+		</Tooltip.Root>
+		<Tooltip.Root>
+			<Tooltip.Trigger>
+				{#snippet child({ props })}
+					<Button
+						{...props}
+						variant="ghost"
+						size="icon-sm"
+						class="flex h-7 w-7 items-center justify-center rounded-md transition-colors {viewMode ===
+						'calendar'
+							? 'bg-muted text-foreground'
+							: 'text-muted-foreground hover:text-foreground'}"
+						onclick={() => (viewMode = 'calendar')}
+						aria-label="Calendar view"
+					>
+						<svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+							><path
+								fill="currentColor"
+								d="M16 3a1 1 0 0 1 1 1v1h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2V4a1 1 0 0 1 2 0v1h6V4a1 1 0 0 1 1-1M8.01 16H8a1 1 0 0 0-.117 1.993L8.01 18a1 1 0 1 0 0-2m4 0H12a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m4 0H16a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m-8-4H8a1 1 0 0 0-.117 1.993L8.01 14a1 1 0 1 0 0-2m4 0H12a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m4 0H16a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2M19 7H5v2h14z"
+							/></svg
+						>
+					</Button>
+				{/snippet}
+			</Tooltip.Trigger>
+			<Tooltip.Content side="bottom">Calendar view</Tooltip.Content>
 		</Tooltip.Root>
 	</div>
 </header>

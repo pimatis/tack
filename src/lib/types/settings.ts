@@ -11,7 +11,7 @@ export type SidebarItemConfig = {
 export type Settings = {
 	theme: Theme;
 	sidebarCollapsed: boolean;
-	defaultViewMode: 'list' | 'board';
+	defaultViewMode: 'list' | 'board' | 'calendar';
 	defaultStatus: 'todo' | 'in_progress';
 	defaultPriority: 0 | 1 | 2 | 3 | 4;
 	dueSoonThreshold: number;

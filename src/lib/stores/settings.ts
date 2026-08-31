@@ -12,9 +12,7 @@ const STORAGE_KEY = 'tack-settings';
 let current: Settings = { ...defaultSettings };
 
 // merge stored sidebar items with defaults so new items appear for existing users
-function migrateSidebarItems(
-	stored: SidebarItemConfig[] | undefined
-): SidebarItemConfig[] {
+function migrateSidebarItems(stored: SidebarItemConfig[] | undefined): SidebarItemConfig[] {
 	if (!stored || !Array.isArray(stored)) return [...defaultSidebarItems];
 	const knownIds = new Set<SidebarItemId>([
 		'pinned',

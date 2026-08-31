@@ -5,6 +5,7 @@ export type ActivityAction =
 	| 'title_changed'
 	| 'description_changed'
 	| 'due_date_changed'
+	| 'end_date_changed'
 	| 'label_added'
 	| 'label_removed'
 	| 'attachment_added'

@@ -317,6 +317,11 @@ pub fn run() {
         description: "fix_fts_triggers",
         sql: include_str!("../migrations/015_fix_fts_triggers.sql"),
         kind: tauri_plugin_sql::MigrationKind::Up,
+    }, tauri_plugin_sql::Migration {
+        version: 16,
+        description: "add_end_date_to_tasks",
+        sql: include_str!("../migrations/016_end_date.sql"),
+        kind: tauri_plugin_sql::MigrationKind::Up,
     }];
 
     tauri::Builder::default()

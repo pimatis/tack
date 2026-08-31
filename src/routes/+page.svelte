@@ -10,6 +10,7 @@
 	import TaskStates from '../components/task/TaskStates.svelte';
 	import TaskList from '../components/task/TaskList.svelte';
 	import BoardView from '../components/task/BoardView.svelte';
+	import CalendarView from '../components/task/CalendarView.svelte';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { TaskPageState } from '$lib/task/taskState.svelte';
 	import { statusOrder } from '$lib/task/constants';
@@ -27,6 +28,7 @@
 	bind:open={state.dialogOpen}
 	projects={state.projects}
 	labels={state.labels}
+	initialDueDate={state.createDueDate}
 	onCreated={(t) => state.handleCreated(t)}
 	onLabelCreated={(l) => state.handleLabelCreated(l)}
 	onLabelUpdated={(l) => state.handleLabelUpdated(l)}
@@ -44,7 +46,8 @@
 <TaskDetailPanel
 	bind:open={state.editDialogOpen}
 	task={state.editingTask}
-	prefix={state.projects.find((project) => project.id === state.editingTask?.projectId)?.prefix ?? ''}
+	prefix={state.projects.find((project) => project.id === state.editingTask?.projectId)?.prefix ??
+		''}
 	labels={state.labels}
 	onUpdated={(t) => state.handleUpdated(t)}
 	onLabelCreated={(l) => state.handleLabelCreated(l)}
@@ -52,9 +55,7 @@
 	onLabelRemoved={(id) => state.handleLabelRemoved(id)}
 />
 
-<section
-	class="flex h-full flex-col px-8 py-8 {state.viewMode === 'list' ? 'mx-auto max-w-3xl' : ''}"
->
+<section class="flex h-full flex-col px-8 py-8">
 	<TaskHeader
 		pinnedFilter={state.pinnedFilter}
 		hasFilters={state.hasFilters}
@@ -68,7 +69,7 @@
 			<BulkActionBar
 				selectedCount={state.selectedCount}
 				isAllSelected={state.isAllSelected()}
-				statusOrder={statusOrder}
+				{statusOrder}
 				projects={state.projects}
 				onBulkChangeStatus={(s) => state.bulkChangeStatus(s)}
 				onBulkChangePriority={(p) => state.bulkChangePriority(p)}
@@ -122,9 +123,8 @@
 			onDuplicate={(id) => state.duplicateTask(id)}
 			onDelete={(id) => state.handleDelete(id)}
 			onListDrop={(s, t) => state.handleListDrop(s, t)}
-			onBoardDrop={(s, t) => state.handleBoardDrop(s, t)}
 		/>
-	{:else}
+	{:else if state.viewMode === 'board'}
 		<BoardView
 			groups={state.groupedTasks}
 			statusOrderList={statusOrder}
@@ -135,10 +135,28 @@
 			bind:dialogOpen={state.dialogOpen}
 			onEdit={(t) => state.handleEdit(t)}
 			onChangeStatus={(t, s) => state.changeStatus(t, s)}
+			onChangePriority={(t, p) => state.changePriority(t, p)}
 			onTogglePin={(t) => state.handleTogglePin(t)}
 			onDuplicate={(id) => state.duplicateTask(id)}
 			onDelete={(id) => state.handleDelete(id)}
 			onBoardDrop={(s, t) => state.handleBoardDrop(s, t)}
+		/>
+	{:else}
+		<CalendarView
+			tasks={state.filteredTasks}
+			projects={state.projects}
+			appSettings={state.appSettings}
+			labelMap={state.labelMap}
+			onEdit={(t) => state.handleEdit(t)}
+			onChangeStatus={(t, s) => state.changeStatus(t, s)}
+			onChangePriority={(t, p) => state.changePriority(t, p)}
+			onTogglePin={(t) => state.handleTogglePin(t)}
+			onDuplicate={(id) => state.duplicateTask(id)}
+			onDelete={(id) => state.handleDelete(id)}
+			onAddTask={(d) => {
+				state.createDueDate = d;
+				state.dialogOpen = true;
+			}}
 		/>
 	{/if}
 </section>

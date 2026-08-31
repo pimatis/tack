@@ -1,6 +1,17 @@
 const turkishMap: Record<string, string> = {
-	İ: 'I', Ş: 'S', Ç: 'C', Ğ: 'G', Ü: 'U', Ö: 'O',
-	ı: 'I', i: 'I', ş: 'S', ç: 'C', ğ: 'G', ü: 'U', ö: 'O'
+	İ: 'I',
+	Ş: 'S',
+	Ç: 'C',
+	Ğ: 'G',
+	Ü: 'U',
+	Ö: 'O',
+	ı: 'I',
+	i: 'I',
+	ş: 'S',
+	ç: 'C',
+	ğ: 'G',
+	ü: 'U',
+	ö: 'O'
 };
 
 const vowels = new Set(['A', 'E', 'I', 'O', 'U']);

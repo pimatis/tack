@@ -3,7 +3,7 @@
 	import StatusIcon from '../StatusIcon.svelte';
 	import TaskCard from './TaskCard.svelte';
 	import { dropZone, type DragDropState } from '$lib/dnd';
-	import type { Task, TaskStatus } from '$lib/types/task';
+	import type { Task, TaskStatus, TaskPriority } from '$lib/types/task';
 	import type { Project } from '$lib/types/project';
 	import type { Label } from '$lib/types/label';
 	import type { Settings } from '$lib/types/settings';
@@ -16,9 +16,10 @@
 		appSettings,
 		labelMap,
 		selectedIds,
-		dialogOpen = $bindable(),
+		dialogOpen = $bindable(), // eslint-disable-line no-useless-assignment
 		onEdit,
 		onChangeStatus,
+		onChangePriority,
 		onTogglePin,
 		onDuplicate,
 		onDelete,
@@ -33,6 +34,7 @@
 		dialogOpen: boolean;
 		onEdit: (task: Task) => void;
 		onChangeStatus: (task: Task, status: TaskStatus) => void;
+		onChangePriority: (task: Task, priority: TaskPriority) => void;
 		onTogglePin: (task: Task) => void;
 		onDuplicate: (id: string) => void;
 		onDelete: (id: string) => void;
@@ -91,6 +93,7 @@
 							{selectedIds}
 							{onEdit}
 							{onChangeStatus}
+							{onChangePriority}
 							{onTogglePin}
 							{onDuplicate}
 							{onDelete}

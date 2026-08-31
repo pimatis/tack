@@ -308,7 +308,11 @@
 	<!-- drag region for macOS traffic lights -->
 	<div class="h-7 shrink-0" data-tauri-drag-region></div>
 	<!-- header: workspace name + quick actions -->
-	<div class="flex h-12 shrink-0 items-center {settings?.sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-2.5'}">
+	<div
+		class="flex h-12 shrink-0 items-center {settings?.sidebarCollapsed
+			? 'justify-center px-0'
+			: 'justify-between px-2.5'}"
+	>
 		{#if !settings?.sidebarCollapsed}
 			<div class="flex items-center gap-2">
 				<svg
@@ -427,7 +431,7 @@
 
 	<ScrollArea class="min-h-0 flex-1">
 		<!-- home -->
-		<div class="{settings?.sidebarCollapsed ? 'flex justify-center px-0 mb-1' : 'px-1.5'}">
+		<div class={settings?.sidebarCollapsed ? 'mb-1 flex justify-center px-0' : 'px-1.5'}>
 			<Button
 				variant="ghost"
 				href="/"
@@ -458,7 +462,7 @@
 
 		<!-- dynamic filter items (reorderable via settings) -->
 		{#if !settings?.sidebarCollapsed}
-			{#each orderedFilterItems as item, i (item.id)}
+			{#each orderedFilterItems as item (item.id)}
 				{#if item.id === 'pinned'}
 					<div
 						class="relative px-1.5"
@@ -776,9 +780,9 @@
 											dispatchFilter('filter-by-priority', 'filter-by-priority:' + p, p)}
 									>
 										<span class="flex shrink-0 items-center gap-0.5 {priorityConfig[p].color}">
-											{#each Array(3) as _, i}
+											{#each [0, 1, 2] as barIndex (barIndex)}
 												<span
-													class="inline-block h-2.5 w-0.5 rounded-full {i < 5 - p
+													class="inline-block h-2.5 w-0.5 rounded-full {barIndex < 5 - p
 														? 'bg-current'
 														: 'bg-current opacity-20'}"
 												></span>
@@ -997,7 +1001,11 @@
 	{/if}
 
 	<!-- trash + settings -->
-	<div class="shrink-0 border-t border-sidebar-border/40 {settings?.sidebarCollapsed ? 'px-0' : 'px-2'} py-1.5 {settings?.sidebarCollapsed ? 'flex flex-col items-center gap-1' : ''}">
+	<div
+		class="shrink-0 border-t border-sidebar-border/40 {settings?.sidebarCollapsed
+			? 'px-0'
+			: 'px-2'} py-1.5 {settings?.sidebarCollapsed ? 'flex flex-col items-center gap-1' : ''}"
+	>
 		{#if updateAvailable && !settings?.sidebarCollapsed}
 			<button
 				type="button"

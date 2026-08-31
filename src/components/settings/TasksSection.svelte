@@ -88,10 +88,7 @@
 			max="30"
 			value={settings.dueSoonThreshold}
 			oninput={(e) =>
-				update(
-					'dueSoonThreshold',
-					Math.max(1, Number((e.target as HTMLInputElement).value) || 1)
-				)}
+				update('dueSoonThreshold', Math.max(1, Number((e.target as HTMLInputElement).value) || 1))}
 			class="w-16 text-center"
 		/>
 		<span class="text-xs text-muted-foreground">days</span>

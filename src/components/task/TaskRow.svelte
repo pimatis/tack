@@ -6,6 +6,7 @@
 	import StatusIcon from '../StatusIcon.svelte';
 	import TaskLabels from './TaskLabels.svelte';
 	import DueDateBadge from './DueDateBadge.svelte';
+	import EndDateBadge from './EndDateBadge.svelte';
 	import TaskContextMenu from './TaskContextMenu.svelte';
 	import { sortableItem, type DragDropState } from '$lib/dnd';
 	import type { Task, TaskPriority, TaskStatus } from '$lib/types/task';
@@ -54,7 +55,7 @@
 				container: `list-${task.status}`,
 				onDrop: (state: DragDropState<Task>) => onListDrop(state, task)
 			}}
-			class="group/task -mx-2 flex items-center gap-2.5 rounded-lg px-2 py-1.5 cursor-grab transition-colors hover:bg-muted/40 active:cursor-grabbing {selectedIds.has(
+			class="group/task -mx-2 flex cursor-grab items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-muted/40 active:cursor-grabbing {selectedIds.has(
 				task.id
 			)
 				? 'bg-primary/8'
@@ -254,18 +255,30 @@
 			<!-- title -->
 			<Button
 				variant="ghost"
-				class="h-auto min-w-0 flex-1 justify-start truncate p-0 text-left text-[13px] text-foreground/90 {task.status ===
+				class="h-auto min-w-0 flex-1 justify-start overflow-hidden p-0 text-left text-[13px] text-foreground/90 {task.status ===
 				'canceled'
-					? 'text-muted-foreground/50 line-through'
+					? 'text-muted-foreground/50'
 					: ''}"
 				onclick={() => onEdit(task)}
 			>
-				{task.title}
+				<span
+					class="block min-w-0 flex-1 truncate [mask-image:linear-gradient(to_right,black_95%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_95%,transparent_100%)] {task.status ===
+					'canceled'
+						? 'line-through'
+						: ''}"
+				>
+					{task.title}
+				</span>
 			</Button>
 
 			<!-- due date -->
 			<div class="flex w-24 shrink-0 justify-end">
 				<DueDateBadge dueDate={task.dueDate} />
+			</div>
+
+			<!-- end date -->
+			<div class="flex w-24 shrink-0 justify-end">
+				<EndDateBadge endDate={task.endDate} />
 			</div>
 
 			<!-- date -->

@@ -7,11 +7,12 @@
 
 	type Props = {
 		value: string;
+		title?: string;
 		onSelect: (date: string) => void;
 		onClear?: () => void;
 	};
 
-	let { value, onSelect, onClear }: Props = $props();
+	let { value, title = 'Due date', onSelect, onClear }: Props = $props();
 	let open = $state(false);
 
 	let selectedDate = $state<DateValue | undefined>(undefined);
@@ -86,7 +87,7 @@
 								handleClear();
 							}
 						}}
-						aria-label="Clear due date"
+						aria-label="Clear {title.toLowerCase()}"
 					>
 						<svg width="11" height="11" viewBox="0 0 24 24" fill="none"
 							><path
@@ -96,17 +97,17 @@
 						>
 					</span>
 				{:else}
-					<span>Due date</span>
+					<span>{title}</span>
 				{/if}
 			</Button>
 		{/snippet}
 	</Dialog.Trigger>
 	<Dialog.Content class="max-w-auto w-fit gap-0 p-0" showCloseButton={false}>
-		<Dialog.Title class="sr-only">Pick a due date</Dialog.Title>
+		<Dialog.Title class="sr-only">Pick {title.toLowerCase()}</Dialog.Title>
 
 		<!-- header -->
 		<div class="flex items-center justify-between px-4 pt-4 pb-3">
-			<span class="text-[13px] font-medium text-foreground">Due date</span>
+			<span class="text-[13px] font-medium text-foreground">{title}</span>
 			<Dialog.Close>
 				{#snippet child({ props })}
 					<Button
@@ -184,7 +185,7 @@
 			</Button>
 			<Button type="button" size="sm" onclick={handleConfirm} disabled={!selectedDate}>
 				{#if selectedDate}
-					Set due date
+					Set {title.toLowerCase()}
 				{:else}
 					Select a date
 				{/if}

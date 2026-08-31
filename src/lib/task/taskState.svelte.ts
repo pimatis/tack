@@ -24,6 +24,14 @@ import type { Settings } from '$lib/types/settings';
 import { statusOrder } from './constants';
 import { isTypingTarget, groupedTasks as computeGroups } from './utils';
 
+// a task's calendar span: due date starts it, end date finishes it
+function dateRange(t: Task): { start: Date | null; end: Date | null } {
+	return {
+		start: t.dueDate ? new Date(t.dueDate + 'T00:00:00') : null,
+		end: t.endDate ? new Date(t.endDate + 'T00:00:00') : null
+	};
+}
+
 export { sortableItem, dropZone, useDndActive };
 
 export class TaskPageState {
@@ -41,13 +49,14 @@ export class TaskPageState {
 
 	searchQuery = $state('');
 	ftsIds = $state<Set<string> | null>(null);
+	createDueDate = $state<string | null>(null);
 	statusFilters = $state<Set<TaskStatus>>(new Set());
 	projectFilters = $state<Set<string>>(new Set());
 	labelFilters = $state<Set<string>>(new Set());
 
 	selectedIds = $state<Set<string>>(new Set());
 	lastSelectedId = $state<string | null>(null);
-	viewMode = $state<'list' | 'board'>(getSettings().defaultViewMode);
+	viewMode = $state<'list' | 'board' | 'calendar'>(getSettings().defaultViewMode);
 	appSettings = $state<Settings>(getSettings());
 	pinnedFilter = $state(false);
 	todayFilter = $state(false);
@@ -73,21 +82,30 @@ export class TaskPageState {
 			now.setHours(0, 0, 0, 0);
 			result = result.filter((t) => {
 				if (t.status === 'done' || t.status === 'canceled') return false;
-				if (!t.dueDate) return false;
-				const due = new Date(t.dueDate + 'T00:00:00');
-				return due.getTime() === now.getTime();
+				const { start, end } = dateRange(t);
+				if (!start && !end) return false;
+				// today lies inside the task's span (start <= today <= end)
+				const startOk = !start || start.getTime() <= now.getTime();
+				const endOk = !end || end.getTime() >= now.getTime();
+				return startOk && endOk;
 			});
 		}
 
 		if (this.upcomingFilter) {
 			const now = new Date();
 			now.setHours(0, 0, 0, 0);
+			const week = new Date(now);
+			week.setDate(now.getDate() + 7);
 			result = result.filter((t) => {
 				if (t.status === 'done' || t.status === 'canceled') return false;
-				if (!t.dueDate) return false;
-				const due = new Date(t.dueDate + 'T00:00:00');
-				const diffDays = Math.round((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-				return diffDays > 0 && diffDays <= 7;
+				const { start, end } = dateRange(t);
+				if (!start && !end) return false;
+				// either end of the span falls within the next 7 days
+				const startUpcoming =
+					!!start && start.getTime() > now.getTime() && start.getTime() <= week.getTime();
+				const endUpcoming =
+					!!end && end.getTime() > now.getTime() && end.getTime() <= week.getTime();
+				return startUpcoming || endUpcoming;
 			});
 		}
 
@@ -96,9 +114,12 @@ export class TaskPageState {
 			now.setHours(0, 0, 0, 0);
 			result = result.filter((t) => {
 				if (t.status === 'done' || t.status === 'canceled') return false;
-				if (!t.dueDate) return false;
-				const due = new Date(t.dueDate + 'T00:00:00');
-				return due.getTime() < now.getTime();
+				const { start, end } = dateRange(t);
+				if (!start && !end) return false;
+				// a part of the span is already in the past
+				const startOverdue = !!start && start.getTime() < now.getTime();
+				const endOverdue = !!end && end.getTime() < now.getTime();
+				return startOverdue || endOverdue;
 			});
 		}
 
@@ -591,7 +612,11 @@ export class TaskPageState {
 
 		const unregisterToggleView = registry.register({
 			id: 'toggle-view',
-			run: () => (this.viewMode = this.viewMode === 'list' ? 'board' : 'list')
+			run: () => {
+				const order = ['list', 'board', 'calendar'] as const;
+				const next = order[(order.indexOf(this.viewMode) + 1) % order.length];
+				this.viewMode = next;
+			}
 		});
 
 		const unregisterClearSelection = registry.register({
@@ -601,7 +626,8 @@ export class TaskPageState {
 		});
 
 		const savedView = getSettings().defaultViewMode;
-		if (savedView === 'list' || savedView === 'board') this.viewMode = savedView;
+		if (savedView === 'list' || savedView === 'board' || savedView === 'calendar')
+			this.viewMode = savedView;
 
 		window.addEventListener('open-task-dialog', openDialog);
 		window.addEventListener('open-project-dialog', openProjectDialog);

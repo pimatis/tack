@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
 	import { Button } from '$lib/components/ui/button/index.js';
-	
+
 	let checked = $state(false);
 	let installing = $state(false);
 	let installingFailed = $state(false);

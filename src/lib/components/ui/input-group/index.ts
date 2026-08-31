@@ -1,6 +1,6 @@
-import Root from "./input-group.svelte";
-import Input from "./input-group-input.svelte";
-import Addon from "./input-group-addon.svelte";
+import Root from './input-group.svelte';
+import Input from './input-group-input.svelte';
+import Addon from './input-group-addon.svelte';
 
 export {
 	Root,

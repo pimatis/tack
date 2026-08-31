@@ -89,7 +89,7 @@
 					<svg width="13" height="13" viewBox="0 0 24 24" fill="none"
 						><path
 							fill="currentColor"
-							d="M16 3a1 1 0 0 1 1 1v1h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2V4a1 1 0 0 1 2 0v1h6V4a1 1 0 0 1 1-3M8.01 16H8a1 1 0 0 0-.117 1.993L8.01 18a1 1 0 1 0 0-2m4 0H12a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m4 0H16a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m-8-4H8a1 1 0 0 0-.117 1.993L8.01 14a1 1 0 1 0 0-2m4 0H12a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m4 0H16a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2M19 7H5v2h14z"
+							d="M16 3a1 1 0 0 1 1 1v1h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2V4a1 1 0 0 1 2 0v1h6V4a1 1 0 0 1 1-1M8.01 16H8a1 1 0 0 0-.117 1.993L8.01 18a1 1 0 1 0 0-2m4 0H12a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m4 0H16a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m-8-4H8a1 1 0 0 0-.117 1.993L8.01 14a1 1 0 1 0 0-2m4 0H12a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m4 0H16a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2M19 7H5v2h14z"
 						/></svg
 					>
 					<span>Status</span>
@@ -103,9 +103,7 @@
 			{/snippet}
 		</Popover.Trigger>
 		<Popover.Content class="w-48 p-1.5" align="end">
-			<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
-				Filter by status
-			</div>
+			<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">Filter by status</div>
 			{#each statusOrder as s (s)}
 				<Button
 					variant="ghost"
@@ -162,13 +160,9 @@
 			{/snippet}
 		</Popover.Trigger>
 		<Popover.Content class="w-52 p-1.5" align="end">
-			<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
-				Filter by project
-			</div>
+			<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">Filter by project</div>
 			{#if projects.length === 0}
-				<div class="px-2 py-3 text-[12px] text-muted-foreground/60">
-					No projects available
-				</div>
+				<div class="px-2 py-3 text-[12px] text-muted-foreground/60">No projects available</div>
 			{:else}
 				{#each projects as project (project.id)}
 					<Button
@@ -230,9 +224,7 @@
 				{/snippet}
 			</Popover.Trigger>
 			<Popover.Content class="w-52 p-1.5" align="end">
-				<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
-					Filter by label
-				</div>
+				<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">Filter by label</div>
 				{#each labels as label (label.id)}
 					<Button
 						variant="ghost"

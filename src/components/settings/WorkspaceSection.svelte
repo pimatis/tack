@@ -4,7 +4,9 @@
 	let { stats }: { stats: { projects: number; tasks: number; done: number; labels: number } } =
 		$props();
 
-	const completionRate = $derived(stats.tasks > 0 ? Math.round((stats.done / stats.tasks) * 100) : 0);
+	const completionRate = $derived(
+		stats.tasks > 0 ? Math.round((stats.done / stats.tasks) * 100) : 0
+	);
 </script>
 
 <div class="grid grid-cols-2 gap-4">

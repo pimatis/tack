@@ -22,8 +22,7 @@
 		onTogglePin,
 		onDuplicate,
 		onDelete,
-		onListDrop,
-		onBoardDrop
+		onListDrop
 	}: {
 		groups: Record<TaskStatus, Task[]>;
 		statusOrderList: TaskStatus[];
@@ -39,7 +38,6 @@
 		onDuplicate: (id: string) => void;
 		onDelete: (id: string) => void;
 		onListDrop: (state: DragDropState<Task>, targetTask: Task) => void;
-		onBoardDrop: (state: DragDropState<Task>, targetTask: Task | null) => void;
 	} = $props();
 </script>
 

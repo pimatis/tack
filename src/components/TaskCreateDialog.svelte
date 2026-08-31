@@ -30,6 +30,7 @@
 		open?: boolean;
 		projects: Project[];
 		labels: Label[];
+		initialDueDate?: string | null;
 		onCreated?: (task: Task) => void;
 		onLabelCreated?: (label: Label) => void;
 		onLabelUpdated?: (label: Label) => void;
@@ -40,6 +41,7 @@
 		open = $bindable(false),
 		projects,
 		labels,
+		initialDueDate = null,
 		onCreated,
 		onLabelCreated,
 		onLabelUpdated,
@@ -52,6 +54,7 @@
 	let priority = $state(String(defaultSettings.defaultPriority));
 	let projectId = $state('');
 	let dueDate = $state<string>('');
+	let endDate = $state<string>('');
 	let selectedLabelIds = $state<string[]>([]);
 	let error = $state<string | null>(null);
 	let submitting = $state(false);
@@ -90,6 +93,10 @@
 	});
 
 	$effect(() => {
+		if (open) dueDate = initialDueDate ?? '';
+	});
+
+	$effect(() => {
 		if (open) requestAnimationFrame(() => titleRef?.focus());
 	});
 
@@ -100,6 +107,7 @@
 		priority = String(defaultSettings.defaultPriority);
 		projectId = projects[0]?.id ?? '';
 		dueDate = '';
+		endDate = '';
 		error = null;
 		createMore = false;
 		attachments = [];
@@ -181,7 +189,8 @@
 				description: description.trim() || null,
 				status,
 				priority: Number(priority) as TaskPriority,
-				dueDate: dueDate || null
+				dueDate: dueDate || null,
+				endDate: endDate || null
 			});
 
 			for (const att of attachments) {
@@ -206,6 +215,7 @@
 				attachments = [];
 				selectedLabelIds = [];
 				dueDate = '';
+				endDate = '';
 				previewMode = false;
 				requestAnimationFrame(() => titleRef?.focus());
 			} else {
@@ -315,14 +325,18 @@
 			{#if attachments.length > 0}
 				<div class="flex flex-wrap gap-2 px-5 pt-1">
 					{#each attachments as att, i (i)}
-							<div
-								class="group/att relative size-16 cursor-zoom-in overflow-hidden rounded-lg border border-border bg-muted/30"
-								role="button"
-								tabindex="0"
-								onclick={() => { if (att.fileData) lightboxUrl = att.fileData; }}
-								onkeydown={(e) => { if (e.key === 'Enter' && att.fileData) lightboxUrl = att.fileData; }}
-							>
-								<img src={att.fileData} alt={att.fileName} class="size-full object-cover" />
+						<div
+							class="group/att relative size-16 cursor-zoom-in overflow-hidden rounded-lg border border-border bg-muted/30"
+							role="button"
+							tabindex="0"
+							onclick={() => {
+								if (att.fileData) lightboxUrl = att.fileData;
+							}}
+							onkeydown={(e) => {
+								if (e.key === 'Enter' && att.fileData) lightboxUrl = att.fileData;
+							}}
+						>
+							<img src={att.fileData} alt={att.fileName} class="size-full object-cover" />
 							<Button
 								variant="ghost"
 								size="icon-xs"
@@ -342,7 +356,14 @@
 				</div>
 			{/if}
 
-			<Input bind:ref={fileInput} type="file" accept="image/*" multiple class="hidden" onchange={handleFileSelect} />
+			<Input
+				bind:ref={fileInput}
+				type="file"
+				accept="image/*"
+				multiple
+				class="hidden"
+				onchange={handleFileSelect}
+			/>
 
 			<!-- metadata pills -->
 			<div class="flex flex-wrap gap-1.5 px-5 pt-3 pb-4">
@@ -404,6 +425,14 @@
 					onSelect={(d) => (dueDate = d)}
 					onClear={() => (dueDate = '')}
 				/>
+
+				<!-- end date picker -->
+				<DueDatePicker
+					title="End date"
+					value={endDate}
+					onSelect={(d) => (endDate = d)}
+					onClear={() => (endDate = '')}
+				/>
 			</div>
 
 			{#if error}
@@ -454,7 +483,9 @@
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-8"
 		onclick={() => (lightboxUrl = null)}
-		onkeydown={(e) => { if (e.key === 'Escape') lightboxUrl = null; }}
+		onkeydown={(e) => {
+			if (e.key === 'Escape') lightboxUrl = null;
+		}}
 		role="button"
 		tabindex="-1"
 		transition:fade={{ duration: 150 }}

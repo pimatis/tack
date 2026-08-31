@@ -70,6 +70,7 @@
 	let status = $state<TaskStatus>('todo');
 	let priority = $state('0');
 	let dueDate = $state<string>('');
+	let endDate = $state<string>('');
 	let error = $state<string | null>(null);
 	let submitting = $state(false);
 	let previewMode = $state(false);
@@ -134,6 +135,7 @@
 		status = task.status;
 		priority = String(task.priority);
 		dueDate = task.dueDate ?? '';
+		endDate = task.endDate ?? '';
 		error = null;
 		previewMode = false;
 		pendingAttachments = [];
@@ -254,7 +256,8 @@
 		try {
 			await removeAttachment(id);
 			attachments = attachments.filter((a) => a.id !== id);
-			const { [id]: _, ...rest } = attachmentUrls;
+			const rest = { ...attachmentUrls };
+			delete rest[id];
 			attachmentUrls = rest;
 			if (task) void logActivity(task.id, 'attachment_removed', undefined, undefined, undefined);
 			if (task) void loadActivity(task.id);
@@ -415,7 +418,8 @@
 				description: description.trim() || null,
 				status,
 				priority: Number(priority) as TaskPriority,
-				dueDate: dueDate || null
+				dueDate: dueDate || null,
+				endDate: endDate || null
 			});
 
 			for (const att of pendingAttachments) {
@@ -481,6 +485,8 @@
 				return 'updated the description';
 			case 'due_date_changed':
 				return entry.newValue ? `set due date to ${entry.newValue}` : 'removed the due date';
+			case 'end_date_changed':
+				return entry.newValue ? `set end date to ${entry.newValue}` : 'removed the end date';
 			case 'label_added':
 				return `added label ${entry.newValue}`;
 			case 'label_removed':
@@ -563,11 +569,21 @@
 										aria-label={task.pinned ? 'Unpin task' : 'Pin task'}
 										onclick={() => void handleTogglePin()}
 									>
-										<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24">
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="15"
+											height="15"
+											viewBox="0 0 24 24"
+										>
 											<title>pin_fill</title>
 											<g id="pin_fill" fill="none">
-												<path d="M24 0v24H0V0zM12.593 23.258l-.011.002-.071.035-.02.004-.014-.004-.071-.035c-.01-.004-.019-.001-.024.005l-.004.01-.017.428.005.02.01.013.104.074.015.004.012-.004.104-.074.012-.016.004-.017-.017-.427c-.002-.01-.009-.017-.017-.018m.265-.113-.013.002-.185.093-.01.01-.003.011.018.43.005.012.008.007.201.093c.012.004.023 0 .029-.008l.004-.014-.034-.614c-.003-.012-.01-.02-.02-.022m-.715.002a.023.023 0 0 0-.027.006l-.006.014-.034.614c0 .012.007.02.017.024l.015-.002.201-.093.01-.008.004-.011.017-.43-.003-.012-.01-.01z" />
-												<path fill="currentColor" d="M16.735 2.835a2 2 0 0 0-2.615-.186l-2.913 2.185a9 9 0 0 1-4.127 1.71l-2.177.31c-.73.105-1.265.891-.913 1.662.331.723 1.385 2.629 4.36 5.72l-4.178 4.178a1 1 0 1 0 1.414 1.414l4.178-4.178c3.091 2.975 4.997 4.029 5.72 4.36.77.352 1.557-.183 1.661-.913l.311-2.177a9 9 0 0 1 1.71-4.127L21.35 9.88a2 2 0 0 0-.186-2.615z" />
+												<path
+													d="M24 0v24H0V0zM12.593 23.258l-.011.002-.071.035-.02.004-.014-.004-.071-.035c-.01-.004-.019-.001-.024.005l-.004.01-.017.428.005.02.01.013.104.074.015.004.012-.004.104-.074.012-.016.004-.017-.017-.427c-.002-.01-.009-.017-.017-.018m.265-.113-.013.002-.185.093-.01.01-.003.011.018.43.005.012.008.007.201.093c.012.004.023 0 .029-.008l.004-.014-.034-.614c-.003-.012-.01-.02-.02-.022m-.715.002a.023.023 0 0 0-.027.006l-.006.014-.034.614c0 .012.007.02.017.024l.015-.002.201-.093.01-.008.004-.011.017-.43-.003-.012-.01-.01z"
+												/>
+												<path
+													fill="currentColor"
+													d="M16.735 2.835a2 2 0 0 0-2.615-.186l-2.913 2.185a9 9 0 0 1-4.127 1.71l-2.177.31c-.73.105-1.265.891-.913 1.662.331.723 1.385 2.629 4.36 5.72l-4.178 4.178a1 1 0 1 0 1.414 1.414l4.178-4.178c3.091 2.975 4.997 4.029 5.72 4.36.77.352 1.557-.183 1.661-.913l.311-2.177a9 9 0 0 1 1.71-4.127L21.35 9.88a2 2 0 0 0-.186-2.615z"
+												/>
 											</g>
 										</svg>
 									</Button>
@@ -862,11 +878,21 @@
 											class="group/att relative size-20 cursor-zoom-in overflow-hidden rounded-lg border border-border bg-muted/30"
 											role="button"
 											tabindex="0"
-											onclick={() => { const url = attachmentUrls[att.id]; if (url) lightboxUrl = url; }}
-											onkeydown={(e) => { const url = attachmentUrls[att.id]; if (e.key === 'Enter' && url) lightboxUrl = url; }}
+											onclick={() => {
+												const url = attachmentUrls[att.id];
+												if (url) lightboxUrl = url;
+											}}
+											onkeydown={(e) => {
+												const url = attachmentUrls[att.id];
+												if (e.key === 'Enter' && url) lightboxUrl = url;
+											}}
 										>
-												{#if isImage(att.mimeType)}
-													<img src={attachmentUrls[att.id] ?? ''} alt={att.fileName} class="size-full object-cover" />
+											{#if isImage(att.mimeType)}
+												<img
+													src={attachmentUrls[att.id] ?? ''}
+													alt={att.fileName}
+													class="size-full object-cover"
+												/>
 											{:else}
 												<div
 													class="flex size-full flex-col items-center justify-center gap-1 p-1 text-center"
@@ -922,8 +948,12 @@
 											class="group/pending relative size-20 cursor-zoom-in overflow-hidden rounded-lg border border-dashed border-border bg-muted/30"
 											role="button"
 											tabindex="0"
-											onclick={() => { if (att.fileData) lightboxUrl = att.fileData; }}
-											onkeydown={(e) => { if (e.key === 'Enter' && att.fileData) lightboxUrl = att.fileData; }}
+											onclick={() => {
+												if (att.fileData) lightboxUrl = att.fileData;
+											}}
+											onkeydown={(e) => {
+												if (e.key === 'Enter' && att.fileData) lightboxUrl = att.fileData;
+											}}
 										>
 											{#if isImage(att.mimeType)}
 												<img src={att.fileData} alt={att.fileName} class="size-full object-cover" />
@@ -1053,10 +1083,10 @@
 										<Button
 											{...props}
 											variant="ghost"
-												class="flex h-auto w-full items-center justify-start gap-2 rounded-md px-2 py-1.5 text-[12px] text-foreground transition-colors hover:bg-muted/50"
-											>
-												<StatusIcon {status} size={14} />
-												<span>{statusLabels[status]}</span>
+											class="flex h-auto w-full items-center justify-start gap-2 rounded-md px-2 py-1.5 text-[12px] text-foreground transition-colors hover:bg-muted/50"
+										>
+											<StatusIcon {status} size={14} />
+											<span>{statusLabels[status]}</span>
 										</Button>
 									{/snippet}
 								</Popover.Trigger>
@@ -1067,8 +1097,8 @@
 									{#each statusOrder as s (s)}
 										<Button
 											variant="ghost"
-												class="flex h-auto w-full items-center justify-start gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-foreground transition-colors hover:bg-muted"
-												onclick={() => (status = s)}
+											class="flex h-auto w-full items-center justify-start gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-foreground transition-colors hover:bg-muted"
+											onclick={() => (status = s)}
 										>
 											<StatusIcon status={s} size={14} />
 											<span>{statusLabels[s]}</span>
@@ -1102,9 +1132,9 @@
 										<Button
 											{...props}
 											variant="ghost"
-												class="flex h-auto w-full items-center justify-start gap-2 rounded-md px-2 py-1.5 text-[12px] text-foreground transition-colors hover:bg-muted/50"
-											>
-												{#if Number(priority) === 1}
+											class="flex h-auto w-full items-center justify-start gap-2 rounded-md px-2 py-1.5 text-[12px] text-foreground transition-colors hover:bg-muted/50"
+										>
+											{#if Number(priority) === 1}
 												<svg
 													class="shrink-0 text-orange-500"
 													width="14"
@@ -1165,8 +1195,8 @@
 									{#each [0, 1, 2, 3, 4] as p (p)}
 										<Button
 											variant="ghost"
-												class="flex h-auto w-full items-center justify-start gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-foreground transition-colors hover:bg-muted"
-												onclick={() => (priority = String(p))}
+											class="flex h-auto w-full items-center justify-start gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-foreground transition-colors hover:bg-muted"
+											onclick={() => (priority = String(p))}
 										>
 											{#if p === 1}
 												<svg
@@ -1250,6 +1280,17 @@
 							/>
 						</div>
 
+						<!-- end date -->
+						<div class="flex flex-col gap-1 py-1.5">
+							<span class="text-[11px] font-medium text-muted-foreground/60">End date</span>
+							<DueDatePicker
+								title="End date"
+								value={endDate}
+								onSelect={(d) => (endDate = d)}
+								onClear={() => (endDate = '')}
+							/>
+						</div>
+
 						<Separator />
 
 						<!-- labels -->
@@ -1312,36 +1353,38 @@
 					</div>
 				</div>
 			</form>
-			{/if}
-			</div>
+		{/if}
+	</div>
 
-			{#if lightboxUrl}
-			<div
-				class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-8"
+	{#if lightboxUrl}
+		<div
+			class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-8"
+			onclick={() => (lightboxUrl = null)}
+			onkeydown={(e) => {
+				if (e.key === 'Escape') lightboxUrl = null;
+			}}
+			role="button"
+			tabindex="-1"
+			transition:fade={{ duration: 150 }}
+		>
+			<img
+				src={lightboxUrl}
+				alt="preview"
+				class="max-h-full max-w-full rounded-lg object-contain shadow-2xl"
+				transition:scale={{ duration: 150, start: 0.95 }}
+			/>
+			<button
+				class="absolute top-4 right-4 flex size-8 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
 				onclick={() => (lightboxUrl = null)}
-				onkeydown={(e) => { if (e.key === 'Escape') lightboxUrl = null; }}
-				role="button"
-				tabindex="-1"
-				transition:fade={{ duration: 150 }}
+				aria-label="Close preview"
 			>
-				<img
-					src={lightboxUrl}
-					alt="preview"
-					class="max-h-full max-w-full rounded-lg object-contain shadow-2xl"
-					transition:scale={{ duration: 150, start: 0.95 }}
-				/>
-				<button
-					class="absolute top-4 right-4 flex size-8 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
-					onclick={() => (lightboxUrl = null)}
-					aria-label="Close preview"
+				<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+					><path
+						fill="currentColor"
+						d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
+					/></svg
 				>
-					<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-						><path
-							fill="currentColor"
-							d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
-						/></svg
-					>
-				</button>
-			</div>
-			{/if}
-			{/if}
+			</button>
+		</div>
+	{/if}
+{/if}

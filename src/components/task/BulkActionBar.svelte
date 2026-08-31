@@ -5,7 +5,7 @@
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import * as Popover from '$lib/components/ui/popover/index.js';
 	import StatusIcon from '../StatusIcon.svelte';
-	import type { Task, TaskPriority, TaskStatus } from '$lib/types/task';
+	import type { TaskPriority, TaskStatus } from '$lib/types/task';
 	import type { Project } from '$lib/types/project';
 	import { statusConfig, priorityConfig } from '$lib/task/constants';
 
@@ -194,9 +194,7 @@
 				{/snippet}
 			</Popover.Trigger>
 			<Popover.Content class="w-52 p-1.5" align="end">
-				<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
-					Move to project
-				</div>
+				<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">Move to project</div>
 				{#each projects as project (project.id)}
 					<Button
 						variant="ghost"

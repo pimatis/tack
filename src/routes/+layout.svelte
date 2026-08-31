@@ -44,7 +44,7 @@
 			<Sidebar {settings} {toggleSidebar} />
 			<main class="flex flex-1 flex-col overflow-hidden">
 				<div class="h-7 shrink-0" data-tauri-drag-region></div>
-				<div class="min-h-0 flex-1 overflow-auto rounded-xl border border-border bg-card m-2">
+				<div class="m-2 min-h-0 flex-1 overflow-auto rounded-xl border border-border bg-card">
 					{@render children()}
 				</div>
 			</main>

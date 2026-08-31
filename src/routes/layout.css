@@ -7,25 +7,33 @@
 	font-family: 'SF Pro Display';
 	font-style: normal;
 	font-weight: 400;
-	src: local('SF Pro Display'), url('/fonts/SFPRODISPLAYREGULAR.woff') format('woff');
+	src:
+		local('SF Pro Display'),
+		url('/fonts/SFPRODISPLAYREGULAR.woff') format('woff');
 }
 @font-face {
 	font-family: 'SF Pro Display';
 	font-style: normal;
 	font-weight: 500;
-	src: local('SF Pro Display'), url('/fonts/SFPRODISPLAYMEDIUM.woff') format('woff');
+	src:
+		local('SF Pro Display'),
+		url('/fonts/SFPRODISPLAYMEDIUM.woff') format('woff');
 }
 @font-face {
 	font-family: 'SF Pro Display';
 	font-style: italic;
 	font-weight: 600;
-	src: local('SF Pro Display'), url('/fonts/SFPRODISPLAYSEMIBOLDITALIC.woff') format('woff');
+	src:
+		local('SF Pro Display'),
+		url('/fonts/SFPRODISPLAYSEMIBOLDITALIC.woff') format('woff');
 }
 @font-face {
 	font-family: 'SF Pro Display';
 	font-style: normal;
 	font-weight: 700;
-	src: local('SF Pro Display'), url('/fonts/SFPRODISPLAYBOLD.woff') format('woff');
+	src:
+		local('SF Pro Display'),
+		url('/fonts/SFPRODISPLAYBOLD.woff') format('woff');
 }
 
 @custom-variant dark (&:is(.dark *));
@@ -259,8 +267,6 @@
 		@apply my-3 border-border;
 	}
 }
-
-/* === drag and drop visual feedback === */
 
 /* floating ghost preview - follows cursor during drag */
 .dnd-ghost {

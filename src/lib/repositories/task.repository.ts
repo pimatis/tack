@@ -12,10 +12,12 @@ import {
 } from '$lib/repositories/activity.repository';
 
 export type CreateTaskInput = Pick<Task, 'title'> &
-	Partial<Pick<Task, 'id' | 'description' | 'status' | 'priority' | 'projectId' | 'dueDate'>>;
+	Partial<
+		Pick<Task, 'id' | 'description' | 'status' | 'priority' | 'projectId' | 'dueDate' | 'endDate'>
+	>;
 
 export type UpdateTaskInput = Partial<
-	Pick<Task, 'title' | 'description' | 'status' | 'priority' | 'dueDate' | 'pinned'>
+	Pick<Task, 'title' | 'description' | 'status' | 'priority' | 'dueDate' | 'endDate' | 'pinned'>
 >;
 
 const TASK_COLUMNS = `
@@ -27,6 +29,7 @@ const TASK_COLUMNS = `
 	status,
 	priority,
 	due_date AS dueDate,
+	end_date AS endDate,
 	sort_order AS sortOrder,
 	pinned,
 	created_at AS createdAt,
@@ -61,6 +64,7 @@ export async function create(input: CreateTaskInput): Promise<Task> {
 			status: input.status ?? 'todo',
 			priority: input.priority ?? 0,
 			dueDate: input.dueDate ?? null,
+			endDate: input.endDate ?? null,
 			sortOrder: 0,
 			createdAt: now,
 			updatedAt: now,
@@ -68,8 +72,8 @@ export async function create(input: CreateTaskInput): Promise<Task> {
 		};
 
 		await db.execute(
-			`INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, sort_order, created_at, updated_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, $9, $10)`,
+			`INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, sort_order, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, $10, $11)`,
 			[
 				task.id,
 				task.number,
@@ -79,6 +83,7 @@ export async function create(input: CreateTaskInput): Promise<Task> {
 				task.status,
 				task.priority,
 				task.dueDate,
+				task.endDate,
 				task.createdAt,
 				task.updatedAt
 			]
@@ -152,6 +157,7 @@ export async function update(id: string, input: UpdateTaskInput): Promise<Task |
 			['status', input.status, 'status', 'status_changed'],
 			['priority', input.priority, 'priority', 'priority_changed'],
 			['due_date', input.dueDate, 'due_date', 'due_date_changed'],
+			['end_date', input.endDate, 'end_date', 'end_date_changed'],
 			[
 				'pinned',
 				input.pinned !== undefined ? (input.pinned ? 1 : 0) : undefined,
@@ -333,7 +339,8 @@ export async function duplicate(id: string): Promise<Task | null> {
 			status: original.status,
 			priority: original.priority,
 			projectId: original.projectId,
-			dueDate: original.dueDate
+			dueDate: original.dueDate,
+			endDate: original.endDate
 		});
 		if (original.labelIds && original.labelIds.length > 0) {
 			await setTaskLabels(copy.id, original.labelIds);

@@ -9,8 +9,7 @@
 	<Card.Root size="sm">
 		<Card.Content class="flex items-center justify-between">
 			<span class="text-[13px] text-muted-foreground">{s.label}</span>
-			<kbd
-				class="rounded-md bg-foreground px-2 py-0.5 text-[11px] font-medium text-background"
+			<kbd class="rounded-md bg-foreground px-2 py-0.5 text-[11px] font-medium text-background"
 				>{shortcutLabel(s)}</kbd
 			>
 		</Card.Content>

@@ -37,6 +37,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
         (13, "migrate_attachment_file_path", include_str!("../../migrations/013_attachment_file_path.sql")),
         (14, "create_fts_search_index", include_str!("../../migrations/014_fts_search.sql")),
         (15, "fix_fts_triggers", include_str!("../../migrations/015_fix_fts_triggers.sql")),
+        (16, "add_end_date_to_tasks", include_str!("../../migrations/016_end_date.sql")),
     ];
 
     // track applied versions via the same table the tauri app uses, so

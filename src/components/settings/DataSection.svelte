@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
@@ -71,9 +70,7 @@
 <div class="flex items-center justify-between">
 	<div>
 		<p class="text-[13px] font-medium">Export data</p>
-		<p class="text-xs text-muted-foreground">
-			Save all projects, tasks and labels as a JSON file
-		</p>
+		<p class="text-xs text-muted-foreground">Save all projects, tasks and labels as a JSON file</p>
 	</div>
 	<Button variant="outline" size="sm" onclick={() => void handleExport()} disabled={exportLoading}>
 		{exportLoading ? 'Exporting...' : 'Export'}
@@ -116,16 +113,11 @@
 				<Dialog.Header>
 					<Dialog.Title>Delete all data</Dialog.Title>
 					<Dialog.Description>
-						This will permanently delete all projects, tasks, labels and attachments. Type
-						"Delete" to confirm.
+						This will permanently delete all projects, tasks, labels and attachments. Type "Delete"
+						to confirm.
 					</Dialog.Description>
 				</Dialog.Header>
-				<Input
-					type="text"
-					bind:value={resetConfirmText}
-					placeholder="Delete"
-					class="w-full"
-				/>
+				<Input type="text" bind:value={resetConfirmText} placeholder="Delete" class="w-full" />
 				<Dialog.Footer>
 					<Dialog.Close>
 						{#snippet child({ props })}

@@ -51,7 +51,10 @@
 		update('sidebarItems', updated);
 	}
 
-	function handleSidebarDrop(state: DragDropState<SidebarItemConfig>, targetItem: SidebarItemConfig) {
+	function handleSidebarDrop(
+		state: DragDropState<SidebarItemConfig>,
+		targetItem: SidebarItemConfig
+	) {
 		const dragged = state.draggedItem;
 		if (!dragged || dragged.id === targetItem.id || !state.dropPosition) return;
 
@@ -73,14 +76,19 @@
 			<p class="text-[13px] font-medium">Sidebar items</p>
 			<p class="text-xs text-muted-foreground">Drag to reorder, toggle to show or hide</p>
 		</div>
-		<Button variant="ghost" size="sm" class="text-xs text-muted-foreground" onclick={resetSidebarItems}>
+		<Button
+			variant="ghost"
+			size="sm"
+			class="text-xs text-muted-foreground"
+			onclick={resetSidebarItems}
+		>
 			Reset
 		</Button>
 	</div>
 	<div class="space-y-1.5">
 		{#each reorderableItems as item (item.id)}
 			<div
-				class="group/sidebar-row relative flex cursor-grab items-center gap-3 rounded-lg border border-border/50 bg-muted/30 px-3 py-2.5 transition-all active:cursor-grabbing hover:border-border"
+				class="group/sidebar-row relative flex cursor-grab items-center gap-3 rounded-lg border border-border/50 bg-muted/30 px-3 py-2.5 transition-all hover:border-border active:cursor-grabbing"
 				role="listitem"
 				aria-label={sidebarItemLabels[item.id]}
 				use:sortableItem={{
