@@ -56,7 +56,7 @@ export function dueDateInfo(dateStr: string | null | undefined): {
 			overdue: false
 		};
 
-	const formatted = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(
+	const formatted = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(
 		due
 	);
 	return {
@@ -76,7 +76,7 @@ export function issueId(task: Task, projects: Project[], appSettings: Settings):
 }
 
 export function formatDate(value: string) {
-	return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value));
+	return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' }).format(new Date(value));
 }
 
 export function groupedTasks(

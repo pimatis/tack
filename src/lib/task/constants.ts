@@ -9,10 +9,10 @@ export const statusConfig: Record<TaskStatus, { label: string }> = {
 
 export const statusOrder: TaskStatus[] = ['todo', 'in_progress', 'done', 'canceled'];
 
-export const priorityConfig: Record<number, { label: string; bars: number }> = {
-	0: { label: 'No priority', bars: 0 },
-	1: { label: 'Urgent', bars: 3 },
-	2: { label: 'High', bars: 3 },
-	3: { label: 'Medium', bars: 2 },
-	4: { label: 'Low', bars: 1 }
+export const priorityConfig: Record<number, { label: string; bars: number; color: string }> = {
+	0: { label: 'No priority', bars: 0, color: 'text-muted-foreground' },
+	1: { label: 'Urgent', bars: 3, color: 'text-red-400' },
+	2: { label: 'High', bars: 3, color: 'text-orange-400' },
+	3: { label: 'Medium', bars: 2, color: 'text-yellow-400' },
+	4: { label: 'Low', bars: 1, color: 'text-blue-400' }
 };

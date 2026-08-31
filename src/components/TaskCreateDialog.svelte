@@ -5,8 +5,10 @@
 	import type { Label } from '$lib/types/label';
 	import type { Project } from '$lib/types/project';
 	import type { Task, TaskPriority, TaskStatus } from '$lib/types/task';
-	import { fade } from 'svelte/transition';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import PriorityIcon from './PriorityIcon.svelte';
+	import StatusIcon from './StatusIcon.svelte';
+	import Lightbox from './Lightbox.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -65,20 +67,12 @@
 	let uploading = $state(false);
 	let previewMode = $state(false);
 	let lightboxUrl = $state<string | null>(null);
-	let lightboxRef = $state<HTMLDivElement | null>(null);
 
 	const statusLabels: Record<TaskStatus, string> = {
 		todo: 'Todo',
 		in_progress: 'In progress',
 		done: 'Done',
 		canceled: 'Canceled'
-	};
-
-	const statusDots: Record<TaskStatus, string> = {
-		todo: 'bg-muted-foreground/40',
-		in_progress: 'bg-amber-500',
-		done: 'bg-green-500',
-		canceled: 'bg-muted-foreground/20'
 	};
 
 	const priorityLabels: Record<string, string> = {
@@ -99,33 +93,6 @@
 
 	$effect(() => {
 		if (open) requestAnimationFrame(() => titleRef?.focus());
-	});
-
-	// escape closes the lightbox first, then the dialog (independent of focus)
-	$effect(() => {
-		if (!open) return;
-		const onKeydown = (e: KeyboardEvent) => {
-			if (e.key === 'Escape' && lightboxUrl) {
-				lightboxUrl = null;
-				e.stopPropagation();
-			}
-		};
-		document.addEventListener('keydown', onKeydown, { capture: true });
-		return () => document.removeEventListener('keydown', onKeydown, { capture: true });
-	});
-
-	// clicks on the lightbox close it first, never the dialog (independent of focus)
-	$effect(() => {
-		if (!open) return;
-		const onPointerDown = (e: PointerEvent) => {
-			if (!lightboxUrl || !lightboxRef) return;
-			if (lightboxRef.contains(e.target as Node)) {
-				e.stopPropagation();
-				lightboxUrl = null;
-			}
-		};
-		document.addEventListener('pointerdown', onPointerDown, { capture: true });
-		return () => document.removeEventListener('pointerdown', onPointerDown, { capture: true });
 	});
 
 	function reset() {
@@ -422,12 +389,15 @@
 						size="sm"
 						class="gap-1.5 rounded-lg border-border bg-muted/30 px-2.5 text-[12px] font-normal shadow-none hover:bg-muted/50"
 					>
-						<span class="size-2 rounded-full {statusDots[status]}"></span>
+						<StatusIcon {status} size={12} />
 						{statusLabels[status]}
 					</Select.Trigger>
 					<Select.Content>
 						{#each Object.entries(statusLabels) as [value, label] (value)}
-							<Select.Item {value} {label} />
+							<Select.Item {value} {label}>
+								<StatusIcon status={value as TaskStatus} size={12} />
+								<span>{label}</span>
+							</Select.Item>
 						{/each}
 					</Select.Content>
 				</Select.Root>
@@ -437,11 +407,17 @@
 						size="sm"
 						class="gap-1.5 rounded-lg border-border bg-muted/30 px-2.5 text-[12px] font-normal shadow-none hover:bg-muted/50"
 					>
+						{#if priority !== '0'}
+							<PriorityIcon priority={Number(priority)} size={13} />
+						{/if}
 						{priorityLabels[priority]}
 					</Select.Trigger>
 					<Select.Content>
 						{#each Object.entries(priorityLabels) as [value, label] (value)}
-							<Select.Item {value} {label} />
+							<Select.Item {value} {label}>
+								<PriorityIcon priority={Number(value)} size={14} />
+								<span>{label}</span>
+							</Select.Item>
 						{/each}
 					</Select.Content>
 				</Select.Root>
@@ -514,41 +490,4 @@
 	</Dialog.Content>
 </Dialog.Root>
 
-{#if lightboxUrl}
-	<div
-		bind:this={lightboxRef}
-		class="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-8"
-		onclick={() => (lightboxUrl = null)}
-		onpointerdowncapture={(e) => {
-			e.stopPropagation();
-			lightboxUrl = null;
-		}}
-		onkeydown={(e) => {
-			if (e.key === 'Escape') {
-				lightboxUrl = null;
-				e.stopPropagation();
-			}
-		}}
-		role="button"
-		tabindex="-1"
-		transition:fade={{ duration: 150 }}
-	>
-		<img
-			src={lightboxUrl}
-			alt="preview"
-			class="max-h-full max-w-full rounded-lg object-contain shadow-2xl"
-		/>
-		<button
-			class="absolute top-4 right-4 flex size-8 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
-			onclick={() => (lightboxUrl = null)}
-			aria-label="Close preview"
-		>
-			<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-				><path
-					fill="currentColor"
-					d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
-				/></svg
-			>
-		</button>
-	</div>
-{/if}
+<Lightbox url={lightboxUrl} onClose={() => (lightboxUrl = null)} />

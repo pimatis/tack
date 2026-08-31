@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { update, togglePin } from '$lib/repositories/task.repository';
+	import PriorityIcon from './PriorityIcon.svelte';
+	import PriorityMenu from './PriorityMenu.svelte';
+	import StatusMenu from './StatusMenu.svelte';
+	import Lightbox from './Lightbox.svelte';
 	import {
 		create as createAttachment,
 		findByTaskId,
@@ -24,7 +28,7 @@
 	import type { Subtask } from '$lib/types/subtask';
 	import type { ActivityLog } from '$lib/types/activity';
 	import type { Task, TaskPriority, TaskStatus } from '$lib/types/task';
-	import { fade, fly, scale } from 'svelte/transition';
+	import { fade, fly } from 'svelte/transition';
 	import { sortableItem, reorderArray, type DragDropState } from '$lib/dnd';
 	import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -34,7 +38,6 @@
 	import { Spinner } from '$lib/components/ui/spinner/index.js';
 	import { Progress } from '$lib/components/ui/progress/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
-	import * as Popover from '$lib/components/ui/popover/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import LabelSelector from './LabelSelector.svelte';
@@ -79,7 +82,6 @@
 	let attachments = $state<TaskAttachment[]>([]);
 	let attachmentUrls = $state<Record<string, string>>({});
 	let lightboxUrl = $state<string | null>(null);
-	let lightboxRef = $state<HTMLDivElement | null>(null);
 	let pendingAttachments = $state<
 		{ fileName: string; fileData: string; mimeType: string; fileSize: number }[]
 	>([]);
@@ -113,16 +115,6 @@
 		'4': 'Low'
 	};
 
-	const priorityConfig: Record<number, { label: string }> = {
-		0: { label: 'No priority' },
-		1: { label: 'Urgent' },
-		2: { label: 'High' },
-		3: { label: 'Medium' },
-		4: { label: 'Low' }
-	};
-
-	const statusOrder: TaskStatus[] = ['todo', 'in_progress', 'done', 'canceled'];
-
 	let subtaskProgress = $derived(
 		subtasks.length > 0
 			? Math.round((subtasks.filter((s) => s.completed).length / subtasks.length) * 100)
@@ -153,33 +145,6 @@
 	$effect(() => {
 		// keep focus inside the panel, also return it after the lightbox closes
 		if (open && !lightboxUrl) requestAnimationFrame(() => titleRef?.focus());
-	});
-
-	// escape closes the lightbox first, then the panel (independent of focus)
-	$effect(() => {
-		if (!open) return;
-		const onKeydown = (e: KeyboardEvent) => {
-			if (e.key === 'Escape' && lightboxUrl) {
-				lightboxUrl = null;
-				e.stopPropagation();
-			}
-		};
-		document.addEventListener('keydown', onKeydown, { capture: true });
-		return () => document.removeEventListener('keydown', onKeydown, { capture: true });
-	});
-
-	// clicks on the lightbox close it first, never the panel (independent of focus)
-	$effect(() => {
-		if (!open) return;
-		const onPointerDown = (e: PointerEvent) => {
-			if (!lightboxUrl || !lightboxRef) return;
-			if (lightboxRef.contains(e.target as Node)) {
-				e.stopPropagation();
-				lightboxUrl = null;
-			}
-		};
-		document.addEventListener('pointerdown', onPointerDown, { capture: true });
-		return () => document.removeEventListener('pointerdown', onPointerDown, { capture: true });
 	});
 
 	async function loadTaskLabels(taskId: string) {
@@ -481,7 +446,7 @@
 	}
 
 	function formatDate(value: string) {
-		return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value));
+		return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' }).format(new Date(value));
 	}
 
 	function formatRelativeTime(value: string): string {
@@ -1110,48 +1075,18 @@
 						<!-- status -->
 						<div class="flex flex-col gap-1 py-1.5">
 							<span class="text-[11px] font-medium text-muted-foreground/60">Status</span>
-							<Popover.Root>
-								<Popover.Trigger>
-									{#snippet child({ props })}
-										<Button
-											{...props}
-											variant="ghost"
-											class="flex h-auto w-full items-center justify-start gap-2 rounded-md px-2 py-1.5 text-[12px] text-foreground transition-colors hover:bg-muted/50"
-										>
-											<StatusIcon {status} size={14} />
-											<span>{statusLabels[status]}</span>
-										</Button>
-									{/snippet}
-								</Popover.Trigger>
-								<Popover.Content class="w-44 p-1.5" align="start">
-									<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
-										Change status
-									</div>
-									{#each statusOrder as s (s)}
-										<Button
-											variant="ghost"
-											class="flex h-auto w-full items-center justify-start gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-foreground transition-colors hover:bg-muted"
-											onclick={() => (status = s)}
-										>
-											<StatusIcon status={s} size={14} />
-											<span>{statusLabels[s]}</span>
-											{#if status === s}
-												<svg
-													class="ml-auto text-muted-foreground"
-													width="14"
-													height="14"
-													viewBox="0 0 24 24"
-													fill="none"
-													><path
-														fill="currentColor"
-														d="M13.06 16.06a1.5 1.5 0 0 1-2.12 0l-5.658-5.656a1.5 1.5 0 1 1 2.122-2.121L12 12.879l4.596-4.596a1.5 1.5 0 0 1 2.122 2.12l-5.657 5.658Z"
-													/></svg
-												>
-											{/if}
-										</Button>
-									{/each}
-								</Popover.Content>
-							</Popover.Root>
+							<StatusMenu value={status} onSelect={(s) => (status = s)}>
+								{#snippet trigger(props)}
+									<Button
+										{...props}
+										variant="ghost"
+										class="flex h-auto w-full items-center justify-start gap-2 rounded-md px-2 py-1.5 text-[12px] text-foreground transition-colors hover:bg-muted/50"
+									>
+										<StatusIcon {status} size={14} />
+										<span>{statusLabels[status]}</span>
+									</Button>
+								{/snippet}
+							</StatusMenu>
 						</div>
 
 						<Separator />
@@ -1159,146 +1094,20 @@
 						<!-- priority -->
 						<div class="flex flex-col gap-1 py-1.5">
 							<span class="text-[11px] font-medium text-muted-foreground/60">Priority</span>
-							<Popover.Root>
-								<Popover.Trigger>
-									{#snippet child({ props })}
-										<Button
-											{...props}
-											variant="ghost"
-											class="flex h-auto w-full items-center justify-start gap-2 rounded-md px-2 py-1.5 text-[12px] text-foreground transition-colors hover:bg-muted/50"
-										>
-											{#if Number(priority) === 1}
-												<svg
-													class="shrink-0 text-orange-500"
-													width="14"
-													height="14"
-													viewBox="0 0 24 24"
-													fill="none"
-												>
-													<path
-														fill="currentColor"
-														d="M10.7 3.148a1.5 1.5 0 0 1 2.6 0l8.633 14.954a1.5 1.5 0 0 1-1.299 2.25H3.366a1.5 1.5 0 0 1-1.299-2.25zM12 15.001a1 1 0 1 0 0 2a1 1 0 0 0 0-2m0-7a1 1 0 0 0-1 1v4a1 1 0 0 0 2 0v-4a1 1 0 0 0-1-1"
-													/>
-												</svg>
-											{:else}
-												<svg
-													class="shrink-0"
-													width="14"
-													height="14"
-													viewBox="0 0 24 24"
-													fill="none"
-												>
-													<rect
-														x="3"
-														y="14"
-														width="3.5"
-														height="7"
-														rx="1"
-														fill="currentColor"
-														opacity={Number(priority) >= 2 ? 1 : 0.25}
-													/>
-													<rect
-														x="10.25"
-														y="9"
-														width="3.5"
-														height="12"
-														rx="1"
-														fill="currentColor"
-														opacity={Number(priority) >= 3 ? 1 : 0.25}
-													/>
-													<rect
-														x="17.5"
-														y="4"
-														width="3.5"
-														height="17"
-														rx="1"
-														fill="currentColor"
-														opacity={Number(priority) >= 4 ? 1 : 0.25}
-													/>
-												</svg>
-											{/if}
-											<span>{priorityLabels[priority]}</span>
-										</Button>
-									{/snippet}
-								</Popover.Trigger>
-								<Popover.Content class="w-48 p-1.5" align="start">
-									<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
-										Set priority
-									</div>
-									{#each [0, 1, 2, 3, 4] as p (p)}
-										<Button
-											variant="ghost"
-											class="flex h-auto w-full items-center justify-start gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-foreground transition-colors hover:bg-muted"
-											onclick={() => (priority = String(p))}
-										>
-											{#if p === 1}
-												<svg
-													class="shrink-0 text-orange-500"
-													width="14"
-													height="14"
-													viewBox="0 0 24 24"
-													fill="none"
-												>
-													<path
-														fill="currentColor"
-														d="M10.7 3.148a1.5 1.5 0 0 1 2.6 0l8.633 14.954a1.5 1.5 0 0 1-1.299 2.25H3.366a1.5 1.5 0 0 1-1.299-2.25zM12 15.001a1 1 0 1 0 0 2a1 1 0 0 0 0-2m0-7a1 1 0 0 0-1 1v4a1 1 0 0 0 2 0v-4a1 1 0 0 0-1-1"
-													/>
-												</svg>
-											{:else}
-												<svg
-													class="shrink-0"
-													width="14"
-													height="14"
-													viewBox="0 0 24 24"
-													fill="none"
-												>
-													<rect
-														x="3"
-														y="14"
-														width="3.5"
-														height="7"
-														rx="1"
-														fill="currentColor"
-														opacity={p >= 2 ? 1 : 0.25}
-													/>
-													<rect
-														x="10.25"
-														y="9"
-														width="3.5"
-														height="12"
-														rx="1"
-														fill="currentColor"
-														opacity={p >= 3 ? 1 : 0.25}
-													/>
-													<rect
-														x="17.5"
-														y="4"
-														width="3.5"
-														height="17"
-														rx="1"
-														fill="currentColor"
-														opacity={p >= 4 ? 1 : 0.25}
-													/>
-												</svg>
-											{/if}
-											<span>{priorityConfig[p].label}</span>
-											{#if Number(priority) === p}
-												<svg
-													class="ml-auto text-muted-foreground"
-													width="14"
-													height="14"
-													viewBox="0 0 24 24"
-													fill="none"
-													><path
-														fill="currentColor"
-														d="M13.06 16.06a1.5 1.5 0 0 1-2.12 0l-5.658-5.656a1.5 1.5 0 1 1 2.122-2.121L12 12.879l4.596-4.596a1.5 1.5 0 0 1 2.122 2.12l-5.657 5.658Z"
-													/></svg
-												>
-											{/if}
-										</Button>
-									{/each}
-								</Popover.Content>
-							</Popover.Root>
+							<PriorityMenu value={Number(priority)} onSelect={(p) => (priority = String(p))}>
+								{#snippet trigger(props)}
+									<Button
+										{...props}
+										variant="ghost"
+										class="flex h-auto w-full items-center justify-start gap-2 rounded-md px-2 py-1.5 text-[12px] text-foreground transition-colors hover:bg-muted/50"
+									>
+										{#if Number(priority) > 0}
+											<PriorityIcon priority={Number(priority)} size={14} />
+										{/if}
+										<span>{priorityLabels[priority]}</span>
+									</Button>
+								{/snippet}
+							</PriorityMenu>
 						</div>
 
 						<Separator />
@@ -1389,43 +1198,5 @@
 		{/if}
 	</div>
 
-	{#if lightboxUrl}
-		<div
-			bind:this={lightboxRef}
-			class="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-8"
-			onclick={() => (lightboxUrl = null)}
-			onpointerdowncapture={(e) => {
-				e.stopPropagation();
-				lightboxUrl = null;
-			}}
-			onkeydown={(e) => {
-				if (e.key === 'Escape') {
-					lightboxUrl = null;
-					e.stopPropagation();
-				}
-			}}
-			role="button"
-			tabindex="-1"
-			transition:fade={{ duration: 150 }}
-		>
-			<img
-				src={lightboxUrl}
-				alt="preview"
-				class="max-h-full max-w-full rounded-lg object-contain shadow-2xl"
-				transition:scale={{ duration: 150, start: 0.95 }}
-			/>
-			<button
-				class="absolute top-4 right-4 flex size-8 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
-				onclick={() => (lightboxUrl = null)}
-				aria-label="Close preview"
-			>
-				<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-					><path
-						fill="currentColor"
-						d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
-					/></svg
-				>
-			</button>
-		</div>
-	{/if}
+	<Lightbox url={lightboxUrl} onClose={() => (lightboxUrl = null)} />
 {/if}

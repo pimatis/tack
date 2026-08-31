@@ -2,6 +2,7 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import PriorityIcon from '../PriorityIcon.svelte';
 	import type { Settings } from '$lib/types/settings';
 
 	let {
@@ -62,12 +63,18 @@
 		onValueChange={(v) => update('defaultPriority', Number(v) as 0 | 1 | 2 | 3 | 4)}
 	>
 		<Select.Trigger class="w-36">
+			{#if Number(settings.defaultPriority) > 0}
+				<PriorityIcon priority={Number(settings.defaultPriority)} size={13} />
+			{/if}
 			{priorityOptions.find((o) => o.value === String(settings.defaultPriority))?.label ??
 				'No priority'}
 		</Select.Trigger>
 		<Select.Content>
 			{#each priorityOptions as opt (opt.value)}
-				<Select.Item value={opt.value} label={opt.label}>{opt.label}</Select.Item>
+				<Select.Item value={opt.value} label={opt.label}>
+					<PriorityIcon priority={Number(opt.value)} size={14} />
+					<span>{opt.label}</span>
+				</Select.Item>
 			{/each}
 		</Select.Content>
 	</Select.Root>

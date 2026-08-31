@@ -3,23 +3,17 @@
 	import { goto } from '$app/navigation';
 	import { findAll as findAllTasks } from '$lib/repositories/task.repository';
 	import { findAll as findAllProjects } from '$lib/repositories/project.repository';
-	import type { Task, TaskStatus } from '$lib/types/task';
+	import type { Task } from '$lib/types/task';
 	import type { Project } from '$lib/types/project';
 	import * as Command from '$lib/components/ui/command/index.js';
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
 	import { issueId } from '$lib/task/utils';
 	import { getSettings } from '$lib/stores/settings';
+	import StatusIcon from './StatusIcon.svelte';
 
 	let open = $state(false);
 	let tasks = $state<Task[]>([]);
 	let projects = $state<Project[]>([]);
-
-	const statusDots: Record<TaskStatus, string> = {
-		todo: 'bg-muted-foreground/40',
-		in_progress: 'bg-amber-500',
-		done: 'bg-green-500',
-		canceled: 'bg-muted-foreground/20'
-	};
 
 	async function goHomeThenDispatch(eventName: string, detail?: unknown) {
 		if (window.location.pathname !== '/') {
@@ -139,7 +133,7 @@
 						onSelect={() => selectTask(task)}
 						class="[&_.cn-command-item-indicator]:hidden"
 					>
-						<span class="size-2 shrink-0 rounded-full {statusDots[task.status]}"></span>
+						<StatusIcon status={task.status} size={12} />
 						<span class="min-w-0 flex-1 truncate">{task.title}</span>
 						<span class="ml-auto shrink-0 font-mono text-[11px] text-muted-foreground/50"
 							>{issueId(task, projects, getSettings())}</span

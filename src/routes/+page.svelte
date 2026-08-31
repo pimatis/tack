@@ -69,7 +69,6 @@
 			<BulkActionBar
 				selectedCount={state.selectedCount}
 				isAllSelected={state.isAllSelected()}
-				{statusOrder}
 				projects={state.projects}
 				onBulkChangeStatus={(s) => state.bulkChangeStatus(s)}
 				onBulkChangePriority={(p) => state.bulkChangePriority(p)}

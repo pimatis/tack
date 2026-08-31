@@ -15,6 +15,8 @@
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import PriorityIcon from './PriorityIcon.svelte';
+	import StatusIcon from './StatusIcon.svelte';
 	import * as ContextMenu from '$lib/components/ui/context-menu/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
@@ -90,11 +92,11 @@
 		canceled: { label: 'Canceled' }
 	};
 	const statusOrder: TaskStatus[] = ['todo', 'in_progress', 'done', 'canceled'];
-	const priorityConfig: Record<number, { label: string; color: string }> = {
-		1: { label: 'Urgent', color: 'text-red-400' },
-		2: { label: 'High', color: 'text-orange-400' },
-		3: { label: 'Medium', color: 'text-yellow-400' },
-		4: { label: 'Low', color: 'text-blue-400' }
+	const priorityConfig: Record<number, { label: string }> = {
+		1: { label: 'Urgent' },
+		2: { label: 'High' },
+		3: { label: 'Medium' },
+		4: { label: 'Low' }
 	};
 
 	// computed counts
@@ -661,74 +663,7 @@
 										onclick={() =>
 											dispatchFilter('filter-by-status', 'filter-by-status:' + status, status)}
 									>
-										{#if status === 'todo'}
-											<svg
-												width="14"
-												height="14"
-												viewBox="0 0 24 24"
-												fill="none"
-												class="shrink-0 text-muted-foreground/50"
-												><circle
-													cx="12"
-													cy="12"
-													r="8"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-												/></svg
-											>
-										{:else if status === 'in_progress'}
-											<svg
-												width="14"
-												height="14"
-												viewBox="0 0 24 24"
-												fill="none"
-												class="shrink-0 text-amber-500"
-												><circle cx="12" cy="12" r="8" fill="currentColor" opacity="0.2" /><path
-													d="M12 4a8 8 0 0 1 8 8a8 8 0 0 1-8 8a8 8 0 0 1-8-8a8 8 0 0 1 8-8Z M12 4a8 8 0 0 1 0 16Z"
-													fill="currentColor"
-												/><circle
-													cx="12"
-													cy="12"
-													r="8"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="1.5"
-													opacity="0.5"
-												/></svg
-											>
-										{:else if status === 'done'}
-											<svg
-												width="14"
-												height="14"
-												viewBox="0 0 24 24"
-												fill="none"
-												class="shrink-0 text-green-500"
-												><circle cx="12" cy="12" r="8" fill="currentColor" /><path
-													fill="none"
-													stroke="#0a0a0a"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2.5"
-													d="m9 12l2 2l4-4"
-												/></svg
-											>
-										{:else if status === 'canceled'}
-											<svg
-												width="14"
-												height="14"
-												viewBox="0 0 24 24"
-												fill="none"
-												class="shrink-0 text-muted-foreground/40"
-												><circle cx="12" cy="12" r="8" fill="currentColor" /><path
-													fill="none"
-													stroke="#0a0a0a"
-													stroke-linecap="round"
-													stroke-width="2.5"
-													d="m9.5 9.5l5 5m-5 0l5-5"
-												/></svg
-											>
-										{/if}
+										<StatusIcon {status} size={14} />
 										<span>{statusConfig[status].label}</span>
 										{#if statusCounts[status] > 0}
 											<span class="ml-auto shrink-0 text-[11px] text-muted-foreground/60"
@@ -779,15 +714,7 @@
 										onclick={() =>
 											dispatchFilter('filter-by-priority', 'filter-by-priority:' + p, p)}
 									>
-										<span class="flex shrink-0 items-center gap-0.5 {priorityConfig[p].color}">
-											{#each [0, 1, 2] as barIndex (barIndex)}
-												<span
-													class="inline-block h-2.5 w-0.5 rounded-full {barIndex < 5 - p
-														? 'bg-current'
-														: 'bg-current opacity-20'}"
-												></span>
-											{/each}
-										</span>
+										<PriorityIcon priority={p} size={14} />
 										<span>{priorityConfig[p].label}</span>
 										{#if priorityCounts[p] > 0}
 											<span class="ml-auto shrink-0 text-[11px] text-muted-foreground/60"

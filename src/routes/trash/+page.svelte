@@ -66,7 +66,7 @@
 		if (diffMin < 60) return `${diffMin}m ago`;
 		if (diffHr < 24) return `${diffHr}h ago`;
 		if (diffDay < 7) return `${diffDay}d ago`;
-		return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(d);
+		return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(d);
 	}
 
 	async function load() {

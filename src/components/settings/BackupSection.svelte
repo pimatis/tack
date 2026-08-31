@@ -47,7 +47,7 @@
 	function formatDate(iso: string): string {
 		const d = new Date(iso);
 		if (Number.isNaN(d.getTime())) return iso;
-		return new Intl.DateTimeFormat(undefined, {
+		return new Intl.DateTimeFormat('en-US', {
 			month: 'short',
 			day: 'numeric',
 			hour: '2-digit',
@@ -59,7 +59,7 @@
 	function formatDateLong(iso: string): string {
 		const d = new Date(iso);
 		if (Number.isNaN(d.getTime())) return iso;
-		return new Intl.DateTimeFormat(undefined, {
+		return new Intl.DateTimeFormat('en-US', {
 			year: 'numeric',
 			month: 'short',
 			day: 'numeric',

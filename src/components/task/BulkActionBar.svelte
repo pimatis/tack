@@ -4,16 +4,16 @@
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import * as Popover from '$lib/components/ui/popover/index.js';
-	import StatusIcon from '../StatusIcon.svelte';
+	import PriorityIcon from '../PriorityIcon.svelte';
+	import StatusMenu from '../StatusMenu.svelte';
+	import PriorityMenu from '../PriorityMenu.svelte';
 	import type { TaskPriority, TaskStatus } from '$lib/types/task';
 	import type { Project } from '$lib/types/project';
-	import { statusConfig, priorityConfig } from '$lib/task/constants';
 
 	let {
 		selectedCount,
 		isAllSelected,
 		onToggleSelectAll,
-		statusOrder,
 		projects,
 		onBulkChangeStatus,
 		onBulkChangePriority,
@@ -25,7 +25,6 @@
 		selectedCount: number;
 		isAllSelected: boolean;
 		onToggleSelectAll: () => void;
-		statusOrder: TaskStatus[];
 		projects: Project[];
 		onBulkChangeStatus: (status: TaskStatus) => void;
 		onBulkChangePriority: (priority: TaskPriority) => void;
@@ -47,131 +46,44 @@
 
 	<div class="flex items-center gap-1.5">
 		<!-- bulk status -->
-		<Popover.Root>
-			<Popover.Trigger>
-				{#snippet child({ props })}
-					<Button
-						{...props}
-						variant="outline"
-						size="sm"
-						class="flex h-8 items-center gap-1.5 rounded-lg border border-input px-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
-					>
-						<span class="size-2 rounded-full bg-muted-foreground/40"></span>
-						<span>Status</span>
-					</Button>
-				{/snippet}
-			</Popover.Trigger>
-			<Popover.Content class="w-48 p-1.5" align="end">
-				<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
-					Set status for all
-				</div>
-				{#each statusOrder as s (s)}
-					<Button
-						variant="ghost"
-						class="flex h-auto w-full items-center justify-start gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-foreground transition-colors hover:bg-muted"
-						onclick={() => onBulkChangeStatus(s)}
-					>
-						<StatusIcon status={s} size={14} />
-						<span>{statusConfig[s].label}</span>
-					</Button>
-				{/each}
-			</Popover.Content>
-		</Popover.Root>
+		<StatusMenu
+			value="todo"
+			onSelect={(s) => onBulkChangeStatus(s)}
+			title="Set status for all"
+			align="end"
+		>
+			{#snippet trigger(props)}
+				<Button
+					{...props}
+					variant="outline"
+					size="sm"
+					class="flex h-8 items-center gap-1.5 rounded-lg border border-input px-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
+				>
+					<span class="size-2 rounded-full bg-muted-foreground/40"></span>
+					<span>Status</span>
+				</Button>
+			{/snippet}
+		</StatusMenu>
 
 		<!-- bulk priority -->
-		<Popover.Root>
-			<Popover.Trigger>
-				{#snippet child({ props })}
-					<Button
-						{...props}
-						variant="outline"
-						size="sm"
-						class="flex h-8 items-center gap-1.5 rounded-lg border border-input px-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
-					>
-						<svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-							<rect x="3" y="14" width="3.5" height="7" rx="1" fill="currentColor" opacity="0.25" />
-							<rect
-								x="10.25"
-								y="9"
-								width="3.5"
-								height="12"
-								rx="1"
-								fill="currentColor"
-								opacity="0.25"
-							/>
-							<rect
-								x="17.5"
-								y="4"
-								width="3.5"
-								height="17"
-								rx="1"
-								fill="currentColor"
-								opacity="0.25"
-							/>
-						</svg>
-						<span>Priority</span>
-					</Button>
-				{/snippet}
-			</Popover.Trigger>
-			<Popover.Content class="w-48 p-1.5" align="end">
-				<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
-					Set priority for all
-				</div>
-				{#each [0, 1, 2, 3, 4] as p (p)}
-					<Button
-						variant="ghost"
-						class="flex h-auto w-full items-center justify-start gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-foreground transition-colors hover:bg-muted"
-						onclick={() => onBulkChangePriority(p as TaskPriority)}
-					>
-						{#if p === 1}
-							<svg
-								class="shrink-0 text-orange-500"
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-							>
-								<path
-									fill="currentColor"
-									d="M10.7 3.148a1.5 1.5 0 0 1 2.6 0l8.633 14.954a1.5 1.5 0 0 1-1.299 2.25H3.366a1.5 1.5 0 0 1-1.299-2.25zM12 15.001a1 1 0 1 0 0 2a1 1 0 0 0 0-2m0-7a1 1 0 0 0-1 1v4a1 1 0 0 0 2 0v-4a1 1 0 0 0-1-1"
-								/>
-							</svg>
-						{:else}
-							<svg class="shrink-0" width="14" height="14" viewBox="0 0 24 24" fill="none">
-								<rect
-									x="3"
-									y="14"
-									width="3.5"
-									height="7"
-									rx="1"
-									fill="currentColor"
-									opacity={p >= 2 ? 1 : 0.25}
-								/>
-								<rect
-									x="10.25"
-									y="9"
-									width="3.5"
-									height="12"
-									rx="1"
-									fill="currentColor"
-									opacity={p >= 3 ? 1 : 0.25}
-								/>
-								<rect
-									x="17.5"
-									y="4"
-									width="3.5"
-									height="17"
-									rx="1"
-									fill="currentColor"
-									opacity={p >= 4 ? 1 : 0.25}
-								/>
-							</svg>
-						{/if}
-						<span>{priorityConfig[p].label}</span>
-					</Button>
-				{/each}
-			</Popover.Content>
-		</Popover.Root>
+		<PriorityMenu
+			value={-1}
+			onSelect={(p) => onBulkChangePriority(p as TaskPriority)}
+			title="Set priority for all"
+			align="end"
+		>
+			{#snippet trigger(props)}
+				<Button
+					{...props}
+					variant="outline"
+					size="sm"
+					class="flex h-8 items-center gap-1.5 rounded-lg border border-input px-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
+				>
+					<PriorityIcon priority={0} size={13} />
+					<span>Priority</span>
+				</Button>
+			{/snippet}
+		</PriorityMenu>
 
 		<!-- bulk move to project -->
 		<Popover.Root>

@@ -2,7 +2,7 @@
 	let { endDate }: { endDate?: string | null } = $props();
 
 	function formatEndDate(dateStr: string): string {
-		return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(
+		return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(
 			new Date(dateStr + 'T00:00:00')
 		);
 	}
