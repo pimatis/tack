@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+	import { getSettings } from '$lib/stores/settings';
+	import { keyComboLabel } from '$lib/shortcuts/index.js';
 
 	let {
 		pinnedFilter,
@@ -16,6 +18,13 @@
 		viewMode: 'list' | 'board' | 'calendar';
 	} = $props();
 </script>
+
+{#snippet shortcut(id: string)}
+	{@const combo = getSettings().shortcuts[id]?.[0]}
+	{#if combo}
+		<span class="ml-1 opacity-50">{keyComboLabel(combo)}</span>
+	{/if}
+{/snippet}
 
 <header class="flex items-center justify-between pb-5">
 	<div class="flex items-center gap-3">
@@ -54,7 +63,7 @@
 					</Button>
 				{/snippet}
 			</Tooltip.Trigger>
-			<Tooltip.Content side="bottom">List view</Tooltip.Content>
+			<Tooltip.Content side="bottom">List view {@render shortcut('toggle-view')}</Tooltip.Content>
 		</Tooltip.Root>
 		<Tooltip.Root>
 			<Tooltip.Trigger>
@@ -79,7 +88,7 @@
 					</Button>
 				{/snippet}
 			</Tooltip.Trigger>
-			<Tooltip.Content side="bottom">Board view</Tooltip.Content>
+			<Tooltip.Content side="bottom">Board view {@render shortcut('toggle-view')}</Tooltip.Content>
 		</Tooltip.Root>
 		<Tooltip.Root>
 			<Tooltip.Trigger>
@@ -104,7 +113,9 @@
 					</Button>
 				{/snippet}
 			</Tooltip.Trigger>
-			<Tooltip.Content side="bottom">Calendar view</Tooltip.Content>
+			<Tooltip.Content side="bottom"
+				>Calendar view {@render shortcut('toggle-view')}</Tooltip.Content
+			>
 		</Tooltip.Root>
 	</div>
 </header>

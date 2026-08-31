@@ -14,8 +14,16 @@
 		return false;
 	}
 
-	function anyModPressed(e: KeyboardEvent): boolean {
-		return e.metaKey || e.ctrlKey || e.altKey;
+	function comboMatches(k: ShortcutKey, e: KeyboardEvent): boolean {
+		// normalize so shift+letter ("C") matches the recorded lowercase key
+		const pressedKey = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+		if (k.key !== pressedKey) return false;
+		if (k.shift && !e.shiftKey) return false;
+		if (!k.shift && e.shiftKey) return false;
+		if (k.alt && !e.altKey) return false;
+		if (!k.alt && e.altKey) return false;
+		if (k.mod === undefined) return !e.metaKey && !e.ctrlKey;
+		return modActive(e, k.mod);
 	}
 
 	let behaviors = $state<ShortcutBehavior[]>([]);
@@ -36,11 +44,7 @@
 		if (!document.hasFocus()) return;
 		const shortcuts = getSettings().shortcuts;
 		for (const [id, keys] of Object.entries(shortcuts)) {
-			const combo = keys.find((k) => {
-				if (k.key !== e.key) return false;
-				if (k.mod === undefined) return !anyModPressed(e);
-				return modActive(e, k.mod);
-			});
+			const combo = keys.find((k) => comboMatches(k, e));
 			if (!combo) continue;
 			const matches = behaviors.filter((b) => b.id === id && (!b.enabled || b.enabled()));
 			if (matches.length === 0) continue;

@@ -1,4 +1,5 @@
 use rusqlite::{Connection, OptionalExtension, params};
+use sha2::{Digest, Sha384};
 use std::path::PathBuf;
 
 pub type Result<T> = std::result::Result<T, String>;
@@ -40,6 +41,8 @@ fn run_migrations(conn: &Connection) -> Result<()> {
         (16, "add_end_date_to_tasks", include_str!("../../migrations/016_end_date.sql")),
     ];
 
+    let known: std::collections::HashSet<i64> = migrations.iter().map(|(v, _, _)| *v as i64).collect();
+
     // track applied versions via the same table the tauri app uses, so
     // non-idempotent migrations (e.g. 013 column rename) only run once
     let has_tracking = conn
@@ -62,7 +65,7 @@ fn run_migrations(conn: &Connection) -> Result<()> {
         .map(|c| c > 0)
         .unwrap_or(false);
 
-    let applied: std::collections::HashSet<i64> = if has_tracking {
+    let mut applied: std::collections::HashSet<i64> = if has_tracking {
         let mut stmt = conn
             .prepare("SELECT version FROM _sqlx_migrations WHERE success = 1")
             .map_err(|e| e.to_string())?;
@@ -71,10 +74,23 @@ fn run_migrations(conn: &Connection) -> Result<()> {
             .map_err(|e| e.to_string())?;
         rows.filter_map(|r| r.ok()).collect()
     } else if has_tack_tables {
-        migrations.iter().map(|(v, _, _)| *v as i64).collect()
+        known.clone()
     } else {
         std::collections::HashSet::new()
     };
+
+    // drop tracking rows for migrations this binary does not know, so a
+    // downgrade opens cleanly instead of erroring (schema stays ahead)
+    if has_tracking {
+        for version in applied.difference(&known) {
+            conn.execute(
+                "DELETE FROM _sqlx_migrations WHERE version = ?1",
+                params![version],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+    }
+    applied.retain(|v| known.contains(v));
 
     for (version, description, sql) in migrations {
         if applied.contains(&(*version as i64)) {
@@ -86,8 +102,8 @@ fn run_migrations(conn: &Connection) -> Result<()> {
                 return Err(format!("migration {} failed: {}", version, msg));
             }
         }
-        // same schema sqlx creates, empty checksum is fine because sqlx run()
-        // skips applied versions without comparing checksums
+        // same schema sqlx creates; checksum matches sqlx's sha384 so the
+        // tauri app (and older binaries) can still verify it
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS _sqlx_migrations (
                 version BIGINT PRIMARY KEY,
@@ -99,10 +115,11 @@ fn run_migrations(conn: &Connection) -> Result<()> {
             );",
         )
         .map_err(|e| e.to_string())?;
+        let checksum: Vec<u8> = Sha384::digest(sql.as_bytes()).to_vec();
         conn.execute(
             "INSERT OR IGNORE INTO _sqlx_migrations (version, description, installed_on, success, checksum, execution_time)
-             VALUES (?1, ?2, CURRENT_TIMESTAMP, 1, x'', 0)",
-            params![*version as i64, *description],
+             VALUES (?1, ?2, CURRENT_TIMESTAMP, 1, ?3, 0)",
+            params![*version as i64, *description, checksum],
         )
         .map_err(|e| format!("failed to record migration {}: {}", version, e))?;
     }

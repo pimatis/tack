@@ -20,7 +20,19 @@
 	let savedFlash = $state(false);
 
 	const dirty = $derived(JSON.stringify(draft) !== JSON.stringify(getSettings().shortcuts));
+	// reset stays available while saved values differ from defaults (not only while draft is dirty)
+	const canReset = $derived(
+		dirty || JSON.stringify(getSettings().shortcuts) !== JSON.stringify(defaultSettings.shortcuts)
+	);
 	const recording = $derived(SHORTCUTS.find((s) => s.id === recordingId) ?? null);
+
+	// keep draft in sync when settings change elsewhere (cli sync) while nothing is pending
+	$effect(() => {
+		const saved = getSettings().shortcuts;
+		if (!dirty && JSON.stringify(draft) !== JSON.stringify(saved)) {
+			draft = JSON.parse(JSON.stringify(saved));
+		}
+	});
 
 	function openRecorder(id: string) {
 		recordingId = id;
@@ -159,7 +171,7 @@
 			variant="ghost"
 			size="sm"
 			class="text-[12px] font-normal text-muted-foreground"
-			disabled={!dirty}
+			disabled={!canReset}
 			onclick={reset}
 		>
 			Reset to defaults
@@ -168,7 +180,13 @@
 </Card.Root>
 
 <!-- record dialog -->
-<Dialog.Root bind:open={dialogOpen}>
+<Dialog.Root
+	bind:open={dialogOpen}
+	onOpenChange={(o) => {
+		dialogOpen = o;
+		if (!o) closeRecorder();
+	}}
+>
 	<Dialog.Content class="max-w-sm gap-0 p-0" showCloseButton={false}>
 		<Dialog.Title class="px-5 pt-4 text-[14px] font-semibold">Keyboard shortcut</Dialog.Title>
 		<Dialog.Description class="px-5 pt-1 text-xs text-muted-foreground">

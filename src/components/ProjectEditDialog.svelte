@@ -100,7 +100,7 @@
 						bind:value={prefix}
 						placeholder="WEB"
 						maxlength={4}
-						class="h-7 w-20 text-[12px] font-medium uppercase"
+						class="h-7 w-20 text-[12px] font-medium"
 					/>
 				</div>
 

@@ -1,6 +1,8 @@
 export type ShortcutKey = {
 	key: string;
 	mod?: 'meta' | 'ctrl' | 'metaOrCtrl';
+	shift?: boolean;
+	alt?: boolean;
 };
 
 export type ShortcutDefinition = {
@@ -71,9 +73,13 @@ export function keyModifierLabel(mod?: ShortcutKey['mod']): string | null {
 }
 
 export function keyComboLabel(key: ShortcutKey): string {
+	const parts: string[] = [];
 	const mod = keyModifierLabel(key.mod);
-	const base = keyLabel(key.key);
-	return mod ? `${mod} ${base}` : base;
+	if (mod) parts.push(mod);
+	if (key.alt) parts.push(isMac ? '⌥' : 'Alt');
+	if (key.shift) parts.push(isMac ? '⇧' : 'Shift');
+	parts.push(keyLabel(key.key));
+	return parts.join(' ');
 }
 
 export function shortcutIdLabel(id: string): string {
@@ -81,17 +87,21 @@ export function shortcutIdLabel(id: string): string {
 }
 
 export function combosEqual(a: ShortcutKey, b: ShortcutKey): boolean {
-	return a.key === b.key && (a.mod ?? null) === (b.mod ?? null);
+	return (
+		a.key === b.key &&
+		(a.mod ?? null) === (b.mod ?? null) &&
+		(a.shift ?? false) === (b.shift ?? false) &&
+		(a.alt ?? false) === (b.alt ?? false)
+	);
 }
 
 // build a shortcut from a keyboard event while recording; null while only modifiers are pressed
 export function comboFromEvent(e: KeyboardEvent): ShortcutKey | null {
 	if (e.key === 'Process' || ['Meta', 'Control', 'Alt', 'Shift'].includes(e.key)) return null;
-	if (e.altKey) return null; // option combos produce special characters, not supported
 	const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
 	let mod: ShortcutKey['mod'] | undefined;
 	if (e.metaKey && e.ctrlKey) mod = 'metaOrCtrl';
 	else if (e.metaKey) mod = 'meta';
 	else if (e.ctrlKey) mod = 'ctrl';
-	return { key, mod };
+	return { key, mod, shift: e.shiftKey || undefined, alt: e.altKey || undefined };
 }

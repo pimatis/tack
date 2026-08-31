@@ -6,10 +6,14 @@ import {
 	type SidebarItemId,
 	type Theme
 } from '$lib/types/settings';
+import type { ShortcutKey } from '$lib/shortcuts/shortcuts';
 
 const STORAGE_KEY = 'tack-settings';
 
 let current: Settings = { ...defaultSettings };
+
+// keys currently being written to the db - the sync poll must not overwrite them
+const pendingPersist = new Set<string>();
 
 // merge stored sidebar items with defaults so new items appear for existing users
 function migrateSidebarItems(stored: SidebarItemConfig[] | undefined): SidebarItemConfig[] {
@@ -79,13 +83,16 @@ function persistToDb(updates: Partial<Settings>): void {
 			const db = await getDb();
 			for (const [key, value] of Object.entries(updates)) {
 				const str = typeof value === 'object' ? JSON.stringify(value) : String(value);
+				pendingPersist.add(key);
 				await db.execute(
 					'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $2',
 					[key, str]
 				);
+				pendingPersist.delete(key);
 			}
 		} catch {
 			// db unavailable (browser dev) - keep localStorage as source of truth
+			pendingPersist.clear();
 		}
 	})();
 }
@@ -110,9 +117,20 @@ export async function loadSettingsFromDb(): Promise<void> {
 		);
 		const merged: Partial<Settings> = {};
 		for (const row of rows) {
-			if (!(row.key in current)) continue;
+			if (!(row.key in current) || pendingPersist.has(row.key)) continue;
 			try {
-				merged[row.key as keyof Settings] = parseDbValue(row.key, row.value) as never;
+				const parsed = parseDbValue(row.key, row.value);
+				if (row.key === 'shortcuts') {
+					// merge so cli-set shortcuts never drop the other defaults
+					merged.shortcuts = {
+						...defaultSettings.shortcuts,
+						...(parsed as Record<string, ShortcutKey[]>)
+					};
+				} else if (row.key === 'sidebarItems') {
+					merged.sidebarItems = migrateSidebarItems(parsed as SidebarItemConfig[] | undefined);
+				} else {
+					merged[row.key as keyof Settings] = parsed as never;
+				}
 			} catch {
 				// skip unparsable values
 			}

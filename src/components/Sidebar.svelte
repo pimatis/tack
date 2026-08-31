@@ -10,13 +10,14 @@
 	import type { Task, TaskStatus } from '$lib/types/task';
 	import type { Settings } from '$lib/types/settings';
 	import type { SidebarItemConfig, SidebarItemId } from '$lib/types/settings';
-	import { setSettings } from '$lib/stores/settings';
+	import { setSettings, getSettings } from '$lib/stores/settings';
 	import { sortableItem, useDndActive, reorderArray, type DragDropState } from '$lib/dnd';
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import PriorityIcon from './PriorityIcon.svelte';
 	import StatusIcon from './StatusIcon.svelte';
+	import { keyComboLabel } from '$lib/shortcuts/index.js';
 	import * as ContextMenu from '$lib/components/ui/context-menu/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
@@ -302,6 +303,13 @@
 	});
 </script>
 
+{#snippet shortcut(id: string)}
+	{@const combo = getSettings().shortcuts[id]?.[0]}
+	{#if combo}
+		<span class="ml-1 opacity-50">{keyComboLabel(combo)}</span>
+	{/if}
+{/snippet}
+
 <aside
 	class="flex h-full flex-col transition-all duration-200 {settings?.sidebarCollapsed
 		? 'w-12'
@@ -340,20 +348,30 @@
 				</svg>
 			</div>
 		{:else}
-			<Button
-				variant="ghost"
-				size="icon-sm"
-				class="text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-				onclick={toggleSidebar}
-				aria-label="Expand sidebar"
-			>
-				<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-					><path
-						fill="currentColor"
-						d="M16.06 10.94a1.5 1.5 0 0 1 0 2.12l-5.656 5.658a1.5 1.5 0 1 1-2.121-2.122L12.879 12 8.283 7.404a1.5 1.5 0 0 1 2.12-2.122l5.658 5.657Z"
-					/></svg
+			<Tooltip.Root>
+				<Tooltip.Trigger>
+					{#snippet child({ props })}
+						<Button
+							{...props}
+							variant="ghost"
+							size="icon-sm"
+							class="text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+							onclick={toggleSidebar}
+							aria-label="Expand sidebar"
+						>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+								><path
+									fill="currentColor"
+									d="M16.06 10.94a1.5 1.5 0 0 1 0 2.12l-5.656 5.658a1.5 1.5 0 1 1-2.121-2.122L12.879 12 8.283 7.404a1.5 1.5 0 0 1 2.12-2.122l5.658 5.657Z"
+								/></svg
+							>
+						</Button>
+					{/snippet}
+				</Tooltip.Trigger>
+				<Tooltip.Content side="bottom"
+					>Expand sidebar {@render shortcut('toggle-sidebar')}</Tooltip.Content
 				>
-			</Button>
+			</Tooltip.Root>
 		{/if}
 		{#if !settings?.sidebarCollapsed}
 			<div class="flex items-center gap-0.5">
@@ -378,7 +396,7 @@
 						{/snippet}
 					</Tooltip.Trigger>
 					<Tooltip.Content side="bottom"
-						>Search <span class="ml-1 opacity-50">⌘K</span></Tooltip.Content
+						>Search {@render shortcut('command-palette')}</Tooltip.Content
 					>
 				</Tooltip.Root>
 				<Tooltip.Root>
@@ -401,7 +419,7 @@
 							</Button>
 						{/snippet}
 					</Tooltip.Trigger>
-					<Tooltip.Content side="bottom">New task</Tooltip.Content>
+					<Tooltip.Content side="bottom">New task {@render shortcut('new-task')}</Tooltip.Content>
 				</Tooltip.Root>
 				<Tooltip.Root>
 					<Tooltip.Trigger>
@@ -423,7 +441,9 @@
 							</Button>
 						{/snippet}
 					</Tooltip.Trigger>
-					<Tooltip.Content side="bottom">New project</Tooltip.Content>
+					<Tooltip.Content side="bottom"
+						>New project {@render shortcut('new-project')}</Tooltip.Content
+					>
 				</Tooltip.Root>
 			</div>
 		{/if}
