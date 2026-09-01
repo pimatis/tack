@@ -5,6 +5,8 @@ type ShortcutCallback = (e: KeyboardEvent) => void;
 export type ShortcutBehavior = {
 	id: string;
 	enabled?: () => boolean;
+	// fire even while the user is typing in an input/textarea (Escape, Cmd+Enter)
+	allowInInput?: boolean;
 	run: ShortcutCallback;
 };
 

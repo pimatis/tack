@@ -82,6 +82,7 @@
 		const unregisterClose = registry.register({
 			id: 'close',
 			enabled: () => open,
+			allowInInput: true,
 			run: () => close()
 		});
 		return () => {

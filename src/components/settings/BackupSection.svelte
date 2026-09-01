@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { listen } from '@tauri-apps/api/event';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -128,13 +127,19 @@
 
 		// keep the snapshot list in sync with CLI backup/restore/delete
 		let refreshTimer: ReturnType<typeof setTimeout> | null = null;
-		const unlisten = listen('backups-changed', () => {
-			if (refreshTimer) clearTimeout(refreshTimer);
-			refreshTimer = setTimeout(() => void load(), 200);
-		});
+		let unlisten: () => void = () => {};
+		void import('@tauri-apps/api/event')
+			.then(({ listen }) =>
+				listen('backups-changed', () => {
+					if (refreshTimer) clearTimeout(refreshTimer);
+					refreshTimer = setTimeout(() => void load(), 200);
+				})
+			)
+			.then((fn) => (unlisten = fn))
+			.catch(() => {});
 
 		return () => {
-			unlisten.then((fn) => fn());
+			unlisten();
 			if (refreshTimer) clearTimeout(refreshTimer);
 		};
 	});

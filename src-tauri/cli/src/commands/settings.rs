@@ -14,6 +14,8 @@ const DEFAULTS: &[(&str, &str)] = &[
     ("backupEnabled", "true"),
     ("backupIntervalHours", "24"),
     ("backupKeepCount", "7"),
+    ("liveEnabled", "false"),
+    ("livePort", "17890"),
     (
         "sidebarItems",
         "[{\"id\":\"pinned\",\"visible\":true},{\"id\":\"today\",\"visible\":true},{\"id\":\"upcoming\",\"visible\":true},{\"id\":\"overdue\",\"visible\":true},{\"id\":\"status\",\"visible\":true},{\"id\":\"priority\",\"visible\":true},{\"id\":\"quickStats\",\"visible\":true}]",
@@ -31,9 +33,17 @@ fn validate_value(key: &str, value: &str) -> Result<()> {
                 return Err("theme must be: dark, light, or system".to_string());
             }
         }
-        "sidebarCollapsed" | "backupEnabled" => {
+        "sidebarCollapsed" | "backupEnabled" | "liveEnabled" => {
             if value != "true" && value != "false" {
                 return Err(format!("{} must be true or false", key));
+            }
+        }
+        "livePort" => {
+            let p: u16 = value
+                .parse()
+                .map_err(|_| "livePort must be a number between 1024 and 65535".to_string())?;
+            if !(1024..=65535).contains(&p) {
+                return Err("livePort must be between 1024 and 65535".to_string());
             }
         }
         "defaultViewMode" => {

@@ -22,6 +22,8 @@ export type Settings = {
 	backupEnabled: boolean;
 	backupIntervalHours: number;
 	backupKeepCount: number;
+	liveEnabled: boolean;
+	livePort: number;
 	sidebarItems: SidebarItemConfig[];
 	shortcuts: Record<string, ShortcutKey[]>;
 };
@@ -47,6 +49,8 @@ export const defaultSettings: Settings = {
 	backupEnabled: true,
 	backupIntervalHours: 24,
 	backupKeepCount: 7,
+	liveEnabled: false,
+	livePort: 17890,
 	sidebarItems: [...defaultSidebarItems],
 	shortcuts: Object.fromEntries(SHORTCUTS.map((s) => [s.id, s.keys])) as Record<
 		string,

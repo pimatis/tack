@@ -60,6 +60,11 @@ enum Commands {
         #[command(subcommand)]
         action: SettingsAction,
     },
+    /// Manage the live server
+    Live {
+        #[command(subcommand)]
+        action: LiveAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -359,6 +364,19 @@ enum SettingsAction {
     },
 }
 
+#[derive(Subcommand)]
+enum LiveAction {
+    /// Enable the live server
+    On {
+        #[arg(long, help = "Port to listen on (default 17890)")]
+        port: Option<u16>,
+    },
+    /// Disable the live server
+    Off,
+    /// Show live server status
+    Status,
+}
+
 fn parse_ids(s: &str) -> Vec<String> {
     s.split(',').map(|id| id.trim().to_string()).filter(|id| !id.is_empty()).collect()
 }
@@ -531,6 +549,17 @@ fn main() {
             }
             SettingsAction::Set { key, value } => {
                 commands::settings::set(&conn, json, &key, &value)
+            }
+        },
+        Commands::Live { action } => match action {
+            LiveAction::On { port } => {
+                commands::live::on(&conn, json, port)
+            }
+            LiveAction::Off => {
+                commands::live::off(&conn, json)
+            }
+            LiveAction::Status => {
+                commands::live::status(&conn, json)
             }
         },
     };

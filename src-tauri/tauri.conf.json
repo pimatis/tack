@@ -4,7 +4,7 @@
 	"version": "0.1.4",
 	"identifier": "com.pimatis.tack",
 	"build": {
-		"beforeDevCommand": "bun run dev",
+		"beforeDevCommand": "bun run build && bun run dev",
 		"devUrl": "http://localhost:1420",
 		"beforeBuildCommand": "bun run build",
 		"frontendDist": "../build"
@@ -36,6 +36,7 @@
 		"targets": ["app", "dmg"],
 		"createUpdaterArtifacts": true,
 		"externalBin": ["bin/tack-cli"],
+		"resources": ["../build"],
 		"icon": [
 			"icons/32x32.png",
 			"icons/128x128.png",

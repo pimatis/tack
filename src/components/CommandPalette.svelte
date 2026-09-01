@@ -69,13 +69,17 @@
 
 		const unregisterNewTask = registry.register({
 			id: 'new-task',
-			enabled: () => open || !document.querySelector("[role='dialog'] input"),
+			enabled: () =>
+				window.location.pathname === '/' &&
+				(open || !document.querySelector("[role='dialog'] input")),
 			run: () => newTask()
 		});
 
 		const unregisterNewProject = registry.register({
 			id: 'new-project',
-			enabled: () => open || !document.querySelector("[role='dialog'] input"),
+			enabled: () =>
+				window.location.pathname === '/' &&
+				(open || !document.querySelector("[role='dialog'] input")),
 			run: () => newProject()
 		});
 

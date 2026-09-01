@@ -1,4 +1,4 @@
-import { getDb } from '$lib/db/client';
+import { getDb, isTauri } from '$lib/db/client';
 import { invoke } from '@tauri-apps/api/core';
 import type { TaskAttachment } from '$lib/types/attachment';
 
@@ -26,11 +26,8 @@ export async function create(input: CreateAttachmentInput): Promise<TaskAttachme
 		const id = crypto.randomUUID();
 		const now = new Date().toISOString();
 
-		// save file to disk via rust command
-		const filePath = await invoke<string>('save_attachment', {
-			id,
-			fileData: input.fileData
-		});
+		// save file to disk (rust command in the app, http upload on the live site)
+		const filePath = await saveFileData(id, input.fileData);
 
 		await db.execute(
 			`INSERT INTO task_attachments (id, task_id, file_name, file_path, mime_type, file_size, created_at)
@@ -52,6 +49,26 @@ export async function create(input: CreateAttachmentInput): Promise<TaskAttachme
 	}
 }
 
+async function saveFileData(id: string, fileData: string): Promise<string> {
+	if (isTauri()) {
+		return await invoke<string>('save_attachment', { id, fileData });
+	}
+	const res = await fetch(`/api/attachment/${id}`, {
+		method: 'PUT',
+		body: dataUrlToBytes(fileData)
+	});
+	if (!res.ok) throw new Error(await res.text());
+	return '';
+}
+
+function dataUrlToBytes(dataUrl: string): Uint8Array {
+	const base64 = dataUrl.split(',')[1] ?? dataUrl;
+	const bin = atob(base64);
+	const bytes = new Uint8Array(bin.length);
+	for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+	return bytes;
+}
+
 export async function findByTaskId(taskId: string): Promise<TaskAttachment[]> {
 	try {
 		const db = await getDb();
@@ -66,12 +83,40 @@ export async function findByTaskId(taskId: string): Promise<TaskAttachment[]> {
 
 // load file data on demand for display
 export async function getAttachmentData(id: string, mimeType: string): Promise<string> {
-	return await invoke<string>('read_attachment', { id, mimeType });
+	if (isTauri()) {
+		return await invoke<string>('read_attachment', { id, mimeType });
+	}
+	const res = await fetch(`/api/attachment/${id}?mime=${encodeURIComponent(mimeType)}`);
+	if (!res.ok) throw new Error(await res.text());
+	const blob = await res.blob();
+	return await new Promise((resolve) => {
+		const reader = new FileReader();
+		reader.onload = () => resolve(reader.result as string);
+		reader.readAsDataURL(blob);
+	});
 }
 
-// copy attachment file to user-selected path
-export async function downloadAttachment(id: string, destPath: string): Promise<void> {
-	await invoke('download_attachment', { id, destPath: destPath });
+// copy attachment file to a user-selected path, or start a plain browser download
+export async function downloadAttachment(
+	id: string,
+	fileName: string,
+	destPath?: string
+): Promise<void> {
+	if (isTauri() && destPath) {
+		await invoke('download_attachment', { id, destPath });
+		return;
+	}
+	const res = await fetch(`/api/attachment/${id}`);
+	if (!res.ok) throw new Error(await res.text());
+	const blob = await res.blob();
+	const url = URL.createObjectURL(blob);
+	const link = document.createElement('a');
+	link.href = url;
+	link.download = fileName;
+	document.body.appendChild(link);
+	link.click();
+	link.remove();
+	URL.revokeObjectURL(url);
 }
 
 export async function remove(id: string): Promise<boolean> {
@@ -79,7 +124,11 @@ export async function remove(id: string): Promise<boolean> {
 		const db = await getDb();
 		const result = await db.execute('DELETE FROM task_attachments WHERE id = $1', [id]);
 		if (result.rowsAffected > 0) {
-			void invoke('delete_attachment', { id });
+			if (isTauri()) {
+				void invoke('delete_attachment', { id });
+			} else {
+				void fetch(`/api/attachment/${id}`, { method: 'DELETE' });
+			}
 		}
 		return result.rowsAffected > 0;
 	} catch (error) {

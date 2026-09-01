@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getSettings } from '$lib/stores/settings';
-import { getDb, resetDb } from '$lib/db/client';
+import { getDb, isTauri, resetDb } from '$lib/db/client';
 
 export type BackupInfo = {
 	name: string;
@@ -46,6 +46,8 @@ export async function runScheduledBackup(): Promise<string | null> {
 }
 
 export function startBackupScheduler(): () => void {
+	// backups are a desktop concern; the live site has no local files to back up
+	if (!isTauri()) return () => {};
 	void runScheduledBackup().catch(() => {});
 	const interval = setInterval(
 		() => {

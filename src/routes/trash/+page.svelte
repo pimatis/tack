@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { listen } from '@tauri-apps/api/event';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Spinner } from '$lib/components/ui/spinner/index.js';
@@ -19,6 +18,7 @@
 	import type { Task } from '$lib/types/task';
 	import type { Project } from '$lib/types/project';
 	import { getSettings } from '$lib/stores/settings';
+	import { onDbChanged } from '$lib/db/client';
 	import { searchTaskIds } from '$lib/search/fts.service';
 	import { issueId } from '$lib/task/utils';
 
@@ -120,11 +120,11 @@
 	onMount(() => {
 		void load();
 		let refreshTimer: ReturnType<typeof setTimeout> | null = null;
-		const unlisten = listen('db-changed', () => {
+		const unlisten = onDbChanged(() => {
 			if (refreshTimer) clearTimeout(refreshTimer);
 			refreshTimer = setTimeout(() => void load(), 200);
 		});
-		return () => unlisten.then((fn) => fn());
+		return () => unlisten();
 	});
 </script>
 

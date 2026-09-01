@@ -1,4 +1,4 @@
-import { listen } from '@tauri-apps/api/event';
+import { onDbChanged } from '$lib/db/client';
 import {
 	remove,
 	findAll,
@@ -645,7 +645,7 @@ export class TaskPageState {
 		window.addEventListener('clear-filters', clearFiltersHandler);
 
 		let refreshTimer: ReturnType<typeof setTimeout> | null = null;
-		const unlistenDbChanged = listen('db-changed', () => {
+		const unlistenDbChanged = onDbChanged(() => {
 			if (refreshTimer) clearTimeout(refreshTimer);
 			refreshTimer = setTimeout(() => void this.refresh(), 200);
 		});
@@ -670,7 +670,7 @@ export class TaskPageState {
 			unregisterSelectAll();
 			unregisterToggleView();
 			unregisterClearSelection();
-			unlistenDbChanged.then((fn) => fn());
+			unlistenDbChanged();
 		};
 	}
 }

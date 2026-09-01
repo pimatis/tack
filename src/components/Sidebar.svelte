@@ -27,8 +27,9 @@
 
 	let {
 		settings = null,
-		toggleSidebar = () => {}
-	}: { settings?: Settings | null; toggleSidebar?: () => void } = $props();
+		toggleSidebar = () => {},
+		narrow = false
+	}: { settings?: Settings | null; toggleSidebar?: () => void; narrow?: boolean } = $props();
 
 	let projects = $state<Project[]>([]);
 	let labels = $state<Label[]>([]);
@@ -319,9 +320,9 @@
 	<div class="h-7 shrink-0" data-tauri-drag-region></div>
 	<!-- header: workspace name + quick actions -->
 	<div
-		class="flex h-12 shrink-0 items-center {settings?.sidebarCollapsed
-			? 'justify-center px-0'
-			: 'justify-between px-2.5'}"
+		class="flex shrink-0 items-center {settings?.sidebarCollapsed
+			? 'flex-col justify-center gap-1 px-0 py-2'
+			: 'h-12 justify-between px-2.5'}"
 	>
 		{#if !settings?.sidebarCollapsed}
 			<div class="flex items-center gap-2">
@@ -347,7 +348,8 @@
 					/>
 				</svg>
 			</div>
-		{:else}
+		{/if}
+		{#if settings?.sidebarCollapsed && !narrow}
 			<Tooltip.Root>
 				<Tooltip.Trigger>
 					{#snippet child({ props })}
@@ -373,80 +375,77 @@
 				>
 			</Tooltip.Root>
 		{/if}
-		{#if !settings?.sidebarCollapsed}
-			<div class="flex items-center gap-0.5">
-				<Tooltip.Root>
-					<Tooltip.Trigger>
-						{#snippet child({ props })}
-							<Button
-								{...props}
-								variant="ghost"
-								size="icon-sm"
-								aria-label="Search"
-								onclick={() => void goHomeThenDispatch('open-command-palette')}
-								class="text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+		<div class="flex items-center gap-0.5 {settings?.sidebarCollapsed ? 'flex-col gap-1' : ''}">
+			<Tooltip.Root>
+				<Tooltip.Trigger>
+					{#snippet child({ props })}
+						<Button
+							{...props}
+							variant="ghost"
+							size="icon-sm"
+							aria-label="Search"
+							onclick={() => void goHomeThenDispatch('open-command-palette')}
+							class="text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+						>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+								><path
+									fill="currentColor"
+									d="M2 10.5a8.5 8.5 0 1 1 15.176 5.262l3.652 3.652a1 1 0 0 1-1.414 1.414l-3.652-3.652A8.5 8.5 0 0 1 2 10.5M10.5 6a1 1 0 0 0 0 2 2.5 2.5 0 0 1 2.5 2.5 1 1 0 1 0 2 0A4.5 4.5 0 0 0 10.5 6"
+								/></svg
 							>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-									><path
-										fill="currentColor"
-										d="M2 10.5a8.5 8.5 0 1 1 15.176 5.262l3.652 3.652a1 1 0 0 1-1.414 1.414l-3.652-3.652A8.5 8.5 0 0 1 2 10.5M10.5 6a1 1 0 0 0 0 2 2.5 2.5 0 0 1 2.5 2.5 1 1 0 1 0 2 0A4.5 4.5 0 0 0 10.5 6"
-									/></svg
-								>
-							</Button>
-						{/snippet}
-					</Tooltip.Trigger>
-					<Tooltip.Content side="bottom"
-						>Search {@render shortcut('command-palette')}</Tooltip.Content
-					>
-				</Tooltip.Root>
-				<Tooltip.Root>
-					<Tooltip.Trigger>
-						{#snippet child({ props })}
-							<Button
-								{...props}
-								variant="ghost"
-								size="icon-sm"
-								aria-label="New task"
-								onclick={() => void goHomeThenDispatch('open-task-dialog')}
-								class="text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+						</Button>
+					{/snippet}
+				</Tooltip.Trigger>
+				<Tooltip.Content side="bottom">Search {@render shortcut('command-palette')}</Tooltip.Content
+				>
+			</Tooltip.Root>
+			<Tooltip.Root>
+				<Tooltip.Trigger>
+					{#snippet child({ props })}
+						<Button
+							{...props}
+							variant="ghost"
+							size="icon-sm"
+							aria-label="New task"
+							onclick={() => void goHomeThenDispatch('open-task-dialog')}
+							class="text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+						>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+								><path
+									fill="currentColor"
+									d="M20.131 3.16a3 3 0 0 0-4.242 0l-.707.708 4.95 4.95.706-.707a3 3 0 0 0 0-4.243l-.707-.707Zm-1.414 7.072-4.95-4.95-9.09 9.091a1.5 1.5 0 0 0-.401.724l-1.029 4.455a1 1 0 0 0 1.2 1.2l4.456-1.028a1.5 1.5 0 0 0 .723-.401z"
+								/></svg
 							>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-									><path
-										fill="currentColor"
-										d="M20.131 3.16a3 3 0 0 0-4.242 0l-.707.708 4.95 4.95.706-.707a3 3 0 0 0 0-4.243l-.707-.707Zm-1.414 7.072-4.95-4.95-9.09 9.091a1.5 1.5 0 0 0-.401.724l-1.029 4.455a1 1 0 0 0 1.2 1.2l4.456-1.028a1.5 1.5 0 0 0 .723-.401z"
-									/></svg
-								>
-							</Button>
-						{/snippet}
-					</Tooltip.Trigger>
-					<Tooltip.Content side="bottom">New task {@render shortcut('new-task')}</Tooltip.Content>
-				</Tooltip.Root>
-				<Tooltip.Root>
-					<Tooltip.Trigger>
-						{#snippet child({ props })}
-							<Button
-								{...props}
-								variant="ghost"
-								size="icon-sm"
-								aria-label="New project"
-								onclick={() => void goHomeThenDispatch('open-project-dialog')}
-								class="text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+						</Button>
+					{/snippet}
+				</Tooltip.Trigger>
+				<Tooltip.Content side="bottom">New task {@render shortcut('new-task')}</Tooltip.Content>
+			</Tooltip.Root>
+			<Tooltip.Root>
+				<Tooltip.Trigger>
+					{#snippet child({ props })}
+						<Button
+							{...props}
+							variant="ghost"
+							size="icon-sm"
+							aria-label="New project"
+							onclick={() => void goHomeThenDispatch('open-project-dialog')}
+							class="text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+						>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+								><path
+									fill="currentColor"
+									d="M10.5 20a1.5 1.5 0 0 0 3 0v-6.5H20a1.5 1.5 0 0 0 0-3h-6.5V4a1.5 1.5 0 0 0-3 0v6.5H4a1.5 1.5 0 0 0 0 3h6.5z"
+								/></svg
 							>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-									><path
-										fill="currentColor"
-										d="M10.5 20a1.5 1.5 0 0 0 3 0v-6.5H20a1.5 1.5 0 0 0 0-3h-6.5V4a1.5 1.5 0 0 0-3 0v6.5H4a1.5 1.5 0 0 0 0 3h6.5z"
-									/></svg
-								>
-							</Button>
-						{/snippet}
-					</Tooltip.Trigger>
-					<Tooltip.Content side="bottom"
-						>New project {@render shortcut('new-project')}</Tooltip.Content
-					>
-				</Tooltip.Root>
-			</div>
-		{/if}
+						</Button>
+					{/snippet}
+				</Tooltip.Trigger>
+				<Tooltip.Content side="bottom"
+					>New project {@render shortcut('new-project')}</Tooltip.Content
+				>
+			</Tooltip.Root>
+		</div>
 	</div>
 
 	<Separator class="mx-2 my-2 bg-sidebar-border/40" />

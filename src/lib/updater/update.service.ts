@@ -18,7 +18,7 @@ export async function getAppVersion(): Promise<string> {
 	try {
 		return await invoke<string>('get_app_version');
 	} catch {
-		return '0.1.0';
+		return 'web';
 	}
 }
 

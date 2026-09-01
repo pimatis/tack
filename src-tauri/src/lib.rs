@@ -1,8 +1,10 @@
 pub mod backup;
+mod live;
 
 use notify::{Watcher, RecursiveMode, EventKind};
 use rusqlite::{Connection, params};
 use sha2::{Digest, Sha384};
+use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 use std::path::PathBuf;
 
@@ -21,7 +23,7 @@ fn read_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
-fn attachments_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn attachments_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let data_dir = app
         .path()
         .app_data_dir()
@@ -86,7 +88,7 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
         .map_err(|e| e.to_string())
 }
 
-fn app_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn app_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
         .map(|dir| {
@@ -224,12 +226,12 @@ fn delete_backup(app: tauri::AppHandle, name: String) -> Result<(), String> {
     backup::delete_backup(&app_db_path(&app)?, &name)
 }
 
-fn base64_encode(input: &[u8]) -> String {
+pub(crate) fn base64_encode(input: &[u8]) -> String {
     use base64::Engine as _;
     base64::engine::general_purpose::STANDARD.encode(input)
 }
 
-fn start_db_watcher(app: tauri::AppHandle) {
+fn start_db_watcher(app: tauri::AppHandle, hub: Arc<live::LiveHub>) {
     let data_dir = app
         .path()
         .app_data_dir()
@@ -251,6 +253,7 @@ fn start_db_watcher(app: tauri::AppHandle) {
                 EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {
                     if is_db_change {
                         let _ = app.emit("db-changed", ());
+                        hub.notify();
                     }
                     if is_backup_change {
                         let _ = app.emit("backups-changed", ());
@@ -322,6 +325,30 @@ fn ensure_cli_on_path(target: &std::path::Path) {
     }
 }
 
+// fsevents does not report appends to an already-open wal file (the gui's
+// sqlx pool writes exactly that way), so poll the db file snapshots as a
+// backstop: desktop and cli changes reach the live site within ~2s either way
+fn start_db_poller(app: tauri::AppHandle, hub: Arc<live::LiveHub>) {
+    std::thread::spawn(move || {
+        let data_dir = app
+            .path()
+            .app_data_dir()
+            .unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let mut last: Option<_> = None;
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            let now = live::db_files_snapshot(&data_dir);
+            if let Some(prev) = last {
+                if prev != now {
+                    let _ = app.emit("db-changed", ());
+                    hub.notify();
+                }
+            }
+            last = Some(now);
+        }
+    });
+}
+
 // place a symlink to the bundled cli on PATH so `tack` works from any terminal
 fn install_cli_link(app: &tauri::AppHandle) -> Result<bool, String> {
     if !cfg!(target_os = "macos") {
@@ -362,7 +389,7 @@ pub fn run() {
         .plugin(tauri_plugin_sql::Builder::default().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_app_version, write_file, read_file, save_attachment, read_attachment, delete_attachment, download_attachment, create_backup, list_backups, restore_backup, delete_backup, install_cli, cli_installed])
+        .invoke_handler(tauri::generate_handler![get_app_version, write_file, read_file, save_attachment, read_attachment, delete_attachment, download_attachment, create_backup, list_backups, restore_backup, delete_backup, install_cli, cli_installed, live::live_start, live::live_stop, live::live_status])
         .setup(|app| {
             let handle = app.handle().clone();
             let _ = install_cli_link(&handle);
@@ -371,7 +398,13 @@ pub fn run() {
             let conn = Connection::open(app_db_path(app.handle())?)?;
             conn.pragma_update(None, "journal_mode", "WAL")?;
             run_migrations(&conn)?;
-            start_db_watcher(handle);
+            let hub = Arc::new(live::LiveHub::default());
+            app.manage(live::LiveState {
+                server: Mutex::new(None),
+                hub: hub.clone(),
+            });
+            start_db_watcher(handle.clone(), hub.clone());
+            start_db_poller(handle, hub);
             Ok(())
         })
         .run(tauri::generate_context!())

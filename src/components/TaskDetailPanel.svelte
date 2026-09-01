@@ -31,6 +31,7 @@
 	import { fade, fly } from 'svelte/transition';
 	import { sortableItem, reorderArray, type DragDropState } from '$lib/dnd';
 	import { save as saveDialog } from '@tauri-apps/plugin-dialog';
+	import { isTauri } from '$lib/db/client';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
@@ -262,6 +263,10 @@
 
 	async function handleDownloadAttachment(att: TaskAttachment) {
 		try {
+			if (!isTauri()) {
+				await downloadAttachment(att.id, att.fileName);
+				return;
+			}
 			const ext = att.fileName.split('.').pop() ?? '';
 			const filters: { name: string; extensions: string[] }[] = [];
 			if (ext) {
@@ -273,7 +278,7 @@
 				filters
 			});
 			if (!destPath) return;
-			await downloadAttachment(att.id, destPath);
+			await downloadAttachment(att.id, att.fileName, destPath);
 		} catch {
 			error = 'Failed to download attachment';
 		}
@@ -375,12 +380,14 @@
 		const unregisterClose = registry.register({
 			id: 'close',
 			enabled: () => open,
+			allowInInput: true,
 			run: () => close()
 		});
 
 		const unregisterSave = registry.register({
 			id: 'save-task',
 			enabled: () => open,
+			allowInInput: true,
 			run: () => void handleSubmit()
 		});
 

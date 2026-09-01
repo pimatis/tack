@@ -366,6 +366,7 @@ pub fn update(
     due_date: Option<&str>,
     end_date: Option<&str>,
 ) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
     let current = conn.query_row(
         "SELECT title, description, status, priority, due_date, end_date FROM tasks WHERE id = ?1",
         params![id],
@@ -406,13 +407,13 @@ pub fn update(
     }
 
     if new_status != cur_status {
-        log_activity(conn, id, "status_changed", Some("status"), Some(status_label(&cur_status)), Some(status_label(new_status)), "cli")?;
+        log_activity(conn, &id, "status_changed", Some("status"), Some(status_label(&cur_status)), Some(status_label(new_status)), "cli")?;
     }
     if new_priority != cur_priority {
-        log_activity(conn, id, "priority_changed", Some("priority"), Some(priority_label(cur_priority)), Some(priority_label(new_priority)), "cli")?;
+        log_activity(conn, &id, "priority_changed", Some("priority"), Some(priority_label(cur_priority)), Some(priority_label(new_priority)), "cli")?;
     }
     if new_title != cur_title {
-        log_activity(conn, id, "title_changed", Some("title"), Some(&cur_title), Some(new_title), "cli")?;
+        log_activity(conn, &id, "title_changed", Some("title"), Some(&cur_title), Some(new_title), "cli")?;
     }
 
     if json {
@@ -428,6 +429,7 @@ pub fn update(
 }
 
 pub fn delete(conn: &Connection, json: bool, id: &str) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
     let now = now_iso();
     let result = conn.execute(
         "UPDATE tasks SET deleted_at = ?1, updated_at = ?2 WHERE id = ?3 AND deleted_at IS NULL",
@@ -436,7 +438,7 @@ pub fn delete(conn: &Connection, json: bool, id: &str) -> Result<()> {
     if result == 0 {
         return Err(format!("Task {} not found or already trashed", id));
     }
-    log_activity(conn, id, "trashed", None, None, None, "cli")?;
+    log_activity(conn, &id, "trashed", None, None, None, "cli")?;
     if json {
         println!("{}", serde_json::to_string_pretty(&json!({
             "success": true,
@@ -450,6 +452,7 @@ pub fn delete(conn: &Connection, json: bool, id: &str) -> Result<()> {
 }
 
 pub fn duplicate(conn: &Connection, json: bool, id: &str) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
     let original = conn.query_row(
         "SELECT title, description, status, priority, project_id, due_date, end_date FROM tasks WHERE id = ?1",
         params![id],
@@ -474,6 +477,7 @@ pub fn duplicate(conn: &Connection, json: bool, id: &str) -> Result<()> {
 }
 
 pub fn toggle_pin(conn: &Connection, json: bool, id: &str, pin: bool) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
     let now = now_iso();
     let result = conn.execute(
         "UPDATE tasks SET pinned = ?1, updated_at = ?2 WHERE id = ?3",
@@ -496,6 +500,7 @@ pub fn toggle_pin(conn: &Connection, json: bool, id: &str, pin: bool) -> Result<
 }
 
 pub fn move_to_project(conn: &Connection, json: bool, id: &str, project: Option<&str>, project_prefix: Option<&str>) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
     let project_id = resolve_project_id(conn, project, project_prefix)?;
     let now = now_iso();
     let result = conn.execute(
@@ -536,7 +541,7 @@ pub fn bulk_delete(conn: &Connection, json: bool, ids: &[String]) -> Result<()> 
         .map_err(|e| format!("Failed to delete tasks: {}", e))?;
 
     for id in ids {
-        let _ = log_activity(conn, id, "trashed", None, None, None, "cli");
+        let _ = log_activity(conn, &id, "trashed", None, None, None, "cli");
     }
     if json {
         println!("{}", serde_json::to_string_pretty(&json!({
@@ -568,7 +573,7 @@ pub fn bulk_status(conn: &Connection, json: bool, ids: &[String], status: &str) 
         .map_err(|e| format!("Failed to update status: {}", e))?;
 
     for id in ids {
-        let _ = log_activity(conn, id, "status_changed", Some("status"), None, Some(status_label(status)), "cli");
+        let _ = log_activity(conn, &id, "status_changed", Some("status"), None, Some(status_label(status)), "cli");
     }
     if json {
         println!("{}", serde_json::to_string_pretty(&json!({
@@ -601,7 +606,7 @@ pub fn bulk_priority(conn: &Connection, json: bool, ids: &[String], priority: i3
         .map_err(|e| format!("Failed to update priority: {}", e))?;
 
     for id in ids {
-        let _ = log_activity(conn, id, "priority_changed", Some("priority"), None, Some(priority_label(priority)), "cli");
+        let _ = log_activity(conn, &id, "priority_changed", Some("priority"), None, Some(priority_label(priority)), "cli");
     }
     if json {
         println!("{}", serde_json::to_string_pretty(&json!({
@@ -696,6 +701,7 @@ pub fn trash_list(conn: &Connection, json: bool) -> Result<()> {
 }
 
 pub fn restore(conn: &Connection, json: bool, id: &str) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
     let now = now_iso();
     let result = conn.execute(
         "UPDATE tasks SET deleted_at = NULL, updated_at = ?1 WHERE id = ?2 AND deleted_at IS NOT NULL",
@@ -705,7 +711,7 @@ pub fn restore(conn: &Connection, json: bool, id: &str) -> Result<()> {
     if result == 0 {
         return Err(format!("Task {} not found in trash", id));
     }
-    log_activity(conn, id, "restored", None, None, None, "cli")?;
+    log_activity(conn, &id, "restored", None, None, None, "cli")?;
     if json {
         println!("{}", serde_json::to_string_pretty(&json!({
             "success": true,
@@ -719,6 +725,7 @@ pub fn restore(conn: &Connection, json: bool, id: &str) -> Result<()> {
 }
 
 pub fn permanent_delete(conn: &Connection, json: bool, id: &str) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
     let result = conn.execute(
         "DELETE FROM tasks WHERE id = ?1 AND deleted_at IS NOT NULL",
         params![id],

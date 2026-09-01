@@ -39,6 +39,34 @@
 @custom-variant dark (&:is(.dark *));
 @plugin '@tailwindcss/typography';
 
+/* settings search: flash the row the user jumped to
+   soft accent tint + thin inner ring, fast peak then smooth ease-out fade */
+.settings-highlight-row {
+	border-radius: 10px;
+	animation: settings-highlight-flash 2.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes settings-highlight-flash {
+	0% {
+		background-color: color-mix(in oklch, var(--primary) 15%, transparent);
+		box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--primary) 30%, transparent);
+	}
+	35% {
+		background-color: color-mix(in oklch, var(--primary) 8%, transparent);
+		box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--primary) 16%, transparent);
+	}
+	100% {
+		background-color: transparent;
+		box-shadow: inset 0 0 0 1px transparent;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.settings-highlight-row {
+		animation-duration: 0.4s;
+	}
+}
+
 /* shared */
 :root {
 	font-family: 'SF Pro Display', sans-serif;

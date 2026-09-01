@@ -26,6 +26,17 @@
 		return modActive(e, k.mod);
 	}
 
+	// true when the keypress lands in an editable element - bare-letter
+	// shortcuts must never fire while the user is typing
+	function isTypingTarget(e: KeyboardEvent): boolean {
+		const target = e.target as HTMLElement | null;
+		if (!target || !target.isConnected) return false;
+		const tag = target.tagName;
+		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+		if (target.isContentEditable) return true;
+		return target.closest('[contenteditable="true"]') !== null;
+	}
+
 	let behaviors = $state<ShortcutBehavior[]>([]);
 
 	const api = {
@@ -42,11 +53,14 @@
 	function handleKeydown(e: KeyboardEvent) {
 		// ignore keys while another app has focus
 		if (!document.hasFocus()) return;
+		const typing = isTypingTarget(e);
 		const shortcuts = getSettings().shortcuts;
 		for (const [id, keys] of Object.entries(shortcuts)) {
 			const combo = keys.find((k) => comboMatches(k, e));
 			if (!combo) continue;
-			const matches = behaviors.filter((b) => b.id === id && (!b.enabled || b.enabled()));
+			const matches = behaviors.filter(
+				(b) => b.id === id && (!b.enabled || b.enabled()) && (!typing || b.allowInInput)
+			);
 			if (matches.length === 0) continue;
 			e.preventDefault();
 			e.stopPropagation();
