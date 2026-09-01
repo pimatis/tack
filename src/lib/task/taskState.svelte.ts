@@ -24,6 +24,22 @@ import type { Settings } from '$lib/types/settings';
 import { statusOrder } from './constants';
 import { isTypingTarget, groupedTasks as computeGroups } from './utils';
 
+// persist collapsed status accordions across page reloads
+const COLLAPSED_KEY = 'tack-collapsed-statuses';
+
+function loadCollapsed(): Set<TaskStatus> {
+	try {
+		const raw = localStorage.getItem(COLLAPSED_KEY);
+		if (!raw) return new Set();
+		const arr: unknown = JSON.parse(raw);
+		if (!Array.isArray(arr)) return new Set();
+		return new Set(arr.filter((s): s is TaskStatus => statusOrder.includes(s as TaskStatus)));
+	} catch {
+		// localStorage unavailable (ssr) or corrupt - start fresh
+		return new Set();
+	}
+}
+
 // a task's calendar span: due date starts it, end date finishes it
 function dateRange(t: Task): { start: Date | null; end: Date | null } {
 	return {
@@ -56,6 +72,7 @@ export class TaskPageState {
 
 	selectedIds = $state<Set<string>>(new Set());
 	lastSelectedId = $state<string | null>(null);
+	collapsedStatuses = $state<Set<TaskStatus>>(loadCollapsed());
 	viewMode = $state<'list' | 'board' | 'calendar'>(getSettings().defaultViewMode);
 	appSettings = $state<Settings>(getSettings());
 	pinnedFilter = $state(false);
@@ -164,6 +181,18 @@ export class TaskPageState {
 		if (next.has(labelId)) next.delete(labelId);
 		else next.add(labelId);
 		this.labelFilters = next;
+	}
+
+	toggleStatusCollapsed(status: TaskStatus) {
+		const next = new Set(this.collapsedStatuses);
+		if (next.has(status)) next.delete(status);
+		else next.add(status);
+		this.collapsedStatuses = next;
+		try {
+			localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]));
+		} catch {
+			// ignore quota errors
+		}
 	}
 
 	async searchFts(query: string) {

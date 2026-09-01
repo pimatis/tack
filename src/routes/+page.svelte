@@ -110,6 +110,8 @@
 		<TaskList
 			groups={state.groupedTasks}
 			statusOrderList={statusOrder}
+			collapsedStatuses={state.collapsedStatuses}
+			onToggleCollapse={(s) => state.toggleStatusCollapsed(s)}
 			projects={state.projects}
 			appSettings={state.appSettings}
 			labelMap={state.labelMap}
