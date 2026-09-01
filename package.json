@@ -1,6 +1,6 @@
 {
 	"name": "tack",
-	"version": "0.1.4",
+	"version": "0.1.5",
 	"description": "A desktop task manager for humans and AI agents",
 	"type": "module",
 	"scripts": {
