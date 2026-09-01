@@ -1,13 +1,10 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { findAll as findAllProjects, remove } from '$lib/repositories/project.repository';
-	import { findAll as findAllTasks } from '$lib/repositories/task.repository';
-	import { findAll as findAllLabels } from '$lib/repositories/label.repository';
+	import { remove } from '$lib/repositories/project.repository';
 	import type { Project } from '$lib/types/project';
-	import type { Label } from '$lib/types/label';
 	import { labelColorMap } from '$lib/types/label';
-	import type { Task, TaskStatus } from '$lib/types/task';
+	import type { TaskStatus } from '$lib/types/task';
 	import type { Settings } from '$lib/types/settings';
 	import type { SidebarItemConfig, SidebarItemId } from '$lib/types/settings';
 	import { setSettings, getSettings } from '$lib/stores/settings';
@@ -24,6 +21,7 @@
 	import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
 	import UpdateDialog from './UpdateDialog.svelte';
 	import { checkForUpdate } from '$lib/updater/update.service';
+	import { TaskPageState } from '$lib/task/taskState.svelte';
 
 	let {
 		settings = null,
@@ -31,10 +29,12 @@
 		narrow = false
 	}: { settings?: Settings | null; toggleSidebar?: () => void; narrow?: boolean } = $props();
 
-	let projects = $state<Project[]>([]);
-	let labels = $state<Label[]>([]);
-	let allTasks = $state<Task[]>([]);
-	let pinnedCount = $state(0);
+	// shared task state: the home page owns it, the sidebar only reads it
+	const pageState = TaskPageState.get();
+	const allTasks = $derived(pageState?.tasks ?? []);
+	const projects = $derived(pageState?.projects ?? []);
+	const labels = $derived(pageState?.labels ?? []);
+	const pinnedCount = $derived(allTasks.filter((t) => t.pinned && !t.deletedAt).length);
 	let pinnedActive = $state(false);
 	let activeFilter = $state<string | null>(null);
 
@@ -181,32 +181,6 @@
 		}
 	}
 
-	async function loadProjects() {
-		try {
-			projects = await findAllProjects();
-		} catch {
-			projects = [];
-		}
-	}
-
-	async function loadLabels() {
-		try {
-			labels = await findAllLabels();
-		} catch {
-			labels = [];
-		}
-	}
-
-	async function loadAllData() {
-		try {
-			allTasks = await findAllTasks();
-			pinnedCount = allTasks.filter((t) => t.pinned && !t.deletedAt).length;
-		} catch {
-			allTasks = [];
-			pinnedCount = 0;
-		}
-	}
-
 	function editProject(project: Project) {
 		void goHomeThenDispatch('open-project-edit-dialog', project);
 	}
@@ -214,7 +188,6 @@
 	async function deleteProject(project: Project) {
 		try {
 			await remove(project.id);
-			await loadProjects();
 			void goHomeThenDispatch('projects-changed');
 		} catch {
 			return;
@@ -239,11 +212,6 @@
 	}
 
 	onMount(() => {
-		const refreshProjects = () => void loadProjects();
-		const refreshAll = () => {
-			void loadAllData();
-			void loadLabels();
-		};
 		const setPinnedActive = () => {
 			pinnedActive = true;
 			activeFilter = null;
@@ -261,10 +229,10 @@
 				activeFilter = event.type;
 			}
 		};
-		window.addEventListener('projects-changed', refreshProjects);
-		window.addEventListener('tasks-changed', refreshAll);
+		window.addEventListener('projects-changed', setAllInactive);
+		window.addEventListener('tasks-changed', setAllInactive);
 		window.addEventListener('filter-pinned', setPinnedActive);
-		window.addEventListener('filter-by-project', setAllInactive);
+		window.addEventListener('filter-by-project', setFilterActive);
 		window.addEventListener('filter-by-status', setFilterActive);
 		window.addEventListener('filter-by-priority', setFilterActive);
 		window.addEventListener('filter-by-label', setFilterActive);
@@ -276,10 +244,8 @@
 		};
 		window.addEventListener('filter-overdue', setFilterActive);
 		window.addEventListener('clear-filters', clearActiveState);
-		void loadProjects();
-		void loadLabels();
-		void loadAllData();
-		void checkForUpdates();
+		// update check is not needed for first paint; let the ui settle first
+		const updateTimer = window.setTimeout(() => void checkForUpdates(), 4000);
 
 		const registry = getShortcutRegistry();
 		const unregisterToggleSidebar = registry?.register({
@@ -288,8 +254,9 @@
 		});
 
 		return () => {
-			window.removeEventListener('projects-changed', refreshProjects);
-			window.removeEventListener('tasks-changed', refreshAll);
+			window.clearTimeout(updateTimer);
+			window.removeEventListener('projects-changed', setAllInactive);
+			window.removeEventListener('tasks-changed', setAllInactive);
 			window.removeEventListener('filter-pinned', setPinnedActive);
 			window.removeEventListener('filter-by-project', setAllInactive);
 			window.removeEventListener('filter-by-status', setFilterActive);

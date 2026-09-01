@@ -9,13 +9,11 @@
 	import FilterBar from '../components/task/FilterBar.svelte';
 	import TaskStates from '../components/task/TaskStates.svelte';
 	import TaskList from '../components/task/TaskList.svelte';
-	import BoardView from '../components/task/BoardView.svelte';
-	import CalendarView from '../components/task/CalendarView.svelte';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { TaskPageState } from '$lib/task/taskState.svelte';
 	import { statusOrder } from '$lib/task/constants';
 
-	const state = new TaskPageState();
+	const state = TaskPageState.get();
 
 	onMount(() => state.init());
 </script>
@@ -126,38 +124,44 @@
 			onListDrop={(s, t) => state.handleListDrop(s, t)}
 		/>
 	{:else if state.viewMode === 'board'}
-		<BoardView
-			groups={state.groupedTasks}
-			statusOrderList={statusOrder}
-			projects={state.projects}
-			appSettings={state.appSettings}
-			labelMap={state.labelMap}
-			selectedIds={state.selectedIds}
-			bind:dialogOpen={state.dialogOpen}
-			onEdit={(t) => state.handleEdit(t)}
-			onChangeStatus={(t, s) => state.changeStatus(t, s)}
-			onChangePriority={(t, p) => state.changePriority(t, p)}
-			onTogglePin={(t) => state.handleTogglePin(t)}
-			onDuplicate={(id) => state.duplicateTask(id)}
-			onDelete={(id) => state.handleDelete(id)}
-			onBoardDrop={(s, t) => state.handleBoardDrop(s, t)}
-		/>
-	{:else}
-		<CalendarView
-			tasks={state.filteredTasks}
-			projects={state.projects}
-			appSettings={state.appSettings}
-			labelMap={state.labelMap}
-			onEdit={(t) => state.handleEdit(t)}
-			onChangeStatus={(t, s) => state.changeStatus(t, s)}
-			onChangePriority={(t, p) => state.changePriority(t, p)}
-			onTogglePin={(t) => state.handleTogglePin(t)}
-			onDuplicate={(id) => state.duplicateTask(id)}
-			onDelete={(id) => state.handleDelete(id)}
-			onAddTask={(d) => {
-				state.createDueDate = d;
-				state.dialogOpen = true;
-			}}
-		/>
+		{#await import('../components/task/BoardView.svelte') then { default: BoardViewComponent }}
+			<svelte:component
+				this={BoardViewComponent}
+				groups={state.groupedTasks}
+				statusOrderList={statusOrder}
+				projects={state.projects}
+				appSettings={state.appSettings}
+				labelMap={state.labelMap}
+				selectedIds={state.selectedIds}
+				bind:dialogOpen={state.dialogOpen}
+				onEdit={(t) => state.handleEdit(t)}
+				onChangeStatus={(t, s) => state.changeStatus(t, s)}
+				onChangePriority={(t, p) => state.changePriority(t, p)}
+				onTogglePin={(t) => state.handleTogglePin(t)}
+				onDuplicate={(id) => state.duplicateTask(id)}
+				onDelete={(id) => state.handleDelete(id)}
+				onBoardDrop={(s, t) => state.handleBoardDrop(s, t)}
+			/>
+		{/await}
+	{:else if state.viewMode === 'calendar'}
+		{#await import('../components/task/CalendarView.svelte') then { default: CalendarViewComponent }}
+			<svelte:component
+				this={CalendarViewComponent}
+				tasks={state.filteredTasks}
+				projects={state.projects}
+				appSettings={state.appSettings}
+				labelMap={state.labelMap}
+				onEdit={(t) => state.handleEdit(t)}
+				onChangeStatus={(t, s) => state.changeStatus(t, s)}
+				onChangePriority={(t, p) => state.changePriority(t, p)}
+				onTogglePin={(t) => state.handleTogglePin(t)}
+				onDuplicate={(id) => state.duplicateTask(id)}
+				onDelete={(id) => state.handleDelete(id)}
+				onAddTask={(d) => {
+					state.createDueDate = d;
+					state.dialogOpen = true;
+				}}
+			/>
+		{/await}
 	{/if}
 </section>

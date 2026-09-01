@@ -5,6 +5,32 @@
 		<link rel="icon" href="/favicon.png" type="image/png" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>Tack</title>
+		<style>
+			/* pre-paint background, mirrors the tokens in layout.css so the
+			   window never flashes white before the stylesheet loads */
+			html,
+			body {
+				background: #242424;
+			}
+			html:not(.dark) body {
+				background: #fafafa;
+			}
+		</style>
+		<script>
+			// apply the saved theme before first paint to avoid a light/dark flash
+			try {
+				var saved = JSON.parse(localStorage.getItem('tack-settings') || '{}');
+				var theme = saved.theme || 'dark';
+				if (theme === 'system') {
+					theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+				}
+				if (theme === 'light') {
+					document.documentElement.classList.remove('dark');
+				} else {
+					document.documentElement.classList.add('dark');
+				}
+			} catch (e) {}
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

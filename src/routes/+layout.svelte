@@ -26,7 +26,7 @@
 	onMount(() => {
 		// keep in sync with cli changes (tack settings set) while the app is running
 		void loadSettingsFromDb();
-		const syncInterval = window.setInterval(() => void loadSettingsFromDb(), 3000);
+		const syncInterval = window.setInterval(() => void loadSettingsFromDb(), 30000);
 		const stopBackups = startBackupScheduler();
 		const stopLive = startLiveManager();
 

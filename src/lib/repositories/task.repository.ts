@@ -20,12 +20,12 @@ export type UpdateTaskInput = Partial<
 	Pick<Task, 'title' | 'description' | 'status' | 'priority' | 'dueDate' | 'endDate' | 'pinned'>
 >;
 
-const TASK_COLUMNS = `
+// list columns: everything the list/board views render, minus the heavy description
+const TASK_LIST_COLUMNS = `
 	id,
 	number,
 	project_id AS projectId,
 	title,
-	description,
 	status,
 	priority,
 	due_date AS dueDate,
@@ -35,6 +35,11 @@ const TASK_COLUMNS = `
 	created_at AS createdAt,
 	updated_at AS updatedAt,
 	deleted_at AS deletedAt
+`;
+
+// full columns: list columns + description, for detail views
+const TASK_COLUMNS = `${TASK_LIST_COLUMNS},
+	description
 `;
 
 export async function create(input: CreateTaskInput): Promise<Task> {
@@ -101,7 +106,7 @@ export async function findAll(): Promise<Task[]> {
 	try {
 		const db = await getDb();
 		const tasks = await db.select<Task[]>(
-			`SELECT ${TASK_COLUMNS} FROM tasks WHERE deleted_at IS NULL ORDER BY updated_at DESC`
+			`SELECT ${TASK_LIST_COLUMNS} FROM tasks WHERE deleted_at IS NULL ORDER BY updated_at DESC`
 		);
 		const labelMap = await findAllTaskLabelIds();
 		for (const task of tasks) {
@@ -356,7 +361,7 @@ export async function findTrashed(): Promise<Task[]> {
 	try {
 		const db = await getDb();
 		const tasks = await db.select<Task[]>(
-			`SELECT ${TASK_COLUMNS} FROM tasks WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC`
+			`SELECT ${TASK_LIST_COLUMNS} FROM tasks WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC`
 		);
 		const labelMap = await findAllTaskLabelIds();
 		for (const task of tasks) {

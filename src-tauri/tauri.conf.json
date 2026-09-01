@@ -4,7 +4,7 @@
 	"version": "0.1.5",
 	"identifier": "com.pimatis.tack",
 	"build": {
-		"beforeDevCommand": "bun run build && bun run dev",
+		"beforeDevCommand": "bun run dev",
 		"devUrl": "http://localhost:1420",
 		"beforeBuildCommand": "bun run build",
 		"frontendDist": "../build"
@@ -18,7 +18,8 @@
 				"minWidth": 900,
 				"minHeight": 600,
 				"titleBarStyle": "Overlay",
-				"hiddenTitle": true
+				"hiddenTitle": true,
+				"backgroundColor": "#242424"
 			}
 		],
 		"security": {

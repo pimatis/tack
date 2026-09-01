@@ -1,6 +1,12 @@
 [workspace]
 members = ["cli"]
 
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+opt-level = "s"
+
 [package]
 name = "tack"
 version = "0.1.5"

@@ -1,4 +1,5 @@
 import { onDbChanged } from '$lib/db/client';
+import { readDataCache, writeDataCache } from '$lib/db/cache';
 import {
 	remove,
 	findAll,
@@ -49,6 +50,9 @@ function dateRange(t: Task): { start: Date | null; end: Date | null } {
 }
 
 export { sortableItem, dropZone, useDndActive };
+
+// single shared instance: the home page creates it, the sidebar reads it
+let sharedInstance: TaskPageState | undefined;
 
 export class TaskPageState {
 	tasks = $state<Task[]>([]);
@@ -319,14 +323,21 @@ export class TaskPageState {
 
 	// refresh and CRUD
 	async refresh() {
-		this.loading = true;
+		// keep showing cached data while refreshing; only show the loading
+		// state when there is nothing on screen yet
+		const hasData = this.tasks.length > 0;
+		if (!hasData) this.loading = true;
 		this.error = null;
 		try {
-			[this.tasks, this.projects, this.labels] = await Promise.all([
+			const [tasks, projects, labels] = await Promise.all([
 				findAll(),
 				findProjects(),
 				findLabels()
 			]);
+			this.tasks = tasks;
+			this.projects = projects;
+			this.labels = labels;
+			writeDataCache({ tasks, projects, labels });
 			window.dispatchEvent(new Event('tasks-changed'));
 			window.dispatchEvent(new Event('projects-changed'));
 		} catch {
@@ -509,6 +520,7 @@ export class TaskPageState {
 	}
 
 	constructor() {
+		this.seedFromCache();
 		$effect(() => {
 			setSettings({ defaultViewMode: this.viewMode });
 		});
@@ -520,6 +532,23 @@ export class TaskPageState {
 			const timer = setTimeout(() => void this.searchFts(query), 150);
 			return () => clearTimeout(timer);
 		});
+	}
+
+	// returns the shared instance, creating it on first call
+	static get(): TaskPageState {
+		sharedInstance ??= new TaskPageState();
+		return sharedInstance;
+	}
+
+	// seed the stores from the last cached snapshot, so first paint has data
+	// immediately while the db refresh revalidates it
+	private seedFromCache(): void {
+		const cached = readDataCache();
+		if (!cached) return;
+		this.tasks = cached.tasks;
+		this.projects = cached.projects;
+		this.labels = cached.labels;
+		this.loading = false;
 	}
 
 	// mount lifecycle
@@ -676,7 +705,7 @@ export class TaskPageState {
 		let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 		const unlistenDbChanged = onDbChanged(() => {
 			if (refreshTimer) clearTimeout(refreshTimer);
-			refreshTimer = setTimeout(() => void this.refresh(), 200);
+			refreshTimer = setTimeout(() => void this.refresh(), 800);
 		});
 
 		void this.refresh();

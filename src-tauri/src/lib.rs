@@ -336,7 +336,7 @@ fn start_db_poller(app: tauri::AppHandle, hub: Arc<live::LiveHub>) {
             .unwrap_or_else(|_| std::path::PathBuf::from("."));
         let mut last: Option<_> = None;
         loop {
-            std::thread::sleep(std::time::Duration::from_secs(2));
+            std::thread::sleep(std::time::Duration::from_secs(5));
             let now = live::db_files_snapshot(&data_dir);
             if let Some(prev) = last {
                 if prev != now {
