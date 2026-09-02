@@ -1,4 +1,4 @@
-use crate::{app_db_path, attachments_dir, base64_encode};
+use crate::{app_db_path, attachments_dir, backup, base64_encode};
 use rusqlite::{params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -102,6 +102,22 @@ pub fn live_status(app: tauri::AppHandle) -> Option<LiveStatus> {
     status(&app)
 }
 
+// tiny_http binds with a plain TcpListener::bind, which leaves the port
+// unbindable for ~2*MSL when the app exits with browser connections open
+// (TIME_WAIT sockets on the live port). bind with SO_REUSEADDR so a quick
+// reopen can rebind the same port at once
+fn bind_listener(port: u16) -> std::io::Result<std::net::TcpListener> {
+    let socket = socket2::Socket::new(
+        socket2::Domain::IPV4,
+        socket2::Type::STREAM,
+        Some(socket2::Protocol::TCP),
+    )?;
+    socket.set_reuse_address(true)?;
+    socket.bind(&std::net::SocketAddr::from(([0, 0, 0, 0], port)).into())?;
+    socket.listen(128)?;
+    Ok(socket.into())
+}
+
 fn url(port: u16) -> String {
     // prefer the local network address so phones on the same wifi can join
     lan_ip()
@@ -141,8 +157,12 @@ fn start(app: &tauri::AppHandle, port: u16) -> Result<LiveStatus> {
 
     let server = Arc::new(
         // 0.0.0.0 so phones and other devices on the local network can connect
-        Server::http(("0.0.0.0", port))
-            .map_err(|e| format!("could not start live server on port {}: {}", port, e))?,
+        Server::from_listener(
+            bind_listener(port)
+                .map_err(|e| format!("could not start live server on port {}: {}", port, e))?,
+            None,
+        )
+        .map_err(|e| format!("could not start live server on port {}: {}", port, e))?,
     );
 
     let accept = server.clone();
@@ -192,6 +212,12 @@ fn handle_request(mut request: Request, ctx: &Ctx) {
             put_attachment(&mut request, p, ctx)
         }
         (Method::Delete, p) if p.starts_with("/api/attachment/") => delete_attachment(p, ctx),
+        (Method::Get, "/api/backups") => serve_backups(ctx),
+        (Method::Post, "/api/backups") => create_backup_http(&mut request, ctx),
+        (Method::Post, p) if p.starts_with("/api/backups/") && p.ends_with("/restore") => {
+            restore_backup_http(p, ctx)
+        }
+        (Method::Delete, p) if p.starts_with("/api/backups/") => delete_backup_http(p, ctx),
         (Method::Get, _) | (Method::Head, _) => serve_static(path, ctx),
         _ => json_response(StatusCode(404), json!({ "error": "not found" })),
     };
@@ -478,6 +504,66 @@ fn poll_events(ctx: &Ctx) -> Response<std::io::Cursor<Vec<u8>>> {
     let last = ctx.hub.generation();
     let changed = ctx.hub.changed_since(last, ctx.events_timeout);
     json_response(StatusCode(200), json!({ "changed": changed }))
+}
+
+// "/api/backups/backup-20240101-000000.000[/restore]" -> "backup-20240101-000000.000"
+fn backup_name_from_path(path: &str, with_restore_suffix: bool) -> Option<String> {
+    let rest = path.strip_prefix("/api/backups/")?;
+    let name = if with_restore_suffix {
+        rest.strip_suffix("/restore")?
+    } else {
+        rest
+    };
+    (!name.is_empty()).then(|| percent_decode(name))
+}
+
+fn serve_backups(ctx: &Ctx) -> Response<std::io::Cursor<Vec<u8>>> {
+    match backup::list_backups(&ctx.db_path) {
+        Ok(list) => json_response(StatusCode(200), json!({ "backups": list })),
+        Err(e) => json_response(StatusCode(500), json!({ "error": e })),
+    }
+}
+
+#[derive(Deserialize)]
+struct CreateBackupPayload {
+    #[serde(default = "default_keep")]
+    keep: usize,
+}
+
+fn default_keep() -> usize {
+    7
+}
+
+fn create_backup_http(request: &mut Request, ctx: &Ctx) -> Response<std::io::Cursor<Vec<u8>>> {
+    let mut body = String::new();
+    let _ = request.as_reader().take(1024).read_to_string(&mut body);
+    let keep = serde_json::from_str::<CreateBackupPayload>(&body)
+        .map(|p| p.keep)
+        .unwrap_or_else(|_| default_keep());
+    match backup::create_backup(&ctx.db_path, keep) {
+        Ok(name) => json_response(StatusCode(200), json!({ "name": name })),
+        Err(e) => json_response(StatusCode(500), json!({ "error": e })),
+    }
+}
+
+fn restore_backup_http(path: &str, ctx: &Ctx) -> Response<std::io::Cursor<Vec<u8>>> {
+    let Some(name) = backup_name_from_path(path, true) else {
+        return json_response(StatusCode(400), json!({ "error": "invalid backup name" }));
+    };
+    match backup::restore_backup(&ctx.db_path, &name) {
+        Ok(()) => json_response(StatusCode(200), json!({ "ok": true })),
+        Err(e) => json_response(StatusCode(500), json!({ "error": e })),
+    }
+}
+
+fn delete_backup_http(path: &str, ctx: &Ctx) -> Response<std::io::Cursor<Vec<u8>>> {
+    let Some(name) = backup_name_from_path(path, false) else {
+        return json_response(StatusCode(400), json!({ "error": "invalid backup name" }));
+    };
+    match backup::delete_backup(&ctx.db_path, &name) {
+        Ok(()) => json_response(StatusCode(200), json!({ "ok": true })),
+        Err(e) => json_response(StatusCode(500), json!({ "error": e })),
+    }
 }
 
 fn frontend_dir(app: &tauri::AppHandle) -> Option<PathBuf> {

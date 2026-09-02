@@ -7,7 +7,7 @@ import type { Label } from '$lib/types/label';
 const STORAGE_KEY = 'tack-data-cache-v1';
 const MAX_SIZE = 1_500_000; // skip caching past ~1.5MB so localStorage stays healthy
 
-export type CachedData = {
+type CachedData = {
 	tasks: Task[];
 	projects: Project[];
 	labels: Label[];

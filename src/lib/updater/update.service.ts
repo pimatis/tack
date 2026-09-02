@@ -50,8 +50,3 @@ export async function downloadAndInstall(
 export async function relaunchApp(): Promise<void> {
 	await relaunch();
 }
-
-// some environments (dev builds) cannot relaunch; give the user a manual fallback
-export function isDev(): boolean {
-	return import.meta.env.DEV;
-}

@@ -2,7 +2,7 @@ import { getDb, isTauri } from '$lib/db/client';
 import { invoke } from '@tauri-apps/api/core';
 import type { TaskAttachment } from '$lib/types/attachment';
 
-export type CreateAttachmentInput = {
+type CreateAttachmentInput = {
 	taskId: string;
 	fileName: string;
 	fileData: string;

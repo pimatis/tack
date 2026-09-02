@@ -47,6 +47,6 @@ export async function getLiveStatus(): Promise<LiveStatus | null> {
 	}
 }
 
-export function dispatchLiveStatus(status: LiveStatus | null): void {
+function dispatchLiveStatus(status: LiveStatus | null): void {
 	window.dispatchEvent(new CustomEvent('live-status-changed', { detail: status }));
 }

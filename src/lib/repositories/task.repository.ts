@@ -11,12 +11,12 @@ import {
 	logBatch as logActivityBatch
 } from '$lib/repositories/activity.repository';
 
-export type CreateTaskInput = Pick<Task, 'title'> &
+type CreateTaskInput = Pick<Task, 'title'> &
 	Partial<
 		Pick<Task, 'id' | 'description' | 'status' | 'priority' | 'projectId' | 'dueDate' | 'endDate'>
 	>;
 
-export type UpdateTaskInput = Partial<
+type UpdateTaskInput = Partial<
 	Pick<Task, 'title' | 'description' | 'status' | 'priority' | 'dueDate' | 'endDate' | 'pinned'>
 >;
 

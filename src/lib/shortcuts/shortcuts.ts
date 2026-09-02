@@ -56,7 +56,7 @@ export const SHORTCUTS: ShortcutDefinition[] = [
 	}
 ];
 
-export function keyLabel(key: string): string {
+function keyLabel(key: string): string {
 	if (key === 'Escape') return 'Esc';
 	if (key === ' ') return 'Space';
 	if (key.length === 1) return key.toUpperCase();
@@ -65,7 +65,7 @@ export function keyLabel(key: string): string {
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
-export function keyModifierLabel(mod?: ShortcutKey['mod']): string | null {
+function keyModifierLabel(mod?: ShortcutKey['mod']): string | null {
 	if (mod === 'meta') return isMac ? '⌘' : 'Win';
 	if (mod === 'ctrl') return isMac ? '⌃' : 'Ctrl';
 	if (mod === 'metaOrCtrl') return isMac ? '⌘' : 'Ctrl';

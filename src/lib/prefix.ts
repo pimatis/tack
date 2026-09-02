@@ -16,9 +16,9 @@ const turkishMap: Record<string, string> = {
 
 const vowels = new Set(['A', 'E', 'I', 'O', 'U']);
 
-export const PREFIX_MAX_LENGTH = 4;
-export const PREFIX_MIN_LENGTH = 2;
-export const PREFIX_PATTERN = /^[A-Z0-9]{2,4}$/;
+const PREFIX_MAX_LENGTH = 4;
+const PREFIX_MIN_LENGTH = 2;
+const PREFIX_PATTERN = /^[A-Z0-9]{2,4}$/;
 
 export function generatePrefix(name: string): string {
 	const chars = name

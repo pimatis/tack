@@ -2,11 +2,11 @@ import Database from '@tauri-apps/plugin-sql';
 
 const DATABASE_URL = 'sqlite:tack.db';
 
-export type QueryResult = { rowsAffected: number; lastInsertId?: number };
+type QueryResult = { rowsAffected: number; lastInsertId?: number };
 
 // minimal surface shared by the tauri sql plugin and the browser http shim,
 // so repositories work unchanged in both the app and the live site
-export type DbClient = {
+type DbClient = {
 	select<T>(query: string, params?: unknown[]): Promise<T>;
 	execute(query: string, params?: unknown[]): Promise<QueryResult>;
 	close(): Promise<boolean>;

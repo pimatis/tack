@@ -1,7 +1,7 @@
 import { getDb } from '$lib/db/client';
 import type { Label, LabelColor } from '$lib/types/label';
 
-export type CreateLabelInput = {
+type CreateLabelInput = {
 	name: string;
 	color: LabelColor;
 };
