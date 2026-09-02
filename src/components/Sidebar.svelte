@@ -11,7 +11,6 @@
 	import { sortableItem, useDndActive, reorderArray, type DragDropState } from '$lib/dnd';
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Badge } from '$lib/components/ui/badge/index.js';
 	import PriorityIcon from './PriorityIcon.svelte';
 	import StatusIcon from './StatusIcon.svelte';
 	import { keyComboLabel } from '$lib/shortcuts/index.js';
@@ -26,8 +25,29 @@
 	let {
 		settings = null,
 		toggleSidebar = () => {},
-		narrow = false
-	}: { settings?: Settings | null; toggleSidebar?: () => void; narrow?: boolean } = $props();
+		narrow = false,
+		mobileOpen = $bindable(false)
+	}: {
+		settings?: Settings | null;
+		toggleSidebar?: () => void;
+		narrow?: boolean;
+		mobileOpen?: boolean;
+	} = $props();
+
+	// on small screens (mobile + tablet) the sidebar is a drawer that starts
+	// closed; the desktop collapsed setting is ignored there
+	let localMobile = $state(false);
+	const isMobile = $derived(narrow || localMobile);
+	const collapsed = $derived(isMobile ? !mobileOpen : !!settings?.sidebarCollapsed);
+
+	function handleToggle() {
+		if (isMobile) mobileOpen = !mobileOpen;
+		else toggleSidebar();
+	}
+
+	function closeMobile() {
+		if (isMobile) mobileOpen = false;
+	}
 
 	// shared task state: the home page owns it, the sidebar only reads it
 	const pageState = TaskPageState.get();
@@ -170,6 +190,7 @@
 
 	// navigate home if not already there, then dispatch event
 	async function goHomeThenDispatch(eventName: string, detail?: unknown) {
+		if (isMobile) mobileOpen = false;
 		if (window.location.pathname !== '/') {
 			await goto('/');
 			await tick();
@@ -212,6 +233,15 @@
 	}
 
 	onMount(() => {
+		// tablet and below: drawer mode; layout already forces narrow below 1024px
+		const mobileQuery = window.matchMedia('(max-width: 1023px)');
+		const applyMobile = () => {
+			localMobile = mobileQuery.matches;
+			if (!localMobile) mobileOpen = false;
+		};
+		applyMobile();
+		mobileQuery.addEventListener('change', applyMobile);
+
 		const setPinnedActive = () => {
 			pinnedActive = true;
 			activeFilter = null;
@@ -255,6 +285,7 @@
 
 		return () => {
 			window.clearTimeout(updateTimer);
+			mobileQuery.removeEventListener('change', applyMobile);
 			window.removeEventListener('projects-changed', setAllInactive);
 			window.removeEventListener('tasks-changed', setAllInactive);
 			window.removeEventListener('filter-pinned', setPinnedActive);
@@ -278,20 +309,33 @@
 	{/if}
 {/snippet}
 
+<!-- mobile drawer backdrop: sibling of the aside so it never covers the
+     drawer content itself (clicking an item must not close the drawer) -->
+{#if isMobile && mobileOpen}
+	<button
+		type="button"
+		class="fixed inset-0 z-40 bg-black/40"
+		aria-label="Close sidebar"
+		onclick={closeMobile}
+	></button>
+{/if}
+
 <aside
-	class="flex h-full flex-col transition-all duration-200 {settings?.sidebarCollapsed
+	class="flex h-dvh flex-col transition-all duration-200 {collapsed
 		? 'w-12'
-		: 'w-50'}"
+		: 'w-50'} {isMobile
+		? 'fixed left-0 top-0 z-50 bg-sidebar shadow-xl shadow-black/10 max-md:w-60!'
+		: ''} {isMobile && !mobileOpen ? '-translate-x-full' : ''}"
 >
 	<!-- drag region for macOS traffic lights -->
 	<div class="h-7 shrink-0" data-tauri-drag-region></div>
 	<!-- header: workspace name + quick actions -->
 	<div
-		class="flex shrink-0 items-center {settings?.sidebarCollapsed
+		class="flex shrink-0 items-center {collapsed
 			? 'flex-col justify-center gap-1 px-0 py-2'
 			: 'h-12 justify-between px-2.5'}"
 	>
-		{#if !settings?.sidebarCollapsed}
+		{#if !collapsed}
 			<div class="flex items-center gap-2">
 				<svg
 					width="40"
@@ -316,7 +360,7 @@
 				</svg>
 			</div>
 		{/if}
-		{#if settings?.sidebarCollapsed && !narrow}
+		{#if collapsed && !isMobile}
 			<Tooltip.Root>
 				<Tooltip.Trigger>
 					{#snippet child({ props })}
@@ -324,8 +368,8 @@
 							{...props}
 							variant="ghost"
 							size="icon-sm"
-							class="text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-							onclick={toggleSidebar}
+							class="text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+							onclick={handleToggle}
 							aria-label="Expand sidebar"
 						>
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -342,7 +386,7 @@
 				>
 			</Tooltip.Root>
 		{/if}
-		<div class="flex items-center gap-0.5 {settings?.sidebarCollapsed ? 'flex-col gap-1' : ''}">
+		<div class="flex items-center gap-0.5 {collapsed ? 'flex-col gap-1' : ''}">
 			<Tooltip.Root>
 				<Tooltip.Trigger>
 					{#snippet child({ props })}
@@ -352,7 +396,7 @@
 							size="icon-sm"
 							aria-label="Search"
 							onclick={() => void goHomeThenDispatch('open-command-palette')}
-							class="text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+							class="text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
 						>
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 								><path
@@ -375,7 +419,7 @@
 							size="icon-sm"
 							aria-label="New task"
 							onclick={() => void goHomeThenDispatch('open-task-dialog')}
-							class="text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+							class="text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
 						>
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 								><path
@@ -397,7 +441,7 @@
 							size="icon-sm"
 							aria-label="New project"
 							onclick={() => void goHomeThenDispatch('open-project-dialog')}
-							class="text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+							class="text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
 						>
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 								><path
@@ -419,14 +463,14 @@
 
 	<ScrollArea class="min-h-0 flex-1">
 		<!-- home -->
-		<div class={settings?.sidebarCollapsed ? 'mb-1 flex justify-center px-0' : 'px-1.5'}>
+		<div class={collapsed ? 'mb-1 flex justify-center px-0' : 'px-1.5'}>
 			<Button
 				variant="ghost"
 				href="/"
-				size={settings?.sidebarCollapsed ? 'icon-sm' : 'default'}
-				class={settings?.sidebarCollapsed
-					? 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground'
-					: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-foreground'}
+				size={collapsed ? 'icon-sm' : 'default'}
+				class={collapsed
+					? 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+					: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}
 				onclick={(e) => {
 					e.preventDefault();
 					void goHomeThenDispatch('clear-filters');
@@ -444,12 +488,13 @@
 						d="M13.2 2.65a2 2 0 0 0-2.4 0l-7 5.25A2 2 0 0 0 3 9.5V19a2 2 0 0 0 2 2h3.9a1.1 1.1 0 0 0 1.1-1.1V15a2 2 0 1 1 4 0v4.9a1.1 1.1 0 0 0 1.1 1.1H19a2 2 0 0 0 2-2V9.5a2 2 0 0 0-.8-1.6z"
 					/></svg
 				>
-				{#if !settings?.sidebarCollapsed}<span>Home</span>{/if}
+				{#if !collapsed}<span>Home</span>{/if}
 			</Button>
 		</div>
 
 		<!-- dynamic filter items (reorderable via settings) -->
-		{#if !settings?.sidebarCollapsed}
+		{#if !collapsed}
+			<div class="px-3 pb-1 pt-2 text-[11px] font-medium text-muted-foreground/60">Filters</div>
 			{#each orderedFilterItems as item (item.id)}
 				{#if item.id === 'pinned'}
 					<div
@@ -465,8 +510,8 @@
 						<button
 							type="button"
 							class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {pinnedActive
-								? 'bg-sidebar-accent text-sidebar-foreground'
-								: 'text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-foreground'}"
+								? 'bg-sidebar-accent/70 text-sidebar-foreground'
+								: 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}"
 							onclick={() => void goHomeThenDispatch('filter-pinned')}
 						>
 							<svg
@@ -483,10 +528,8 @@
 							</svg>
 							<span>Pinned</span>
 							{#if pinnedCount > 0}
-								<Badge
-									variant="default"
-									class="ml-auto h-4.5 min-w-4.5 px-1.5 text-[10px] font-medium"
-									>{pinnedCount}</Badge
+								<span
+									class="ml-auto text-[11px] tabular-nums text-muted-foreground/50">{pinnedCount}</span
 								>
 							{/if}
 						</button>
@@ -506,8 +549,8 @@
 							type="button"
 							class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {activeFilter ===
 							'filter-today'
-								? 'bg-sidebar-accent text-sidebar-foreground'
-								: 'text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-foreground'}"
+								? 'bg-sidebar-accent/70 text-sidebar-foreground'
+								: 'text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}"
 							onclick={() => dispatchFilter('filter-today', 'filter-today')}
 						>
 							<svg
@@ -523,9 +566,8 @@
 							>
 							<span>Today</span>
 							{#if todayCount > 0}
-								<Badge
-									variant="default"
-									class="ml-auto h-4.5 min-w-4.5 px-1.5 text-[10px] font-medium">{todayCount}</Badge
+								<span
+									class="ml-auto text-[11px] tabular-nums text-muted-foreground/50">{todayCount}</span
 								>
 							{/if}
 						</button>
@@ -545,8 +587,8 @@
 							type="button"
 							class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {activeFilter ===
 							'filter-upcoming'
-								? 'bg-sidebar-accent text-sidebar-foreground'
-								: 'text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-foreground'}"
+								? 'bg-sidebar-accent/70 text-sidebar-foreground'
+								: 'text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}"
 							onclick={() => dispatchFilter('filter-upcoming', 'filter-upcoming')}
 						>
 							<svg
@@ -562,10 +604,8 @@
 							>
 							<span>Upcoming</span>
 							{#if upcomingCount > 0}
-								<Badge
-									variant="default"
-									class="ml-auto h-4.5 min-w-4.5 px-1.5 text-[10px] font-medium"
-									>{upcomingCount}</Badge
+								<span
+									class="ml-auto text-[11px] tabular-nums text-muted-foreground/50">{upcomingCount}</span
 								>
 							{/if}
 						</button>
@@ -585,8 +625,8 @@
 							type="button"
 							class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {activeFilter ===
 							'filter-overdue'
-								? 'bg-sidebar-accent text-sidebar-foreground'
-								: 'text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-foreground'}"
+								? 'bg-sidebar-accent/70 text-sidebar-foreground'
+								: 'text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}"
 							onclick={() => dispatchFilter('filter-overdue', 'filter-overdue')}
 						>
 							<svg
@@ -602,10 +642,8 @@
 							>
 							<span>Overdue</span>
 							{#if overdueCount > 0}
-								<Badge
-									variant="default"
-									class="ml-auto h-4.5 min-w-4.5 bg-red-500/15 px-1.5 text-[10px] font-medium text-red-400"
-									>{overdueCount}</Badge
+								<span
+									class="ml-auto text-[11px] tabular-nums text-red-400/80">{overdueCount}</span
 								>
 							{/if}
 						</button>
@@ -623,7 +661,7 @@
 					>
 						<details open class="group/status">
 							<summary
-								class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+								class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
 							>
 								<svg
 									class="text-muted-foreground transition-transform duration-150 group-open/status:rotate-90"
@@ -644,8 +682,8 @@
 										type="button"
 										class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {activeFilter ===
 										'filter-by-status:' + status
-											? 'bg-sidebar-accent text-sidebar-foreground'
-											: 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground'}"
+											? 'bg-sidebar-accent/70 text-sidebar-foreground'
+											: 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}"
 										onclick={() =>
 											dispatchFilter('filter-by-status', 'filter-by-status:' + status, status)}
 									>
@@ -674,7 +712,7 @@
 					>
 						<details open class="group/priority">
 							<summary
-								class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+								class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
 							>
 								<svg
 									class="text-muted-foreground transition-transform duration-150 group-open/priority:rotate-90"
@@ -695,8 +733,8 @@
 										type="button"
 										class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {activeFilter ===
 										'filter-by-priority:' + p
-											? 'bg-sidebar-accent text-sidebar-foreground'
-											: 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground'}"
+											? 'bg-sidebar-accent/70 text-sidebar-foreground'
+											: 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}"
 										onclick={() =>
 											dispatchFilter('filter-by-priority', 'filter-by-priority:' + p, p)}
 									>
@@ -721,8 +759,8 @@
 					<Button
 						variant="ghost"
 						size="icon-sm"
-						class="text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground {pinnedActive
-							? 'bg-sidebar-accent text-sidebar-foreground'
+						class="text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground {pinnedActive
+							? 'bg-sidebar-accent/70 text-sidebar-foreground'
 							: ''}"
 						onclick={() => void goHomeThenDispatch('filter-pinned')}
 						aria-label="Pinned"
@@ -745,11 +783,11 @@
 		{/if}
 
 		<!-- projects -->
-		{#if !settings?.sidebarCollapsed}
+		{#if !collapsed}
 			<div class="px-1.5">
 				<details open class="group/projects">
 					<summary
-						class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+						class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
 					>
 						<svg
 							class="text-muted-foreground transition-transform duration-150 group-open/projects:rotate-90"
@@ -762,8 +800,8 @@
 								d="M16.06 10.94a1.5 1.5 0 0 1 0 2.12l-5.656 5.658a1.5 1.5 0 1 1-2.121-2.122L12.879 12 8.283 7.404a1.5 1.5 0 0 1 2.12-2.122l5.658 5.657Z"
 							/></svg
 						>
-						{#if !settings?.sidebarCollapsed}<span>Projects</span>{/if}
-						{#if !settings?.sidebarCollapsed}
+						{#if !collapsed}<span>Projects</span>{/if}
+						{#if !collapsed}
 							<Tooltip.Root>
 								<Tooltip.Trigger>
 									{#snippet child({ props })}
@@ -853,7 +891,7 @@
 				{#if labels.length > 0}
 					<details open class="group/labels mt-0.5">
 						<summary
-							class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+							class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
 						>
 							<svg
 								class="text-muted-foreground transition-transform duration-150 group-open/labels:rotate-90"
@@ -874,8 +912,8 @@
 									type="button"
 									class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {activeFilter ===
 									'filter-by-label:' + label.id
-										? 'bg-sidebar-accent text-sidebar-foreground'
-										: 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground'}"
+										? 'bg-sidebar-accent/70 text-sidebar-foreground'
+										: 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}"
 									onclick={() =>
 										dispatchFilter('filter-by-label', 'filter-by-label:' + label.id, label.id)}
 								>
@@ -898,7 +936,7 @@
 	</ScrollArea>
 
 	<!-- stats footer -->
-	{#if !settings?.sidebarCollapsed && totalTasks > 0 && isItemVisible('quickStats')}
+	{#if !collapsed && totalTasks > 0 && isItemVisible('quickStats')}
 		<div class="shrink-0 border-t border-sidebar-border/40 px-3 py-2">
 			<div class="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
 				<span>{totalTasks} tasks</span>
@@ -915,11 +953,11 @@
 
 	<!-- trash + settings -->
 	<div
-		class="shrink-0 border-t border-sidebar-border/40 {settings?.sidebarCollapsed
+		class="shrink-0 border-t border-sidebar-border/40 {collapsed
 			? 'px-0'
-			: 'px-2'} py-1.5 {settings?.sidebarCollapsed ? 'flex flex-col items-center gap-1' : ''}"
+			: 'px-2'} py-1.5 {collapsed ? 'flex flex-col items-center gap-1' : ''}"
 	>
-		{#if updateAvailable && !settings?.sidebarCollapsed}
+		{#if updateAvailable && !collapsed}
 			<button
 				type="button"
 				onclick={() => (updateDialogOpen = true)}
@@ -937,11 +975,12 @@
 		<Button
 			variant="ghost"
 			href="/trash"
-			size={settings?.sidebarCollapsed ? 'icon-sm' : 'default'}
-			class={settings?.sidebarCollapsed
-				? 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground'
-				: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-foreground'}
+			size={collapsed ? 'icon-sm' : 'default'}
+			class={collapsed
+				? 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+				: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}
 			aria-label="Trash"
+			onclick={() => closeMobile()}
 		>
 			<svg
 				class="shrink-0 text-muted-foreground"
@@ -954,16 +993,17 @@
 					d="M14.28 2a2 2 0 0 1 1.897 1.368L16.72 5H20a1 1 0 1 1 0 2l-.003.071-.867 12.143A3 3 0 0 1 16.138 22H7.862a3 3 0 0 1-2.992-2.786L4.003 7.07A1.01 1.01 0 0 1 4 7a1 1 0 0 1 0-2h3.28l.543-1.632A2 2 0 0 1 9.721 2zM9 10a1 1 0 0 0-.993.883L8 11v6a1 1 0 0 0 1.993.117L10 17v-6a1 1 0 0 0-1-1m6 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0v-6a1 1 0 0 0-1-1m-.72-6H9.72l-.333 1h5.226z"
 				/></svg
 			>
-			{#if !settings?.sidebarCollapsed}<span>Trash</span>{/if}
+			{#if !collapsed}<span>Trash</span>{/if}
 		</Button>
 		<Button
 			variant="ghost"
 			href="/settings"
-			size={settings?.sidebarCollapsed ? 'icon-sm' : 'default'}
-			class={settings?.sidebarCollapsed
-				? 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground'
-				: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-foreground'}
+			size={collapsed ? 'icon-sm' : 'default'}
+			class={collapsed
+				? 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+				: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}
 			aria-label="Settings"
+			onclick={() => closeMobile()}
 		>
 			<svg
 				class="shrink-0 text-muted-foreground"
@@ -976,7 +1016,7 @@
 					d="M9.965 2.809a1.511 1.511 0 0 0-1.401-.203 9.99 9.99 0 0 0-2.982 1.725 1.51 1.51 0 0 0-.524 1.313c.075.753-.058 1.48-.42 2.106-.361.627-.925 1.106-1.615 1.417a1.511 1.511 0 0 0-.875 1.113 10.059 10.059 0 0 0 0 3.44c.093.537.46.926.875 1.114.69.31 1.254.79 1.616 1.416.361.627.494 1.353.419 2.106-.045.452.107.964.524 1.313a9.989 9.989 0 0 0 2.982 1.725 1.51 1.51 0 0 0 1.4-.203c.615-.442 1.312-.691 2.036-.691s1.42.249 2.035.691c.37.266.89.39 1.401.203a9.99 9.99 0 0 0 2.982-1.725c.417-.349.57-.86.524-1.313-.075-.753.057-1.48.42-2.106.361-.627.925-1.105 1.615-1.416.414-.187.782-.577.875-1.114a10.062 10.062 0 0 0 0-3.44 1.511 1.511 0 0 0-.875-1.113c-.69-.311-1.254-.79-1.616-1.417-.362-.626-.494-1.353-.419-2.106a1.511 1.511 0 0 0-.524-1.313 9.99 9.99 0 0 0-2.982-1.725 1.511 1.511 0 0 0-1.4.203C13.42 3.25 12.723 3.5 12 3.5s-1.42-.249-2.035-.691M9 12a3 3 0 1 1 6 0 3 3 0 0 1-6 0"
 				/></svg
 			>
-			{#if !settings?.sidebarCollapsed}<span>Settings</span>{/if}
+			{#if !collapsed}<span>Settings</span>{/if}
 		</Button>
 	</div>
 </aside>

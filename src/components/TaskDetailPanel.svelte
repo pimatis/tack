@@ -530,7 +530,7 @@
 
 	<div
 		bind:this={panelRef}
-		class="fixed top-0 right-0 z-50 h-screen w-full max-w-[640px] bg-card shadow-2xl"
+		class="fixed top-0 right-0 z-50 h-full w-full max-w-[640px] bg-card shadow-2xl sm:max-w-[680px] lg:max-w-[720px]"
 		transition:fly={{ x: 640, duration: 280, opacity: 1 }}
 		role="dialog"
 		aria-modal="true"
@@ -549,7 +549,7 @@
 				class="flex h-full flex-col"
 			>
 				<!-- header -->
-				<div class="flex items-center justify-between px-5 pt-4 pb-3">
+				<div class="flex items-center justify-between px-4 pt-4 pb-3 sm:px-5">
 					<div class="flex items-center gap-2">
 						<div
 							class="flex size-5 items-center justify-center rounded-[5px] bg-primary text-[10px] leading-none font-bold text-primary-foreground"
@@ -649,9 +649,9 @@
 				</div>
 
 				<!-- scrollable content -->
-				<div class="flex flex-1 overflow-hidden">
+				<div class="flex flex-1 flex-col overflow-hidden md:flex-row">
 					<!-- main content -->
-					<div class="flex flex-1 flex-col overflow-y-auto px-5">
+					<div class="flex flex-1 flex-col overflow-y-auto px-4 sm:px-5">
 						<!-- title -->
 						<Input
 							bind:ref={titleRef}
@@ -1078,7 +1078,9 @@
 					</div>
 
 					<!-- properties sidebar -->
-					<aside class="flex w-[200px] shrink-0 flex-col gap-px overflow-y-auto bg-muted/10 p-3">
+					<aside
+						class="flex shrink-0 flex-col gap-px border-t border-border/60 bg-muted/10 p-3 md:w-[200px] md:border-t-0 md:border-l md:overflow-y-auto"
+					>
 						<!-- status -->
 						<div class="flex flex-col gap-1 py-1.5">
 							<span class="text-[11px] font-medium text-muted-foreground/60">Status</span>
@@ -1165,7 +1167,7 @@
 					class="hidden"
 					onchange={handleFileSelect}
 				/>
-				<div class="flex items-center justify-between border-t border-border px-5 py-3">
+				<div class="flex items-center justify-between border-t border-border px-4 py-3 sm:px-5">
 					<div class="flex items-center gap-2">
 						<Tooltip.Root>
 							<Tooltip.Trigger>

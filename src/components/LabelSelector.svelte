@@ -128,7 +128,7 @@
 			</Button>
 		{/snippet}
 	</Popover.Trigger>
-	<Popover.Content class="w-60 p-1.5" align="start">
+	<Popover.Content class="w-[calc(100vw-2rem)] max-w-60 p-1.5" align="start">
 		<!-- label list -->
 		{#if labels.length > 0}
 			<div class="flex flex-col gap-px">
@@ -204,9 +204,9 @@
 									/></svg
 								>
 							{/if}
-							<!-- edit + delete buttons (hover) -->
+							<!-- edit + delete buttons (visible on touch, hover on desktop) -->
 							<div
-								class="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/label:opacity-100"
+								class="flex shrink-0 items-center gap-0.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover/label:opacity-100"
 							>
 								<Tooltip.Root>
 									<Tooltip.Trigger>

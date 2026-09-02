@@ -7,7 +7,7 @@
 {#if dueDateInfo(dueDate)}
 	{@const dd = dueDateInfo(dueDate)!}
 	<span
-		class="flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium {dd.textColor} {dd.bgColor}"
+		class="flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium {dd.textColor} {dd.bgColor}"
 	>
 		<svg width="10" height="10" viewBox="0 0 24 24" fill="none"
 			><path

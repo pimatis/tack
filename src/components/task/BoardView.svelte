@@ -45,7 +45,7 @@
 <div class="flex flex-1 gap-3 overflow-x-auto pb-2">
 	{#each statusOrderList as status (status)}
 		{@const group = groups[status]}
-		<div class="flex w-[260px] shrink-0 flex-col">
+		<div class="flex w-[240px] shrink-0 flex-col sm:w-[260px]">
 			<!-- column header -->
 			<div class="flex items-center gap-2 px-1 pb-2">
 				<StatusIcon {status} size={14} />

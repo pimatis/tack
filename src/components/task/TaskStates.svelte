@@ -20,12 +20,12 @@
 </script>
 
 {#if loading}
-	<div class="flex items-center justify-center gap-2 py-20 text-[13px] text-muted-foreground">
+	<div class="flex items-center justify-center gap-2 px-4 py-16 text-[13px] text-muted-foreground sm:py-20">
 		<Spinner class="size-3.5" />
 		<span>Loading tasks...</span>
 	</div>
 {:else if error}
-	<div class="flex flex-col items-center gap-3 py-20">
+	<div class="flex flex-col items-center gap-3 px-4 py-16 text-center sm:py-20">
 		<div class="flex size-8 items-center justify-center rounded-lg bg-destructive/10">
 			<svg class="text-destructive" width="16" height="16" viewBox="0 0 24 24" fill="none"
 				><path
@@ -38,7 +38,7 @@
 		<Button variant="outline" size="sm" onclick={onRefresh}>Try again</Button>
 	</div>
 {:else if tasksEmpty}
-	<div class="flex flex-col items-center justify-center gap-5 py-28">
+	<div class="flex flex-col items-center justify-center gap-5 px-4 py-20 text-center sm:py-28">
 		<div class="flex size-14 items-center justify-center rounded-2xl bg-muted/50">
 			<svg class="text-muted-foreground/60" width="28" height="28" viewBox="0 0 24 24" fill="none"
 				><path
@@ -71,7 +71,7 @@
 		</Button>
 	</div>
 {:else if filteredEmpty}
-	<div class="flex flex-col items-center gap-3 py-24">
+	<div class="flex flex-col items-center gap-3 px-4 py-16 text-center sm:py-24">
 		<div class="flex size-10 items-center justify-center rounded-xl bg-muted">
 			<svg class="text-muted-foreground" width="20" height="20" viewBox="0 0 24 24" fill="none"
 				><path

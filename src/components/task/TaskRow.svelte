@@ -100,7 +100,9 @@
 			</span>
 
 			<!-- labels -->
-			<TaskLabels labelIds={task.labelIds ?? []} {labelMap} max={3} />
+			<div class="hidden lg:block">
+				<TaskLabels labelIds={task.labelIds ?? []} {labelMap} max={3} />
+			</div>
 
 			<!-- status popover -->
 			<StatusMenu value={task.status} onSelect={(s) => onChangeStatus(task, s)}>
@@ -137,17 +139,17 @@
 			</Button>
 
 			<!-- due date -->
-			<div class="flex w-24 shrink-0 justify-end">
+			<div class="hidden w-24 shrink-0 justify-end md:flex">
 				<DueDateBadge dueDate={task.dueDate} />
 			</div>
 
 			<!-- end date -->
-			<div class="flex w-24 shrink-0 justify-end">
+			<div class="hidden w-24 shrink-0 justify-end md:flex">
 				<EndDateBadge endDate={task.endDate} />
 			</div>
 
 			<!-- date -->
-			<span class="hidden w-16 shrink-0 text-right text-[11px] text-muted-foreground/40 sm:block">
+			<span class="hidden w-16 shrink-0 text-right text-[11px] text-muted-foreground/40 md:block">
 				{formatDate(task.updatedAt)}
 			</span>
 

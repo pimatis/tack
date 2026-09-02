@@ -227,7 +227,7 @@
 
 <Dialog.Root bind:open>
 	<Dialog.Content
-		class="max-w-lg gap-0 p-0"
+		class="w-[calc(100vw-2rem)] max-w-lg gap-0 p-0"
 		showCloseButton={false}
 		onInteractOutside={(e) => {
 			// keep the dialog open while the lightbox is showing
@@ -237,14 +237,14 @@
 		<Dialog.Title class="sr-only">Create task</Dialog.Title>
 		<form onsubmit={handleSubmit} class="flex flex-col">
 			<!-- header: badge + breadcrumb + close -->
-			<div class="flex items-center justify-between px-5 pt-4 pb-3">
-				<div class="flex items-center gap-2">
+			<div class="flex items-center justify-between gap-2 px-4 pt-4 pb-3 sm:px-5">
+				<div class="flex min-w-0 items-center gap-2">
 					<div
-						class="flex size-4.5 items-center justify-center rounded-[5px] bg-primary text-[9px] leading-none font-bold text-primary-foreground"
+						class="flex size-4.5 shrink-0 items-center justify-center rounded-[5px] bg-primary text-[9px] leading-none font-bold text-primary-foreground"
 					>
 						T
 					</div>
-					<span class="text-[12px] text-muted-foreground">
+					<span class="truncate text-[12px] text-muted-foreground">
 						New task · {projects.find((p) => p.id === projectId)?.name ?? 'Inbox'}
 					</span>
 				</div>
@@ -268,7 +268,7 @@
 			</div>
 
 			<!-- title + description -->
-			<div class="flex flex-col gap-2 px-5">
+			<div class="flex flex-col gap-2 px-4 sm:px-5">
 				<Input
 					bind:ref={titleRef}
 					bind:value={title}
@@ -325,7 +325,7 @@
 			</div>
 
 			{#if attachments.length > 0}
-				<div class="flex flex-wrap gap-2 px-5 pt-1">
+				<div class="flex flex-wrap gap-2 px-4 pt-1 sm:px-5">
 					{#each attachments as att, i (i)}
 						<div
 							class="group/att relative size-16 cursor-zoom-in overflow-hidden rounded-lg border border-border bg-muted/30"
@@ -368,7 +368,7 @@
 			/>
 
 			<!-- metadata pills -->
-			<div class="flex flex-wrap gap-1.5 px-5 pt-3 pb-4">
+			<div class="flex flex-wrap gap-1.5 px-4 pt-3 pb-4 sm:px-5">
 				<Select.Root type="single" bind:value={projectId as never}>
 					<Select.Trigger
 						size="sm"
@@ -447,13 +447,13 @@
 			</div>
 
 			{#if error}
-				<p class="px-5 text-[12px] text-destructive" role="alert">{error}</p>
+				<p class="px-4 text-[12px] text-destructive sm:px-5" role="alert">{error}</p>
 			{/if}
 
 			<Separator />
 
 			<!-- footer -->
-			<div class="flex items-center justify-between px-5 py-3">
+			<div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-5">
 				<div class="flex items-center gap-2">
 					<Checkbox id="create-more" bind:checked={createMore} />
 					<label for="create-more" class="cursor-pointer text-[12px] text-muted-foreground"

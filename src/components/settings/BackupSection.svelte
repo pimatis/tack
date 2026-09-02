@@ -145,7 +145,7 @@
 	});
 </script>
 
-<div class="flex items-center justify-between">
+<div class="flex flex-wrap items-center justify-between gap-2">
 	<div>
 		<p class="text-[13px] font-medium">Local backups</p>
 		<p class="text-xs text-muted-foreground">
@@ -161,7 +161,7 @@
 {#if settings.backupEnabled}
 	<Separator />
 
-	<div class="flex items-center justify-between">
+	<div class="flex flex-wrap items-center justify-between gap-2">
 		<div>
 			<p class="text-[13px] font-medium">Backup schedule</p>
 			<p class="text-xs text-muted-foreground">How often a new snapshot is taken</p>
@@ -185,7 +185,7 @@
 
 	<Separator />
 
-	<div class="flex items-center justify-between">
+	<div class="flex flex-wrap items-center justify-between gap-2">
 		<div>
 			<p class="text-[13px] font-medium">Backups to keep</p>
 			<p class="text-xs text-muted-foreground">Older snapshots are removed automatically</p>

@@ -26,7 +26,7 @@
 			{@render trigger(props)}
 		{/snippet}
 	</Popover.Trigger>
-	<Popover.Content class="w-48 p-1.5" {align}>
+	<Popover.Content class="w-[calc(100vw-2rem)] max-w-48 p-1.5" {align}>
 		<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
 			{title}
 		</div>

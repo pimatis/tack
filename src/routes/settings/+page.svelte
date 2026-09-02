@@ -305,12 +305,14 @@
 
 <section class="flex h-full flex-col">
 	<!-- header -->
-	<header class="flex items-center justify-between border-b border-border px-6 py-4">
-		<div>
-			<h1 class="text-lg font-semibold tracking-tight">Settings</h1>
-			<p class="text-sm text-muted-foreground">Manage your workspace and preferences</p>
+	<header class="flex items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-6 sm:py-4">
+		<div class="min-w-0">
+			<h1 class="text-base font-semibold tracking-tight sm:text-lg">Settings</h1>
+			<p class="truncate text-xs text-muted-foreground sm:text-sm">
+				Manage your workspace and preferences
+			</p>
 		</div>
-		<Button variant="ghost" size="sm" href="/">
+		<Button variant="ghost" size="sm" href="/" class="shrink-0">
 			<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 				><path
 					fill="currentColor"
@@ -322,7 +324,7 @@
 	</header>
 
 	<!-- content -->
-	<div class="flex-1 overflow-y-auto px-6 py-6">
+	<div class="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
 		<div class="mx-auto max-w-2xl">
 			<!-- search -->
 			<div class="relative mb-5">
@@ -450,46 +452,48 @@
 				{/if}
 			{:else}
 				<Tabs.Root bind:value={activeTab} class="w-full">
-					<Tabs.List class="flex w-full gap-1 rounded-lg bg-muted/50 p-1">
-						<Tabs.Trigger value="appearance" class="flex-1">Appearance</Tabs.Trigger>
-						<Tabs.Trigger value="sidebar" class="flex-1">Sidebar</Tabs.Trigger>
-						<Tabs.Trigger value="tasks" class="flex-1">Tasks</Tabs.Trigger>
-						<Tabs.Trigger value="data" class="flex-1">Data</Tabs.Trigger>
-						<Tabs.Trigger value="backup" class="flex-1">Backup</Tabs.Trigger>
-						<Tabs.Trigger value="shortcuts" class="flex-1">Shortcuts</Tabs.Trigger>
-						<Tabs.Trigger value="live" class="flex-1">Live</Tabs.Trigger>
-						<Tabs.Trigger value="workspace" class="flex-1">Workspace</Tabs.Trigger>
-					</Tabs.List>
+					<div class="overflow-x-auto pb-0.5">
+						<Tabs.List class="flex w-max gap-1 rounded-lg bg-muted/50 p-1 sm:w-full">
+							<Tabs.Trigger value="appearance" class="shrink-0 flex-1 whitespace-nowrap">Appearance</Tabs.Trigger>
+							<Tabs.Trigger value="sidebar" class="shrink-0 flex-1 whitespace-nowrap">Sidebar</Tabs.Trigger>
+							<Tabs.Trigger value="tasks" class="shrink-0 flex-1 whitespace-nowrap">Tasks</Tabs.Trigger>
+							<Tabs.Trigger value="data" class="shrink-0 flex-1 whitespace-nowrap">Data</Tabs.Trigger>
+							<Tabs.Trigger value="backup" class="shrink-0 flex-1 whitespace-nowrap">Backup</Tabs.Trigger>
+							<Tabs.Trigger value="shortcuts" class="shrink-0 flex-1 whitespace-nowrap">Shortcuts</Tabs.Trigger>
+							<Tabs.Trigger value="live" class="shrink-0 flex-1 whitespace-nowrap">Live</Tabs.Trigger>
+							<Tabs.Trigger value="workspace" class="shrink-0 flex-1 whitespace-nowrap">Workspace</Tabs.Trigger>
+						</Tabs.List>
+					</div>
 
-					<Tabs.Content value="appearance" class="mt-6 space-y-6">
+					<Tabs.Content value="appearance" class="mt-4 space-y-5 sm:mt-6 sm:space-y-6">
 						<AppearanceSection {settings} update={updateSetting} />
 					</Tabs.Content>
 
-					<Tabs.Content value="sidebar" class="mt-6 space-y-6">
+					<Tabs.Content value="sidebar" class="mt-4 space-y-5 sm:mt-6 sm:space-y-6">
 						<SidebarSection {settings} update={updateSetting} />
 					</Tabs.Content>
 
-					<Tabs.Content value="tasks" class="mt-6 space-y-6">
+					<Tabs.Content value="tasks" class="mt-4 space-y-5 sm:mt-6 sm:space-y-6">
 						<TasksSection {settings} update={updateSetting} />
 					</Tabs.Content>
 
-					<Tabs.Content value="data" class="mt-6 space-y-6">
+					<Tabs.Content value="data" class="mt-4 space-y-5 sm:mt-6 sm:space-y-6">
 						<DataSection />
 					</Tabs.Content>
 
-					<Tabs.Content value="backup" class="mt-6 space-y-6">
+					<Tabs.Content value="backup" class="mt-4 space-y-5 sm:mt-6 sm:space-y-6">
 						<BackupSection />
 					</Tabs.Content>
 
-					<Tabs.Content value="shortcuts" class="mt-6 space-y-4">
+					<Tabs.Content value="shortcuts" class="mt-4 space-y-4 sm:mt-6">
 						<ShortcutsSection />
 					</Tabs.Content>
 
-					<Tabs.Content value="live" class="mt-6 space-y-6">
+					<Tabs.Content value="live" class="mt-4 space-y-5 sm:mt-6 sm:space-y-6">
 						<LiveSection {settings} update={updateSetting} />
 					</Tabs.Content>
 
-					<Tabs.Content value="workspace" class="mt-6 space-y-6">
+					<Tabs.Content value="workspace" class="mt-4 space-y-5 sm:mt-6 sm:space-y-6">
 						<WorkspaceSection {stats} />
 						<CliSection />
 						<Separator class="bg-border/40" />

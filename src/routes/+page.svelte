@@ -53,7 +53,7 @@
 	onLabelRemoved={(id) => state.handleLabelRemoved(id)}
 />
 
-<section class="flex h-full flex-col px-8 py-8">
+<section class="flex h-full flex-col px-3 py-3 sm:px-5 sm:py-5 lg:px-8 lg:py-8">
 	<TaskHeader
 		pinnedFilter={state.pinnedFilter}
 		hasFilters={state.hasFilters}

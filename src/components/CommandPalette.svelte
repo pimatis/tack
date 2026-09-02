@@ -99,10 +99,10 @@
 	title="Command palette"
 	description="Search for commands, tasks, and projects"
 	showCloseButton={false}
-	class="top-[18%]! max-w-[560px]!"
+	class="top-[12%]! w-[calc(100vw-2rem)]! max-w-[560px]! sm:top-[18%]"
 >
 	<Command.Input placeholder="Type a command or search..." />
-	<Command.List class="max-h-[400px]">
+	<Command.List class="max-h-[60vh] sm:max-h-[400px]">
 		<Command.Empty>No results found.</Command.Empty>
 
 		<Command.Group heading="Actions">

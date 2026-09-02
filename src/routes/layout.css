@@ -39,6 +39,25 @@
 @custom-variant dark (&:is(.dark *));
 @plugin '@tailwindcss/typography';
 
+/* the app shell never scrolls: without this, iOS Safari routes touch gestures
+   on fixed overlays (sidebar drawer) to the document instead of the inner
+   scroll container, so one-finger scrolling inside the drawer does nothing */
+html,
+body {
+	overflow: hidden;
+}
+
+/* bits-ui scroll-area viewport is a flex column, which on iOS Safari clips
+   overflowing content without enabling touch scrolling (flex item shrinks to
+   the container and the viewport never overflows); plain block layout lets
+   the content wrapper grow naturally so the drawer scrolls on phones.
+   touch-action: pan-y is required for single-finger scrolling on iOS Safari */
+[data-scroll-area-viewport] {
+	display: block;
+	touch-action: pan-y;
+	overscroll-behavior: contain;
+}
+
 /* settings search: flash the row the user jumped to
    soft accent tint + thin inner ring, fast peak then smooth ease-out fade */
 .settings-highlight-row {

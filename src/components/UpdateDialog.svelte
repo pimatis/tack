@@ -76,7 +76,7 @@
 </script>
 
 <Dialog.Root bind:open>
-	<Dialog.Content class="max-w-md gap-5 p-6">
+	<Dialog.Content class="w-[calc(100vw-2rem)] max-w-md gap-4 p-4 sm:gap-5 sm:p-6">
 		<Dialog.Header class="gap-2">
 			<Dialog.Title class="text-base font-semibold tracking-tight">
 				{#if uiState.status === 'checking'}
@@ -126,7 +126,7 @@
 			</div>
 		{/if}
 
-		<Dialog.Footer class="mt-1">
+		<Dialog.Footer class="mt-1 flex-wrap gap-2">
 			{#if uiState.status === 'checking'}
 				<div class="flex items-center gap-2 text-[13px] text-muted-foreground">
 					<Spinner class="size-3.5" />

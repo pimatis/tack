@@ -40,7 +40,7 @@
 {#if url}
 	<div
 		bind:this={ref}
-		class="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-8"
+		class="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-3 sm:p-8"
 		onclick={onClose}
 		onpointerdowncapture={(e) => {
 			e.stopPropagation();
@@ -63,7 +63,7 @@
 			transition:scale={{ duration: 150, start: 0.95 }}
 		/>
 		<button
-			class="absolute top-4 right-4 flex size-8 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+			class="absolute top-2 right-2 flex size-8 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 sm:top-4 sm:right-4"
 			onclick={onClose}
 			aria-label="Close preview"
 		>

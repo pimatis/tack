@@ -57,7 +57,7 @@
 </script>
 
 <!-- version info -->
-<div class="flex items-center justify-between">
+<div class="flex flex-wrap items-center justify-between gap-2">
 	<div>
 		<p class="text-[13px] font-medium">Version</p>
 		<p class="text-xs text-muted-foreground">
@@ -79,7 +79,7 @@
 				<span>Checking for updates...</span>
 			</div>
 		{:else if checkState.status === 'up-to-date'}
-			<div class="flex items-center justify-between">
+			<div class="flex flex-wrap items-center justify-between gap-2">
 				<div class="flex items-center gap-2 text-[13px] text-muted-foreground">
 					<svg
 						width="15"
@@ -99,7 +99,7 @@
 				</Button>
 			</div>
 		{:else if checkState.status === 'available'}
-			<div class="flex items-center justify-between">
+			<div class="flex flex-wrap items-center justify-between gap-2">
 				<div>
 					<p class="text-[13px] font-medium">
 						Version {checkState.update.version} is available
@@ -139,7 +139,7 @@
 				<span>Installing update. Restarting Tack...</span>
 			</div>
 		{:else if checkState.status === 'error'}
-			<div class="flex items-center justify-between">
+			<div class="flex flex-wrap items-center justify-between gap-2">
 				<div class="flex items-center gap-2 text-[13px] text-destructive">
 					<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"
 						><path

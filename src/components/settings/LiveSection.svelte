@@ -103,7 +103,7 @@
 </script>
 
 {#if browser}
-	<div class="flex items-center justify-between gap-4">
+	<div class="flex flex-wrap items-center justify-between gap-3">
 		<div class="flex min-w-0 items-start gap-3">
 			<div
 				class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/30"
@@ -135,7 +135,7 @@
 		</span>
 	</div>
 {:else}
-	<div class="flex items-center justify-between gap-4">
+	<div class="flex flex-wrap items-center justify-between gap-3">
 		<div class="flex min-w-0 items-start gap-3">
 			<div
 				class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/30"
@@ -168,7 +168,7 @@
 
 	{#if settings.liveEnabled}
 		<Separator />
-		<div class="flex items-center justify-between gap-4">
+		<div class="flex flex-wrap items-center justify-between gap-3">
 			<div>
 				<p class="text-[13px] font-medium">Port</p>
 				<p class="text-xs text-muted-foreground">Where the server listens on this device</p>
@@ -184,7 +184,7 @@
 		</div>
 
 		<Separator />
-		<div class="flex items-center justify-between gap-4">
+		<div class="flex flex-wrap items-center justify-between gap-3">
 			<div class="min-w-0">
 				<p class="text-[13px] font-medium">Status</p>
 				{#if status}

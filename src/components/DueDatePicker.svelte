@@ -102,7 +102,7 @@
 			</Button>
 		{/snippet}
 	</Dialog.Trigger>
-	<Dialog.Content class="max-w-auto w-fit gap-0 p-0" showCloseButton={false}>
+	<Dialog.Content class="w-[calc(100vw-2rem)] max-w-[320px] gap-0 p-0" showCloseButton={false}>
 		<Dialog.Title class="sr-only">Pick {title.toLowerCase()}</Dialog.Title>
 
 		<!-- header -->
@@ -128,7 +128,7 @@
 		</div>
 
 		<!-- quick options -->
-		<div class="flex items-center gap-1.5 px-4 pb-3">
+		<div class="flex flex-wrap items-center gap-1.5 px-4 pb-3">
 			<Button
 				variant="outline"
 				size="xs"
@@ -179,7 +179,7 @@
 		<Separator />
 
 		<!-- footer -->
-		<div class="flex items-center justify-between gap-2 px-4 py-3">
+		<div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
 			<Button type="button" variant="ghost" size="sm" onclick={handleClear} disabled={!value}>
 				Clear
 			</Button>

@@ -36,9 +36,9 @@
 	} = $props();
 </script>
 
-<div class="flex items-center gap-2 pb-4">
+<div class="flex flex-wrap items-center gap-2 pb-4">
 	<!-- search -->
-	<div class="relative flex-1">
+	<div class="relative min-w-0 flex-1 basis-full sm:basis-auto">
 		<svg
 			class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground/50"
 			width="14"

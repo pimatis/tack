@@ -74,11 +74,11 @@
 </script>
 
 <Dialog.Root bind:open>
-	<Dialog.Content class="max-w-md gap-0 p-0" showCloseButton={false}>
+	<Dialog.Content class="w-[calc(100vw-2rem)] max-w-md gap-0 p-0" showCloseButton={false}>
 		<Dialog.Title class="sr-only">Create project</Dialog.Title>
 		<form onsubmit={handleSubmit} class="flex flex-col">
 			<!-- header -->
-			<div class="flex items-center justify-between px-5 pt-4 pb-3">
+			<div class="flex items-center justify-between px-4 pt-4 pb-3 sm:px-5">
 				<span class="text-[13px] font-medium text-foreground">New project</span>
 				<Dialog.Close>
 					{#snippet child({ props })}
@@ -100,7 +100,7 @@
 			</div>
 
 			<!-- body -->
-			<div class="flex flex-col gap-3 px-5 pb-4">
+			<div class="flex flex-col gap-3 px-4 pb-4 sm:px-5">
 				<Input
 					bind:ref={nameRef}
 					bind:value={name}
@@ -172,13 +172,13 @@
 			</div>
 
 			{#if error}
-				<p class="px-5 text-[12px] text-destructive" role="alert">{error}</p>
+				<p class="px-4 text-[12px] text-destructive sm:px-5" role="alert">{error}</p>
 			{/if}
 
 			<Separator />
 
 			<!-- footer -->
-			<div class="flex items-center justify-end gap-2 px-5 py-3">
+			<div class="flex flex-wrap items-center justify-end gap-2 px-4 py-3 sm:px-5">
 				<Button type="button" variant="ghost" size="sm" onclick={() => (open = false)}
 					>Cancel</Button
 				>

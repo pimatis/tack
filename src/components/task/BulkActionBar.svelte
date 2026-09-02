@@ -35,7 +35,7 @@
 	} = $props();
 </script>
 
-<div class="flex items-center gap-2 pb-4">
+<div class="flex flex-wrap items-center gap-2 pb-4">
 	<Checkbox checked={isAllSelected} onCheckedChange={() => onToggleSelectAll()} />
 	<span class="text-[12px] font-medium text-foreground">
 		{selectedCount}
@@ -44,7 +44,7 @@
 
 	<div class="flex-1"></div>
 
-	<div class="flex items-center gap-1.5">
+	<div class="flex flex-wrap items-center gap-1.5">
 		<!-- bulk status -->
 		<StatusMenu
 			value="todo"

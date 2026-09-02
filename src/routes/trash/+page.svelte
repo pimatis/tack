@@ -130,10 +130,10 @@
 
 <section class="flex h-full flex-col">
 	<!-- header -->
-	<header class="flex items-center justify-between border-b border-border px-6 py-4">
-		<div>
+	<header class="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-6 sm:py-4">
+		<div class="min-w-0">
 			<div class="flex items-center gap-3">
-				<h1 class="text-lg font-semibold tracking-tight">Trash</h1>
+				<h1 class="text-base font-semibold tracking-tight sm:text-lg">Trash</h1>
 				{#if !loading && tasks.length > 0}
 					<div class="flex items-center gap-1.5 text-[12px] text-muted-foreground">
 						<span class="size-1.5 rounded-full bg-foreground/30"></span>
@@ -141,11 +141,11 @@
 					</div>
 				{/if}
 			</div>
-			<p class="text-sm text-muted-foreground">
+			<p class="truncate text-xs text-muted-foreground sm:text-sm">
 				Deleted tasks can be restored or permanently removed
 			</p>
 		</div>
-		<div class="flex items-center gap-2">
+		<div class="flex shrink-0 items-center gap-2">
 			{#if tasks.length > 0}
 				<Dialog.Root bind:open={emptyConfirmOpen}>
 					<Dialog.Trigger>
@@ -200,7 +200,7 @@
 	</header>
 
 	<!-- content -->
-	<div class="flex-1 overflow-y-auto px-6 py-6">
+	<div class="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
 		<div class="mx-auto max-w-3xl">
 			{#if loading}
 				<div class="flex items-center justify-center gap-2 py-20 text-[13px] text-muted-foreground">
@@ -292,7 +292,7 @@
 									</span>
 
 									<!-- project badge -->
-									<div class="flex w-16 shrink-0 justify-end">
+									<div class="hidden w-16 shrink-0 justify-end md:flex">
 										{#if task.projectId}
 											{@const project = projectMap.get(task.projectId)}
 											{#if project}

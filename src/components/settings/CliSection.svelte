@@ -39,7 +39,7 @@
 	});
 </script>
 
-<div class="flex items-center justify-between gap-4">
+<div class="flex flex-wrap items-center justify-between gap-3">
 	<div class="flex min-w-0 items-start gap-3">
 		<div
 			class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/30"

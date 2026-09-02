@@ -41,6 +41,7 @@
 	let selectedDay = $state<Date | null>(null);
 
 	const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
+	const WEEKDAYS_SHORT = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
 
 	const LANE_HEIGHT = 25;
 	const MORE_THRESHOLD = 3;
@@ -161,18 +162,18 @@
 	}
 </script>
 
-<div class="flex h-full flex-col gap-3">
+<div class="flex h-full flex-col gap-2 sm:gap-3">
 	<!-- month navigation -->
 	<div class="flex items-center justify-between">
 		<div class="flex items-center gap-1.5">
-			<span class="text-[16px] font-semibold tracking-tight text-foreground">
+			<span class="text-[16px] font-semibold tracking-tight text-foreground sm:text-[17px]">
 				{formatMonth(month)}
 			</span>
-			<div class="ml-2 flex items-center gap-0.5">
+			<div class="ml-1 flex items-center gap-0.5 sm:ml-2">
 				<Button
 					variant="ghost"
 					size="icon-xs"
-					class="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+					class="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 					onclick={() => shiftMonth(-1)}
 					aria-label="Previous month"
 				>
@@ -186,7 +187,7 @@
 				<Button
 					variant="ghost"
 					size="icon-xs"
-					class="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+					class="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 					onclick={() => shiftMonth(1)}
 					aria-label="Next month"
 				>
@@ -197,14 +198,28 @@
 						/></svg
 					>
 				</Button>
+				<Button
+					variant="ghost"
+					size="icon-xs"
+					class="ml-0.5 hidden h-7 rounded-md px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:flex"
+					onclick={() => {
+						const now = new Date();
+						month = new Date(now.getFullYear(), now.getMonth(), 1);
+					}}
+				>
+					Today
+				</Button>
 			</div>
 		</div>
 	</div>
 
 	<!-- weekday header -->
 	<div class="grid grid-cols-7 border-b border-border/60 pb-2">
-		{#each WEEKDAYS as day (day)}
-			<div class="px-1.5 text-[11px] font-medium text-muted-foreground/70">{day}</div>
+		{#each WEEKDAYS as day, idx (day)}
+			<div class="px-1 text-center text-[11px] font-medium text-muted-foreground/70 sm:text-left sm:text-[11px]">
+				<span class="sm:hidden">{WEEKDAYS_SHORT[idx]}</span>
+				<span class="hidden sm:inline">{day}</span>
+			</div>
 		{/each}
 	</div>
 
@@ -215,7 +230,7 @@
 		{#each gridDays as day, i (dayKey(day))}
 			{@const bars = activeBars(i)}
 			<div
-				class="group relative flex min-h-0 cursor-pointer flex-col overflow-hidden border-r border-b border-border/40 p-1.5 transition-colors last:border-r-0 hover:bg-muted/20 {i >=
+				class="group relative flex min-h-0 cursor-pointer flex-col overflow-hidden border-r border-b border-border/40 p-1.5 transition-colors last:border-r-0 hover:bg-muted/20 sm:p-1.5 {i >=
 				35
 					? 'border-b-0'
 					: ''} {i % 7 === 6 ? 'border-r-0' : ''} {!inCurrentMonth(day) ? 'bg-muted/10' : ''}"
@@ -229,9 +244,9 @@
 					}
 				}}
 			>
-				<div class="flex h-6 shrink-0 items-center justify-between pr-0.5">
+				<div class="flex h-7 shrink-0 items-center justify-between sm:pr-0.5">
 					<span
-						class="flex size-5.5 items-center justify-center rounded-full text-[11px] {isToday(day)
+						class="flex size-6 items-center justify-center rounded-full text-[12px] {isToday(day)
 							? 'bg-primary font-semibold text-primary-foreground'
 							: inCurrentMonth(day)
 								? 'text-foreground'
@@ -241,7 +256,7 @@
 					</span>
 					<button
 						type="button"
-						class="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-muted hover:text-foreground"
+						class="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground/40 transition-opacity hover:bg-muted hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100"
 						aria-label="Add task on this day"
 						onclick={(e) => {
 							e.stopPropagation();
@@ -275,7 +290,7 @@
 							{#if isStart}
 								<button
 									type="button"
-									class="absolute inset-x-1 flex h-5 cursor-pointer items-center gap-1.5 overflow-hidden rounded-md border border-border/50 bg-muted/40 px-1.5 text-left transition-colors hover:bg-muted/70 {isDone
+									class="absolute inset-x-1 flex h-5 cursor-pointer items-center gap-1 overflow-hidden rounded-md border border-border/40 bg-muted/30 px-1 text-left transition-colors hover:bg-muted/60 sm:inset-x-1.5 sm:gap-1.5 sm:rounded-lg sm:border-border/50 sm:bg-muted/40 sm:px-1.5 sm:hover:bg-muted/70 {isDone
 										? 'opacity-50'
 										: ''}"
 									style="top: {bar.lane * LANE_HEIGHT}px"
@@ -288,7 +303,7 @@
 								>
 									<span class="size-1.5 shrink-0 rounded-full {dotColor}"></span>
 									<span
-										class="min-w-0 flex-1 truncate [mask-image:linear-gradient(to_right,black_85%,transparent_100%)] text-[11px] leading-none [-webkit-mask-image:linear-gradient(to_right,black_85%,transparent_100%)] {isDone
+										class="min-w-0 flex-1 truncate [mask-image:linear-gradient(to_right,black_85%,transparent_100%)] text-[10px] leading-none [-webkit-mask-image:linear-gradient(to_right,black_85%,transparent_100%)] sm:text-[11px] {isDone
 											? 'line-through'
 											: ''}"
 									>
@@ -296,7 +311,7 @@
 									</span>
 									{#if !isEnd}
 										<svg
-											class="shrink-0 text-muted-foreground/60"
+											class="hidden shrink-0 text-muted-foreground/60 sm:block"
 											width="10"
 											height="10"
 											viewBox="0 0 24 24"
@@ -338,7 +353,7 @@
 				{#if bars.length > MORE_THRESHOLD}
 					<button
 						type="button"
-						class="shrink-0 cursor-pointer px-1 text-[10px] text-muted-foreground/60 transition-colors hover:text-foreground"
+						class="shrink-0 cursor-pointer rounded px-1 py-0.5 text-[10px] font-medium text-muted-foreground/60 transition-colors hover:bg-muted/40 hover:text-foreground sm:px-1 sm:py-0"
 						onclick={(e) => {
 							e.stopPropagation();
 							selectedDay = day;

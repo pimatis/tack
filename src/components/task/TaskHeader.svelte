@@ -26,9 +26,9 @@
 	{/if}
 {/snippet}
 
-<header class="flex items-center justify-between pb-5">
+<header class="flex flex-wrap items-center justify-between gap-2 pb-4 sm:pb-5">
 	<div class="flex items-center gap-3">
-		<h1 class="text-[22px] font-semibold tracking-tight text-foreground">
+		<h1 class="text-[18px] font-semibold tracking-tight text-foreground sm:text-[22px]">
 			{pinnedFilter ? 'Pinned' : 'Tasks'}
 		</h1>
 		<div class="flex items-center gap-1.5 text-[12px] text-muted-foreground">

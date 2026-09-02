@@ -107,14 +107,14 @@
 
 <Card.Root size="sm" class="!py-0">
 	<!-- header -->
-	<div class="flex items-start justify-between gap-3 px-4 pt-3.5 pb-3">
-		<div>
+	<div class="flex flex-wrap items-start justify-between gap-3 px-4 pt-3.5 pb-3">
+		<div class="min-w-0">
 			<p class="text-[13px] font-medium">Keyboard shortcuts</p>
 			<p class="mt-0.5 text-xs text-muted-foreground">
 				Click any shortcut to record a new key combination
 			</p>
 		</div>
-		<Button size="sm" disabled={!dirty} onclick={save}>
+		<Button size="sm" class="shrink-0" disabled={!dirty} onclick={save}>
 			{savedFlash ? 'Saved' : 'Save changes'}
 		</Button>
 	</div>
@@ -127,7 +127,7 @@
 			class="h-auto w-full justify-between gap-3 rounded-none px-4 py-2.5 font-normal text-foreground/90 hover:bg-muted/40"
 			onclick={() => openRecorder(s.id)}
 		>
-			<span class="text-[13px] text-foreground/90">{s.label}</span>
+			<span class="min-w-0 flex-1 truncate text-left text-[13px] text-foreground/90">{s.label}</span>
 			<span class="flex shrink-0 items-center gap-2.5">
 				{#if draft[s.id]?.length}
 					<ShortcutKeycap combo={draft[s.id][0]} />
@@ -163,7 +163,7 @@
 	{/each}
 
 	<!-- footer -->
-	<div class="flex items-center justify-between px-4 py-2.5">
+	<div class="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
 		<span class="text-[11px] text-muted-foreground/50">
 			{Object.keys(draft).length} shortcuts
 		</span>
@@ -187,7 +187,7 @@
 		if (!o) closeRecorder();
 	}}
 >
-	<Dialog.Content class="max-w-sm gap-0 p-0" showCloseButton={false}>
+	<Dialog.Content class="w-[calc(100vw-2rem)] max-w-sm gap-0 p-0" showCloseButton={false}>
 		<Dialog.Title class="px-5 pt-4 text-[14px] font-semibold">Keyboard shortcut</Dialog.Title>
 		<Dialog.Description class="px-5 pt-1 text-xs text-muted-foreground">
 			Press keys to set a shortcut for {recording?.label}
@@ -204,7 +204,7 @@
 			</div>
 			{#if conflictId}
 				<div
-					class="mt-3 flex items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2"
+					class="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2"
 				>
 					<span class="text-xs text-amber-500">
 						{shortcutIdLabel(conflictId)} already uses this shortcut

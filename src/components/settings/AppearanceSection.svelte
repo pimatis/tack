@@ -20,8 +20,8 @@
 </script>
 
 <!-- theme -->
-<div class="flex items-center justify-between">
-	<div>
+<div class="flex flex-wrap items-center justify-between gap-2">
+	<div class="min-w-0">
 		<p class="text-[13px] font-medium">Theme</p>
 		<p class="text-xs text-muted-foreground">Choose how tack looks to you</p>
 	</div>
@@ -44,8 +44,8 @@
 <Separator />
 
 <!-- sidebar collapse -->
-<div class="flex items-center justify-between">
-	<div>
+<div class="flex flex-wrap items-center justify-between gap-2">
+	<div class="min-w-0">
 		<p class="text-[13px] font-medium">Collapse sidebar</p>
 		<p class="text-xs text-muted-foreground">Hide sidebar labels and project list</p>
 	</div>
@@ -58,8 +58,8 @@
 <Separator />
 
 <!-- default view mode -->
-<div class="flex items-center justify-between">
-	<div>
+<div class="flex flex-wrap items-center justify-between gap-2">
+	<div class="min-w-0">
 		<p class="text-[13px] font-medium">Default view</p>
 		<p class="text-xs text-muted-foreground">Which view to open by default</p>
 	</div>

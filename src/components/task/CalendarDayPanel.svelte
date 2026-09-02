@@ -106,7 +106,7 @@
 	></div>
 
 	<div
-		class="fixed top-0 right-0 z-50 flex h-screen w-full max-w-[400px] flex-col bg-card shadow-2xl"
+		class="fixed top-0 right-0 z-50 flex h-full w-full flex-col bg-card shadow-2xl sm:h-screen sm:w-full sm:max-w-[400px]"
 		transition:fly={{ x: 400, duration: 280, opacity: 1 }}
 		role="dialog"
 		aria-modal="true"

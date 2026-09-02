@@ -28,7 +28,7 @@
 </script>
 
 <!-- default status -->
-<div class="flex items-center justify-between">
+<div class="flex flex-wrap items-center justify-between gap-2">
 	<div>
 		<p class="text-[13px] font-medium">Default status</p>
 		<p class="text-xs text-muted-foreground">Status assigned to new tasks</p>
@@ -52,7 +52,7 @@
 <Separator />
 
 <!-- default priority -->
-<div class="flex items-center justify-between">
+<div class="flex flex-wrap items-center justify-between gap-2">
 	<div>
 		<p class="text-[13px] font-medium">Default priority</p>
 		<p class="text-xs text-muted-foreground">Priority assigned to new tasks</p>
@@ -83,7 +83,7 @@
 <Separator />
 
 <!-- due soon threshold -->
-<div class="flex items-center justify-between">
+<div class="flex flex-wrap items-center justify-between gap-2">
 	<div>
 		<p class="text-[13px] font-medium">Due soon threshold</p>
 		<p class="text-xs text-muted-foreground">Days ahead to flag tasks as due soon</p>
@@ -105,7 +105,7 @@
 <Separator />
 
 <!-- prefix padding -->
-<div class="flex items-center justify-between">
+<div class="flex flex-wrap items-center justify-between gap-2">
 	<div>
 		<p class="text-[13px] font-medium">Task id padding</p>
 		<p class="text-xs text-muted-foreground">Zero-pad task numbers (0 = no padding, 3 = TSK-001)</p>
