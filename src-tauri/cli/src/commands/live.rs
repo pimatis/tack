@@ -106,3 +106,80 @@ pub fn status(conn: &Connection, json: bool) -> Result<()> {
     }
     Ok(())
 }
+
+pub fn watch(conn: &Connection, json: bool) -> Result<()> {
+    let enabled = get_setting(conn, "liveEnabled").unwrap_or_else(|| "false".to_string()) == "true";
+    if !enabled {
+        return Err("live server is disabled - run `tack live on` first".to_string());
+    }
+    let port = current_port(conn);
+    // the app's server binds 0.0.0.0, so loopback always reaches it
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).map_err(|_| {
+        format!("live server is not running on port {} - start the tack app", port)
+    })?;
+    use std::io::{BufRead, BufReader, Write};
+    write!(
+        stream,
+        "GET /api/events/stream HTTP/1.1\r\nHost: 127.0.0.1\r\nAccept: text/event-stream\r\nConnection: close\r\n\r\n"
+    )
+    .map_err(|e| format!("failed to open event stream: {}", e))?;
+    stream.flush().map_err(|e| e.to_string())?;
+
+    // parse the sse frames line by line; comment lines (: ping) are ignored
+    let mut event = String::new();
+    let mut data = String::new();
+    for line in BufReader::new(stream).lines() {
+        let line = line.map_err(|e| format!("event stream error: {}", e))?;
+        if let Some(rest) = line.strip_prefix("event:") {
+            event = rest.trim().to_string();
+        } else if let Some(rest) = line.strip_prefix("data:") {
+            data = rest.trim().to_string();
+        } else if line.is_empty() && !data.is_empty() {
+            // connected is the stream's hello event (current generation),
+            // db-changed fires on every real write
+            if event == "connected" || event == "db-changed" {
+                print_event(json, &event, &data)?;
+            }
+            event.clear();
+            data.clear();
+        }
+    }
+    // the stream ended: the live server stopped (or the connection dropped)
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string(&json!({ "stream": "closed" }))
+                .map_err(|e| e.to_string())?
+        );
+    } else {
+        println!("live stream closed (server stopped or connection lost)");
+    }
+    Ok(())
+}
+
+fn print_event(json: bool, kind: &str, data: &str) -> Result<()> {
+    let payload: serde_json::Value =
+        serde_json::from_str(data).map_err(|e| format!("bad event payload: {}", e))?;
+    if json {
+        let mut out = payload
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
+        if kind == "connected" {
+            out.insert("connected".to_string(), json!(true));
+        }
+        println!(
+            "{}",
+            serde_json::to_string(&serde_json::Value::Object(out)).map_err(|e| e.to_string())?
+        );
+    } else {
+        let generation = payload["generation"].as_u64().unwrap_or(0);
+        println!(
+            "[{}] {} (generation {})",
+            chrono::Local::now().format("%H:%M:%S"),
+            kind,
+            generation
+        );
+    }
+    Ok(())
+}

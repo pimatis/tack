@@ -20,7 +20,7 @@
 
 	let status = $state<LiveStatus | null>(null);
 	let error = $state('');
-	let copied = $state(false);
+	let copied = $state('');
 	let busy = $state(false);
 	let copyTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -67,21 +67,20 @@
 		}
 	}
 
-	async function copyUrl() {
-		if (!status) return;
+	async function copyText(text: string, target: 'url' | 'stream') {
 		try {
-			await navigator.clipboard.writeText(status.url);
+			await navigator.clipboard.writeText(text);
 		} catch {
 			const el = document.createElement('textarea');
-			el.value = status.url;
+			el.value = text;
 			document.body.appendChild(el);
 			el.select();
 			document.execCommand('copy');
 			el.remove();
 		}
-		copied = true;
+		copied = target;
 		if (copyTimer) clearTimeout(copyTimer);
-		copyTimer = setTimeout(() => (copied = false), 3000);
+		copyTimer = setTimeout(() => (copied = ''), 3000);
 	}
 
 	onMount(() => {
@@ -190,13 +189,15 @@
 				{#if status}
 					<button
 						type="button"
-						onclick={() => void copyUrl()}
+						onclick={() => {
+							if (status) void copyText(status.url, 'url');
+						}}
 						title="Copy url"
 						aria-label="Copy url"
 						class="mt-1 flex max-w-full cursor-pointer items-center gap-1.5 rounded-md font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
 					>
 						<span class="size-1.5 shrink-0 rounded-full bg-emerald-500"></span>
-						<span class="truncate">{copied ? 'Copied!' : status.url}</span>
+						<span class="truncate">{copied === 'url' ? 'Copied!' : status.url}</span>
 					</button>
 				{:else}
 					<p class="text-xs text-muted-foreground">
@@ -226,12 +227,44 @@
 			</div>
 		</div>
 
+		<Separator />
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<div class="min-w-0">
+				<p class="text-[13px] font-medium">Event stream</p>
+				<p class="text-xs text-muted-foreground">
+					Real-time db change feed for agents (Server-Sent Events)
+				</p>
+			</div>
+			{#if status}
+				<button
+					type="button"
+					onclick={() => {
+						if (status) void copyText(`${status.url}/api/events/stream`, 'stream');
+					}}
+					title="Copy event stream url"
+					aria-label="Copy event stream url"
+					class="flex max-w-full cursor-pointer items-center gap-1.5 rounded-md font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
+				>
+					<span class="size-1.5 shrink-0 rounded-full bg-emerald-500"></span>
+					<span class="truncate"
+						>{copied === 'stream' ? 'Copied!' : `${status.url}/api/events/stream`}</span
+					>
+				</button>
+			{:else}
+				<p class="text-xs text-muted-foreground">available while the server runs</p>
+			{/if}
+		</div>
+
 		{#if error}
 			<p class="text-xs text-destructive">{error}</p>
 		{:else}
 			<p class="text-xs text-muted-foreground">
 				Your data stays on this device. While the server is on, any device on your local network can
-				open the address above. You can also toggle it from the terminal with
+				open the address above. Agents can watch changes in real time with
+				<code class="font-mono text-foreground/80">tack live watch</code>
+				{#if status}or
+					<code class="font-mono text-foreground/80">curl -N {status.url}/api/events/stream</code
+					>{/if}. You can also toggle it from the terminal with
 				<code class="font-mono text-foreground/80">tack live on</code> or
 				<code class="font-mono text-foreground/80">tack live off</code>
 			</p>

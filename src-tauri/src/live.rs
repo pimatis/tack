@@ -2,10 +2,11 @@ use crate::{app_db_path, attachments_dir, backup, base64_encode};
 use rusqlite::{params_from_iter, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use tauri::Manager;
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
@@ -13,7 +14,9 @@ pub type Result<T> = std::result::Result<T, String>;
 
 // change signaling for browser clients: a generation counter + condvar.
 // the live server long-polls on it, so every http response completes
-// (tiny_http only flushes its writer once a response body finishes)
+// (tiny_http only flushes its writer once a response body finishes); the
+// sse stream waits on the same condvar but writes frames straight to the
+// connection writer (request.into_writer), flushing after each one
 #[derive(Default)]
 pub struct LiveHub {
     state: Mutex<LiveHubState>,
@@ -59,6 +62,9 @@ pub struct LiveServer {
     // accept loop handle, joined on drop so the listener socket is
     // guaranteed closed (port freed) once the server is dropped
     accept: Option<std::thread::JoinHandle<()>>,
+    // close flags for in-flight sse streams; set on drop so live_stop ends
+    // them instead of leaving them attached to the app-lifetime hub
+    sse: Arc<Mutex<Vec<Arc<AtomicBool>>>>,
 }
 
 impl Drop for LiveServer {
@@ -68,6 +74,9 @@ impl Drop for LiveServer {
         self.server.unblock();
         if let Some(handle) = self.accept.take() {
             let _ = handle.join();
+        }
+        for flag in self.sse.lock().unwrap().iter() {
+            flag.store(true, Ordering::Relaxed);
         }
     }
 }
@@ -85,6 +94,8 @@ struct Ctx {
     hub: Arc<LiveHub>,
     // how long /api/events holds a quiet poll before answering
     events_timeout: Duration,
+    // close flags for in-flight /api/events/stream connections
+    sse: Arc<Mutex<Vec<Arc<AtomicBool>>>>,
 }
 
 #[tauri::command]
@@ -145,6 +156,7 @@ fn start(app: &tauri::AppHandle, port: u16) -> Result<LiveStatus> {
         drop(guard.take());
     }
 
+    let sse = Arc::new(Mutex::new(Vec::new()));
     let ctx = Ctx {
         db_path: app_db_path(app)?,
         attachments: attachments_dir(app)?,
@@ -153,6 +165,7 @@ fn start(app: &tauri::AppHandle, port: u16) -> Result<LiveStatus> {
         })?,
         hub: state.hub.clone(),
         events_timeout: Duration::from_secs(20),
+        sse: sse.clone(),
     };
 
     let server = Arc::new(
@@ -177,6 +190,7 @@ fn start(app: &tauri::AppHandle, port: u16) -> Result<LiveStatus> {
         port,
         server,
         accept: Some(handle),
+        sse,
     });
     Ok(LiveStatus { port, url: url(port) })
 }
@@ -198,11 +212,23 @@ fn status(app: &tauri::AppHandle) -> Option<LiveStatus> {
         .map(|live| LiveStatus { port: live.port, url: url(live.port) })
 }
 
-fn handle_request(mut request: Request, ctx: &Ctx) {
+fn handle_request(request: Request, ctx: &Ctx) {
     let raw_url = request.url().to_string();
     let (path, query) = raw_url.split_once('?').unwrap_or((raw_url.as_str(), ""));
     let method = request.method().clone();
 
+    // sse bypasses respond(): tiny_http only flushes a response body once it
+    // finishes, so write frames straight to the connection writer instead
+    if method == Method::Get && path == "/api/events/stream" {
+        let closed = Arc::new(AtomicBool::new(false));
+        ctx.sse.lock().unwrap().push(closed.clone());
+        let mut writer = request.into_writer();
+        stream_events(&mut writer, ctx, &closed);
+        ctx.sse.lock().unwrap().retain(|f| !Arc::ptr_eq(f, &closed));
+        return;
+    }
+
+    let mut request = request;
     let response = match (method, path) {
         (Method::Post, "/api/select") => run_query(&mut request, ctx, true),
         (Method::Post, "/api/execute") => run_query(&mut request, ctx, false),
@@ -506,6 +532,39 @@ fn poll_events(ctx: &Ctx) -> Response<std::io::Cursor<Vec<u8>>> {
     json_response(StatusCode(200), json!({ "changed": changed }))
 }
 
+// sse stream for agents: keep the connection open and push a db-changed event
+// whenever the hub generation advances. the hello event carries the current
+// generation, so a client that sees a jump larger than one knows it missed
+// events and should re-query. the heartbeat doubles as a dead-client check:
+// the next write fails on a dropped connection and ends the stream
+fn stream_events(writer: &mut dyn Write, ctx: &Ctx, closed: &AtomicBool) {
+    let _ = write!(
+        writer,
+        "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n"
+    );
+    let mut last = ctx.hub.generation();
+    let _ = write!(
+        writer,
+        "event: connected\r\ndata: {{\"generation\":{last}}}\r\n\r\n"
+    );
+    let _ = writer.flush();
+    while !closed.load(Ordering::Relaxed) {
+        let changed = ctx.hub.changed_since(last, Duration::from_secs(5));
+        if changed {
+            last = ctx.hub.generation();
+            let _ = write!(
+                writer,
+                "event: db-changed\r\ndata: {{\"generation\":{last}}}\r\n\r\n"
+            );
+        } else {
+            let _ = write!(writer, ": ping\r\n\r\n");
+        }
+        if writer.flush().is_err() {
+            return;
+        }
+    }
+}
+
 // "/api/backups/backup-20240101-000000.000[/restore]" -> "backup-20240101-000000.000"
 fn backup_name_from_path(path: &str, with_restore_suffix: bool) -> Option<String> {
     let rest = path.strip_prefix("/api/backups/")?;
@@ -579,18 +638,6 @@ fn frontend_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
     (local.join("index.html").exists()).then_some(local)
 }
 
-// (mtime, len) snapshot of the db files; the poller backstop compares these
-// because fsevents does not report appends to an already-open wal file (the
-// gui's sqlx pool writes exactly that way)
-pub(crate) fn db_files_snapshot(dir: &Path) -> (Option<(SystemTime, u64)>, Option<(SystemTime, u64)>) {
-    let stat = |name: &str| {
-        std::fs::metadata(dir.join(name))
-            .ok()
-            .map(|m| (m.modified().unwrap_or(SystemTime::UNIX_EPOCH), m.len()))
-    };
-    (stat("tack.db"), stat("tack.db-wal"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -598,7 +645,7 @@ mod tests {
     use tiny_http::TestRequest;
 
     // the file watcher sees checkpointing writes (per-request connections,
-    // like the live server and the cli) ...
+    // like the live server and the cli)
     #[test]
     fn watcher_sees_per_request_writes() {
         let dir = std::env::temp_dir().join(format!(
@@ -649,44 +696,6 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
-    // ... but fsevents misses appends to an existing -wal from a long-lived
-    // connection (the gui's sqlx pool writes exactly that way); the mtime/size
-    // snapshot backstop must still detect those writes
-    #[test]
-    fn snapshot_backstop_detects_existing_wal_appends() {
-        let dir = std::env::temp_dir().join(format!(
-            "tack-watch-test-{}-snapshot",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let db_path = dir.join("tack.db");
-
-        let keeper = Connection::open(&db_path).unwrap();
-        keeper.pragma_update(None, "journal_mode", "WAL").unwrap();
-        keeper.execute_batch("CREATE TABLE t (id TEXT PRIMARY KEY)").unwrap();
-        keeper.execute("INSERT INTO t (id) VALUES ('seed')", []).unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(200));
-
-        let before = db_files_snapshot(&dir);
-
-        // long-lived connection appending to the existing -wal (gui style)
-        let persistent = Connection::open(&db_path).unwrap();
-        persistent
-            .execute("INSERT INTO t (id) VALUES ('persistent')", [])
-            .unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(200));
-
-        let after = db_files_snapshot(&dir);
-        assert!(
-            before != after,
-            "snapshot backstop missed the persistent-connection write"
-        );
-        drop(persistent);
-        drop(keeper);
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-
     // the events endpoint must long-poll: complete responses that fire
     // quickly when a change lands and only after a quiet timeout otherwise
     #[test]
@@ -705,6 +714,7 @@ mod tests {
             frontend: dir.clone(),
             hub: Arc::new(LiveHub::default()),
             events_timeout: Duration::from_secs(2),
+            sse: Arc::new(Mutex::new(Vec::new())),
         };
 
         let server = Arc::new(Server::http(("127.0.0.1", 0)).unwrap());
@@ -764,6 +774,96 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    // the sse stream must answer with event-stream headers, push a hello
+    // event with the current generation, then a db-changed event as soon as
+    // the hub notifies
+    #[test]
+    fn events_stream_sse() {
+        let dir = std::env::temp_dir().join(format!("tack-sse-stream-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("tack.db");
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch("CREATE TABLE t (id TEXT PRIMARY KEY)").unwrap();
+        drop(conn);
+
+        let ctx = Ctx {
+            db_path,
+            attachments: dir.join("attachments"),
+            frontend: dir.clone(),
+            hub: Arc::new(LiveHub::default()),
+            events_timeout: Duration::from_secs(2),
+            sse: Arc::new(Mutex::new(Vec::new())),
+        };
+
+        let server = Arc::new(Server::http(("127.0.0.1", 0)).unwrap());
+        let port = server.server_addr().to_ip().unwrap().port();
+        let accept = server.clone();
+        let accept_ctx = ctx.clone();
+        std::thread::spawn(move || {
+            for request in accept.incoming_requests() {
+                let ctx = accept_ctx.clone();
+                std::thread::spawn(move || handle_request(request, &ctx));
+            }
+        });
+
+        use std::io::{BufRead, BufReader, Write};
+        let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(3)))
+            .unwrap();
+        write!(
+            stream,
+            "GET /api/events/stream HTTP/1.1\r\nHost: localhost\r\nAccept: text/event-stream\r\nConnection: close\r\n\r\n"
+        )
+        .unwrap();
+        stream.flush().unwrap();
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+
+        // consume response headers up to the blank line
+        let mut line = String::new();
+        loop {
+            line.clear();
+            reader.read_line(&mut line).unwrap();
+            if line == "\r\n" || line == "\n" {
+                break;
+            }
+        }
+
+        // hello event carries the current generation (0)
+        let mut frame = String::new();
+        for _ in 0..3 {
+            line.clear();
+            reader.read_line(&mut line).unwrap();
+            frame.push_str(&line);
+        }
+        assert!(
+            frame.contains("event: connected") && frame.contains("\"generation\":0"),
+            "expected connected event with generation 0, got: {frame:?}"
+        );
+
+        // a change landing mid-stream must fire a db-changed event quickly
+        let t0 = std::time::Instant::now();
+        ctx.hub.notify();
+        let mut frame = String::new();
+        for _ in 0..3 {
+            line.clear();
+            reader.read_line(&mut line).unwrap();
+            frame.push_str(&line);
+        }
+        assert!(
+            frame.contains("event: db-changed") && frame.contains("\"generation\":1"),
+            "expected db-changed event with generation 1, got: {frame:?}"
+        );
+        assert!(
+            t0.elapsed() < std::time::Duration::from_secs(2),
+            "db-changed event arrived late"
+        );
+
+        drop(reader);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     // sqlx-style $n placeholders must become rusqlite numbered ones
     #[test]
     fn translates_placeholders() {
@@ -816,6 +916,7 @@ mod tests {
             frontend: dir.clone(),
             hub: Arc::new(LiveHub::default()),
             events_timeout: Duration::from_secs(2),
+            sse: Arc::new(Mutex::new(Vec::new())),
         };
 
         // select with sqlx-style placeholder + numeric param
@@ -896,6 +997,7 @@ mod tests {
             port,
             server,
             accept: Some(handle),
+            sse: Arc::new(Mutex::new(Vec::new())),
         };
 
         // while alive, the port accepts connections

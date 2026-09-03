@@ -246,7 +246,13 @@ pub(crate) fn base64_encode(input: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(input)
 }
 
-fn start_db_watcher(app: tauri::AppHandle, hub: Arc<live::LiveHub>) {
+// one reporter owns the db change signal: the file watcher feeds it events,
+// and a 5s timer backstops writes fsevents misses (the gui's sqlx pool
+// appends to the wal without firing events). the reporter waits for a quiet
+// window, then reports only when the wal actually grew: appends are real
+// data changes, while checkpoint cycles (wal absorbed into the db and
+// recreated empty) and shm touches are not
+fn start_db_reporter(app: tauri::AppHandle, hub: Arc<live::LiveHub>) {
     let data_dir = app
         .path()
         .app_data_dir()
@@ -258,6 +264,10 @@ fn start_db_watcher(app: tauri::AppHandle, hub: Arc<live::LiveHub>) {
     // ensure the backups dir exists so the watcher has something to watch
     let _ = std::fs::create_dir_all(&backups_dir);
 
+    let (tx, rx) = std::sync::mpsc::channel::<()>();
+
+    let reporter_app = app.clone();
+    let watcher_tx = tx.clone();
     let mut watcher = notify::recommended_watcher(move |res: Result<notify::Event, _>| {
         if let Ok(event) = res {
             let is_db_change = event.paths.iter().any(|p| {
@@ -267,8 +277,7 @@ fn start_db_watcher(app: tauri::AppHandle, hub: Arc<live::LiveHub>) {
             match event.kind {
                 EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {
                     if is_db_change {
-                        let _ = app.emit("db-changed", ());
-                        hub.notify();
+                        let _ = watcher_tx.send(());
                     }
                     if is_backup_change {
                         let _ = app.emit("backups-changed", ());
@@ -278,12 +287,53 @@ fn start_db_watcher(app: tauri::AppHandle, hub: Arc<live::LiveHub>) {
             }
         }
     }).expect("failed to create file watcher");
-
     let _ = watcher.watch(&watch_dir, RecursiveMode::NonRecursive);
     let _ = watcher.watch(&backups_dir, RecursiveMode::NonRecursive);
-
     // keep watcher alive for app lifetime
     std::mem::forget(watcher);
+
+    std::thread::spawn(move || {
+        // backstop tick: catches writes that never fired a file event
+        let poll_tx = tx.clone();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            let _ = poll_tx.send(());
+        });
+
+        let quiet = std::time::Duration::from_secs(2);
+        let wal = data_dir.join("tack.db-wal");
+        let mut stored_len: Option<u64> = None;
+        let mut quiet_since: Option<std::time::Instant> = None;
+        loop {
+            match rx.recv_timeout(std::time::Duration::from_secs(1)) {
+                Ok(()) => quiet_since = Some(std::time::Instant::now()),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
+            }
+            let Some(since) = quiet_since else {
+                continue;
+            };
+            if since.elapsed() < quiet {
+                continue;
+            }
+            quiet_since = None;
+            let len = std::fs::metadata(&wal).ok().map(|m| m.len());
+            // the wal grows only on real writes; a checkpoint removes and
+            // recreates it empty, which is the same data already reported
+            let grew = match (stored_len, len) {
+                (Some(prev), Some(cur)) => cur > prev,
+                _ => false,
+            };
+            if let Some(len) = len {
+                stored_len = Some(len);
+            }
+            if !grew {
+                continue;
+            }
+            let _ = reporter_app.emit("db-changed", ());
+            hub.notify();
+        }
+    });
 }
 
 // resolvers for the bundled cli binary and its symlink target (macOS only)
@@ -338,30 +388,6 @@ fn ensure_cli_on_path(target: &std::path::Path) {
         use std::io::Write;
         let _ = writeln!(f, "export PATH=\"{dir_str}:$PATH\"");
     }
-}
-
-// fsevents does not report appends to an already-open wal file (the gui's
-// sqlx pool writes exactly that way), so poll the db file snapshots as a
-// backstop: desktop and cli changes reach the live site within ~2s either way
-fn start_db_poller(app: tauri::AppHandle, hub: Arc<live::LiveHub>) {
-    std::thread::spawn(move || {
-        let data_dir = app
-            .path()
-            .app_data_dir()
-            .unwrap_or_else(|_| std::path::PathBuf::from("."));
-        let mut last: Option<_> = None;
-        loop {
-            std::thread::sleep(std::time::Duration::from_secs(5));
-            let now = live::db_files_snapshot(&data_dir);
-            if let Some(prev) = last {
-                if prev != now {
-                    let _ = app.emit("db-changed", ());
-                    hub.notify();
-                }
-            }
-            last = Some(now);
-        }
-    });
 }
 
 // place a symlink to the bundled cli on PATH so `tack` works from any terminal
@@ -438,8 +464,7 @@ pub fn run() {
                 server: Mutex::new(None),
                 hub: hub.clone(),
             });
-            start_db_watcher(handle.clone(), hub.clone());
-            start_db_poller(handle.clone(), hub.clone());
+            start_db_reporter(handle.clone(), hub.clone());
             // safety net: if the frontend never boots, don't leave the user
             // with a permanently hidden window
             std::thread::spawn(move || {

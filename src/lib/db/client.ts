@@ -76,7 +76,7 @@ class HttpDb implements DbClient {
 	}
 }
 
-// unified db-changed subscription: tauri event in the app, long-poll in the browser
+// unified db-changed subscription: tauri event in the app, sse stream in the browser
 export function onDbChanged(callback: () => void): () => void {
 	if (isTauri()) {
 		let cancelled = false;
@@ -90,26 +90,13 @@ export function onDbChanged(callback: () => void): () => void {
 			unlisten?.();
 		};
 	}
-	// the local server holds the poll open until a db change lands (or a quiet
-	// timeout), so every response completes and we immediately re-poll
-	let cancelled = false;
-	let timer: ReturnType<typeof setTimeout> | undefined;
-	const poll = async () => {
-		if (cancelled) return;
-		try {
-			const res = await fetch('/api/events');
-			if (res.ok) {
-				const data = (await res.json()) as { changed?: boolean };
-				if (data.changed) callback();
-			}
-		} catch {
-			// server not reachable yet; retry shortly
-		}
-		if (!cancelled) timer = setTimeout(() => void poll(), 250);
-	};
-	void poll();
+	// the local server pushes db-changed events over sse; EventSource
+	// reconnects automatically, so a dropped connection self-heals
+	const source = new EventSource('/api/events/stream');
+	const onEvent = () => callback();
+	source.addEventListener('db-changed', onEvent);
 	return () => {
-		cancelled = true;
-		if (timer) clearTimeout(timer);
+		source.removeEventListener('db-changed', onEvent);
+		source.close();
 	};
 }

@@ -375,6 +375,8 @@ enum LiveAction {
     Off,
     /// Show live server status
     Status,
+    /// Watch db changes in real time (server-sent events)
+    Watch,
 }
 
 fn parse_ids(s: &str) -> Vec<String> {
@@ -560,6 +562,9 @@ fn main() {
             }
             LiveAction::Status => {
                 commands::live::status(&conn, json)
+            }
+            LiveAction::Watch => {
+                commands::live::watch(&conn, json)
             }
         },
     };

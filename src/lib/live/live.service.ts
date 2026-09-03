@@ -4,13 +4,20 @@ import { getSettings, setSettings } from '$lib/stores/settings';
 
 export type LiveStatus = { port: number; url: string };
 
+// marks the one-time session reset; in sessionStorage so it survives webview
+// reloads (dev hot-reload must not stop a running live server)
+const LIVE_SESSION_KEY = 'tack-live-session-reset';
+
 // keep the embedded server in sync with the liveEnabled/livePort settings,
 // including changes made from the cli (tack settings set liveEnabled true)
 export function startLiveManager(): () => void {
 	if (!isTauri()) return () => {};
 	// live is session-scoped: the persisted flag must never auto-start the
-	// server on launch, so reset it before the first reconcile
-	if (getSettings().liveEnabled) setSettings({ liveEnabled: false });
+	// server on launch, so reset it once per webview session
+	if (!sessionStorage.getItem(LIVE_SESSION_KEY)) {
+		sessionStorage.setItem(LIVE_SESSION_KEY, '1');
+		if (getSettings().liveEnabled) setSettings({ liveEnabled: false });
+	}
 	const reconcile = () => void reconcileLive();
 	window.addEventListener('settings-changed', reconcile);
 	void reconcileLive();
