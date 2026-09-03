@@ -18,8 +18,11 @@ export default defineConfig(async () => ({
 		strictPort: true,
 		host: host || false,
 		hmr: host ? { protocol: 'ws', host, port: 1421 } : undefined,
+		// 3. dev sourcemaps without embedded sources: smaller dev-server
+		// memory footprint and lighter payloads to the webview
+		sourcemapExcludeSources: true,
 		watch: {
-			// 3. tell Vite to ignore watching `src-tauri`
+			// 4. tell Vite to ignore watching `src-tauri`
 			ignored: ['**/src-tauri/**']
 		}
 	}

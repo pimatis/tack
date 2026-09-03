@@ -7,6 +7,7 @@
 	font-family: 'SF Pro Display';
 	font-style: normal;
 	font-weight: 400;
+	font-display: swap;
 	src:
 		local('SF Pro Display'),
 		url('/fonts/SFPRODISPLAYREGULAR.woff') format('woff');
@@ -15,6 +16,7 @@
 	font-family: 'SF Pro Display';
 	font-style: normal;
 	font-weight: 500;
+	font-display: swap;
 	src:
 		local('SF Pro Display'),
 		url('/fonts/SFPRODISPLAYMEDIUM.woff') format('woff');
@@ -23,6 +25,7 @@
 	font-family: 'SF Pro Display';
 	font-style: italic;
 	font-weight: 600;
+	font-display: swap;
 	src:
 		local('SF Pro Display'),
 		url('/fonts/SFPRODISPLAYSEMIBOLDITALIC.woff') format('woff');
@@ -31,6 +34,7 @@
 	font-family: 'SF Pro Display';
 	font-style: normal;
 	font-weight: 700;
+	font-display: swap;
 	src:
 		local('SF Pro Display'),
 		url('/fonts/SFPRODISPLAYBOLD.woff') format('woff');

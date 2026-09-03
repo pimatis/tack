@@ -16,6 +16,7 @@
 	import { startBackupScheduler } from '$lib/backup/backup.service';
 	import { startLiveManager } from '$lib/live/live.service';
 	import { isTauri } from '$lib/db/client';
+	import { invoke } from '@tauri-apps/api/core';
 
 	const { children } = $props();
 
@@ -28,6 +29,10 @@
 	let mobileOpen = $state(false);
 
 	onMount(() => {
+		// reveal the window as soon as the shell is mounted; direct ipc works
+		// even while the window is hidden (rAF does not fire off-screen)
+		invoke('show_window').catch(() => {});
+
 		// keep in sync with cli changes (tack settings set) while the app is running
 		void loadSettingsFromDb();
 		const syncInterval = window.setInterval(() => void loadSettingsFromDb(), 30000);

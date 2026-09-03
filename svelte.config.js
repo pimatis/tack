@@ -11,6 +11,9 @@ const config = {
 	preprocess: [vitePreprocess()],
 	kit: {
 		adapter: adapter({ fallback: 'index.html' }),
+		// route-level code splitting: settings/trash stay out of the main
+		// bundle so the webview parses less js and holds a smaller heap
+		output: { bundleStrategy: 'split' },
 		alias: { $lib: './src/lib' }
 	}
 };

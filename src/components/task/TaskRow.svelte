@@ -94,8 +94,8 @@
 				{/snippet}
 			</PriorityMenu>
 
-			<!-- issue id -->
-			<span class="shrink-0 font-mono text-[11px] font-medium text-muted-foreground/50">
+			<!-- issue id (min-width keeps the status icon column aligned across rows) -->
+			<span class="min-w-11 shrink-0 font-mono text-[11px] font-medium text-muted-foreground/50">
 				{issueId(task, projects, appSettings)}
 			</span>
 

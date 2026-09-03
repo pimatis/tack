@@ -1,9 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import TaskCreateDialog from '../components/TaskCreateDialog.svelte';
-	import TaskDetailPanel from '../components/TaskDetailPanel.svelte';
-	import ProjectCreateDialog from '../components/ProjectCreateDialog.svelte';
-	import ProjectEditDialog from '../components/ProjectEditDialog.svelte';
 	import TaskHeader from '../components/task/TaskHeader.svelte';
 	import BulkActionBar from '../components/task/BulkActionBar.svelte';
 	import FilterBar from '../components/task/FilterBar.svelte';
@@ -22,36 +18,52 @@
 	<title>Tasks | Tack</title>
 </svelte:head>
 
-<TaskCreateDialog
-	bind:open={state.dialogOpen}
-	projects={state.projects}
-	labels={state.labels}
-	initialDueDate={state.createDueDate}
-	onCreated={(t) => state.handleCreated(t)}
-	onLabelCreated={(l) => state.handleLabelCreated(l)}
-	onLabelUpdated={(l) => state.handleLabelUpdated(l)}
-	onLabelRemoved={(id) => state.handleLabelRemoved(id)}
-/>
-<ProjectCreateDialog
-	bind:open={state.projectDialogOpen}
-	onCreated={(p) => state.handleProjectCreated(p)}
-/>
-<ProjectEditDialog
-	bind:open={state.projectEditOpen}
-	project={state.editingProject}
-	onUpdated={(p) => state.handleProjectUpdated(p)}
-/>
-<TaskDetailPanel
-	bind:open={state.editDialogOpen}
-	task={state.editingTask}
-	prefix={state.projects.find((project) => project.id === state.editingTask?.projectId)?.prefix ??
-		''}
-	labels={state.labels}
-	onUpdated={(t) => state.handleUpdated(t)}
-	onLabelCreated={(l) => state.handleLabelCreated(l)}
-	onLabelUpdated={(l) => state.handleLabelUpdated(l)}
-	onLabelRemoved={(id) => state.handleLabelRemoved(id)}
-/>
+{#if state.dialogOpen}
+	{#await import('../components/TaskCreateDialog.svelte') then { default: TaskCreateDialogComponent }}
+		<TaskCreateDialogComponent
+			bind:open={state.dialogOpen}
+			projects={state.projects}
+			labels={state.labels}
+			initialDueDate={state.createDueDate}
+			onCreated={(t) => state.handleCreated(t)}
+			onLabelCreated={(l) => state.handleLabelCreated(l)}
+			onLabelUpdated={(l) => state.handleLabelUpdated(l)}
+			onLabelRemoved={(id) => state.handleLabelRemoved(id)}
+		/>
+	{/await}
+{/if}
+{#if state.projectDialogOpen}
+	{#await import('../components/ProjectCreateDialog.svelte') then { default: ProjectCreateDialogComponent }}
+		<ProjectCreateDialogComponent
+			bind:open={state.projectDialogOpen}
+			onCreated={(p) => state.handleProjectCreated(p)}
+		/>
+	{/await}
+{/if}
+{#if state.projectEditOpen}
+	{#await import('../components/ProjectEditDialog.svelte') then { default: ProjectEditDialogComponent }}
+		<ProjectEditDialogComponent
+			bind:open={state.projectEditOpen}
+			project={state.editingProject}
+			onUpdated={(p) => state.handleProjectUpdated(p)}
+		/>
+	{/await}
+{/if}
+{#if state.editDialogOpen}
+	{#await import('../components/TaskDetailPanel.svelte') then { default: TaskDetailPanelComponent }}
+		<TaskDetailPanelComponent
+			bind:open={state.editDialogOpen}
+			task={state.editingTask}
+			prefix={state.projects.find((project) => project.id === state.editingTask?.projectId)
+				?.prefix ?? ''}
+			labels={state.labels}
+			onUpdated={(t) => state.handleUpdated(t)}
+			onLabelCreated={(l) => state.handleLabelCreated(l)}
+			onLabelUpdated={(l) => state.handleLabelUpdated(l)}
+			onLabelRemoved={(id) => state.handleLabelRemoved(id)}
+		/>
+	{/await}
+{/if}
 
 <section class="flex h-full flex-col px-3 py-3 sm:px-5 sm:py-5 lg:px-8 lg:py-8">
 	<TaskHeader

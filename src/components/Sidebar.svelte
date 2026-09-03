@@ -18,7 +18,6 @@
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
-	import UpdateDialog from './UpdateDialog.svelte';
 	import { checkForUpdate } from '$lib/updater/update.service';
 	import { TaskPageState } from '$lib/task/taskState.svelte';
 
@@ -1017,4 +1016,8 @@
 	</div>
 </aside>
 
-<UpdateDialog bind:open={updateDialogOpen} />
+{#if updateDialogOpen}
+	{#await import('./UpdateDialog.svelte') then { default: UpdateDialogComponent }}
+		<UpdateDialogComponent bind:open={updateDialogOpen} />
+	{/await}
+{/if}

@@ -6,7 +6,22 @@ use rusqlite::{Connection, params};
 use sha2::{Digest, Sha384};
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
+use tauri_plugin_window_state::StateFlags;
 use std::path::PathBuf;
+
+// reveal the window once the design is on screen; called from the command,
+// the page-load hook, and the fallback timer
+fn reveal_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+#[tauri::command]
+fn show_window(app: tauri::AppHandle) {
+    reveal_main_window(&app);
+}
 
 #[tauri::command]
 fn get_app_version() -> String {
@@ -383,16 +398,33 @@ fn cli_installed() -> bool {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                // visibility is managed by show_window after first paint
+                .with_state_flags(StateFlags::all() & !StateFlags::VISIBLE)
+                .build(),
+        )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_app_version, write_file, read_file, save_attachment, read_attachment, delete_attachment, download_attachment, create_backup, list_backups, restore_backup, delete_backup, install_cli, cli_installed, live::live_start, live::live_stop, live::live_status])
+        .on_page_load(move |webview, payload| {
+            // rust-side reveal: unlike requestAnimationFrame, this fires even
+            // while the window is hidden (webkit pauses rAF off-screen)
+            if payload.event() == tauri::webview::PageLoadEvent::Finished {
+                reveal_main_window(webview.app_handle());
+            }
+        })
+        .invoke_handler(tauri::generate_handler![get_app_version, show_window, write_file, read_file, save_attachment, read_attachment, delete_attachment, download_attachment, create_backup, list_backups, restore_backup, delete_backup, install_cli, cli_installed, live::live_start, live::live_stop, live::live_status])
         .setup(|app| {
             let handle = app.handle().clone();
-            let _ = install_cli_link(&handle);
+            // fs + shellrc work: keep it off the critical path so the webview
+            // spawns as early as possible
+            let cli_handle = handle.clone();
+            std::thread::spawn(move || {
+                let _ = install_cli_link(&cli_handle);
+            });
             // migrate before the webview loads the db, so the sql plugin
             // never sees a version it does not know
             let conn = Connection::open(app_db_path(app.handle())?)?;
@@ -407,7 +439,13 @@ pub fn run() {
                 hub: hub.clone(),
             });
             start_db_watcher(handle.clone(), hub.clone());
-            start_db_poller(handle, hub);
+            start_db_poller(handle.clone(), hub.clone());
+            // safety net: if the frontend never boots, don't leave the user
+            // with a permanently hidden window
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(5));
+                reveal_main_window(&handle);
+            });
             Ok(())
         })
         .run(tauri::generate_context!())
