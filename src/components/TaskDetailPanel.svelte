@@ -1079,7 +1079,7 @@
 
 					<!-- properties sidebar -->
 					<aside
-						class="flex shrink-0 flex-col gap-px border-t border-border/60 bg-muted/10 p-3 md:w-[200px] md:border-t-0 md:border-l md:overflow-y-auto"
+						class="flex shrink-0 flex-col gap-px border-t border-border/60 bg-muted/10 p-3 md:w-[200px] md:overflow-y-auto md:border-t-0 md:border-l"
 					>
 						<!-- status -->
 						<div class="flex flex-col gap-1 py-1.5">

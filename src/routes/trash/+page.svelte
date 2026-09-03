@@ -130,7 +130,9 @@
 
 <section class="flex h-full flex-col">
 	<!-- header -->
-	<header class="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-6 sm:py-4">
+	<header
+		class="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-6 sm:py-4"
+	>
 		<div class="min-w-0">
 			<div class="flex items-center gap-3">
 				<h1 class="text-base font-semibold tracking-tight sm:text-lg">Trash</h1>

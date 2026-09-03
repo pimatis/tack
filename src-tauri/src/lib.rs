@@ -398,6 +398,9 @@ pub fn run() {
             let conn = Connection::open(app_db_path(app.handle())?)?;
             conn.pragma_update(None, "journal_mode", "WAL")?;
             run_migrations(&conn)?;
+            // live is session-scoped: clear the persisted flag at launch so
+            // the webview never reads a stale true and auto-starts the server
+            let _ = conn.execute("UPDATE settings SET value = 'false' WHERE key = 'liveEnabled'", []);
             let hub = Arc::new(live::LiveHub::default());
             app.manage(live::LiveState {
                 server: Mutex::new(None),

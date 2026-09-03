@@ -127,7 +127,8 @@
 			class="h-auto w-full justify-between gap-3 rounded-none px-4 py-2.5 font-normal text-foreground/90 hover:bg-muted/40"
 			onclick={() => openRecorder(s.id)}
 		>
-			<span class="min-w-0 flex-1 truncate text-left text-[13px] text-foreground/90">{s.label}</span>
+			<span class="min-w-0 flex-1 truncate text-left text-[13px] text-foreground/90">{s.label}</span
+			>
 			<span class="flex shrink-0 items-center gap-2.5">
 				{#if draft[s.id]?.length}
 					<ShortcutKeycap combo={draft[s.id][0]} />

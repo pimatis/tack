@@ -20,7 +20,9 @@
 </script>
 
 {#if loading}
-	<div class="flex items-center justify-center gap-2 px-4 py-16 text-[13px] text-muted-foreground sm:py-20">
+	<div
+		class="flex items-center justify-center gap-2 px-4 py-16 text-[13px] text-muted-foreground sm:py-20"
+	>
 		<Spinner class="size-3.5" />
 		<span>Loading tasks...</span>
 	</div>

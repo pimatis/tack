@@ -72,7 +72,13 @@
 		<p class="text-[13px] font-medium">Export data</p>
 		<p class="text-xs text-muted-foreground">Save all projects, tasks and labels as a JSON file</p>
 	</div>
-	<Button variant="outline" size="sm" onclick={() => void handleExport()} disabled={exportLoading} class="shrink-0">
+	<Button
+		variant="outline"
+		size="sm"
+		onclick={() => void handleExport()}
+		disabled={exportLoading}
+		class="shrink-0"
+	>
 		{exportLoading ? 'Exporting...' : 'Export'}
 	</Button>
 </div>
@@ -87,7 +93,13 @@
 			Restore from a previously exported JSON file. This will replace all current data.
 		</p>
 	</div>
-	<Button variant="outline" size="sm" onclick={() => void handleImport()} disabled={importing} class="shrink-0">
+	<Button
+		variant="outline"
+		size="sm"
+		onclick={() => void handleImport()}
+		disabled={importing}
+		class="shrink-0"
+	>
 		{importing ? 'Importing...' : 'Import'}
 	</Button>
 </div>

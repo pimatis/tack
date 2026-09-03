@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '$lib/db/client';
-import { getSettings } from '$lib/stores/settings';
+import { getSettings, setSettings } from '$lib/stores/settings';
 
 export type LiveStatus = { port: number; url: string };
 
@@ -8,6 +8,9 @@ export type LiveStatus = { port: number; url: string };
 // including changes made from the cli (tack settings set liveEnabled true)
 export function startLiveManager(): () => void {
 	if (!isTauri()) return () => {};
+	// live is session-scoped: the persisted flag must never auto-start the
+	// server on launch, so reset it before the first reconcile
+	if (getSettings().liveEnabled) setSettings({ liveEnabled: false });
 	const reconcile = () => void reconcileLive();
 	window.addEventListener('settings-changed', reconcile);
 	void reconcileLive();
@@ -33,6 +36,9 @@ async function reconcileLive(): Promise<void> {
 			dispatchLiveStatus(null);
 		}
 	} catch (error) {
+		// start failed (e.g. port busy): flip the toggle off so the ui matches
+		// the real server state instead of showing "on" while nothing listens
+		setSettings({ liveEnabled: false });
 		window.dispatchEvent(new CustomEvent('live-error-changed', { detail: String(error) }));
 	} finally {
 		reconciling = false;

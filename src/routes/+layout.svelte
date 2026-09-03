@@ -90,12 +90,16 @@
 							onclick={() => (mobileOpen = true)}
 							aria-label="Open sidebar"
 						>
-							<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"
-								viewBox="0 0 24 24" class="size-5"
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="20"
+								height="20"
+								viewBox="0 0 24 24"
+								class="size-5"
 								><path
 									fill="currentColor"
 									d="M20 17.5a1.5 1.5 0 0 1 .144 2.993L20 20.5H4a1.5 1.5 0 0 1-.144-2.993L4 17.5zm0-7a1.5 1.5 0 0 1 0 3H4a1.5 1.5 0 0 1 0-3zm0-7a1.5 1.5 0 0 1 0 3H4a1.5 1.5 0 1 1 0-3z"
-							/></svg
+								/></svg
 							>
 						</Button>
 					{/if}

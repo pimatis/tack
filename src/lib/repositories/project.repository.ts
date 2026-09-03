@@ -1,8 +1,7 @@
 import { getDb } from '$lib/db/client';
 import type { Project } from '$lib/types/project';
 
-type CreateProjectInput = Pick<Project, 'name' | 'prefix'> &
-	Partial<Pick<Project, 'description'>>;
+type CreateProjectInput = Pick<Project, 'name' | 'prefix'> & Partial<Pick<Project, 'description'>>;
 
 export async function create(input: CreateProjectInput): Promise<Project> {
 	try {
@@ -47,8 +46,7 @@ export async function findAll(): Promise<Project[]> {
 	}
 }
 
-type UpdateProjectInput = Pick<Project, 'name' | 'prefix'> &
-	Partial<Pick<Project, 'description'>>;
+type UpdateProjectInput = Pick<Project, 'name' | 'prefix'> & Partial<Pick<Project, 'description'>>;
 
 export async function update(id: string, input: UpdateProjectInput): Promise<Project | null> {
 	try {

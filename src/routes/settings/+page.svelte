@@ -305,7 +305,9 @@
 
 <section class="flex h-full flex-col">
 	<!-- header -->
-	<header class="flex items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-6 sm:py-4">
+	<header
+		class="flex items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-6 sm:py-4"
+	>
 		<div class="min-w-0">
 			<h1 class="text-base font-semibold tracking-tight sm:text-lg">Settings</h1>
 			<p class="truncate text-xs text-muted-foreground sm:text-sm">
@@ -454,14 +456,30 @@
 				<Tabs.Root bind:value={activeTab} class="w-full">
 					<div class="overflow-x-auto pb-0.5">
 						<Tabs.List class="flex w-max gap-1 rounded-lg bg-muted/50 p-1 sm:w-full">
-							<Tabs.Trigger value="appearance" class="shrink-0 flex-1 whitespace-nowrap">Appearance</Tabs.Trigger>
-							<Tabs.Trigger value="sidebar" class="shrink-0 flex-1 whitespace-nowrap">Sidebar</Tabs.Trigger>
-							<Tabs.Trigger value="tasks" class="shrink-0 flex-1 whitespace-nowrap">Tasks</Tabs.Trigger>
-							<Tabs.Trigger value="data" class="shrink-0 flex-1 whitespace-nowrap">Data</Tabs.Trigger>
-							<Tabs.Trigger value="backup" class="shrink-0 flex-1 whitespace-nowrap">Backup</Tabs.Trigger>
-							<Tabs.Trigger value="shortcuts" class="shrink-0 flex-1 whitespace-nowrap">Shortcuts</Tabs.Trigger>
-							<Tabs.Trigger value="live" class="shrink-0 flex-1 whitespace-nowrap">Live</Tabs.Trigger>
-							<Tabs.Trigger value="workspace" class="shrink-0 flex-1 whitespace-nowrap">Workspace</Tabs.Trigger>
+							<Tabs.Trigger value="appearance" class="flex-1 shrink-0 whitespace-nowrap"
+								>Appearance</Tabs.Trigger
+							>
+							<Tabs.Trigger value="sidebar" class="flex-1 shrink-0 whitespace-nowrap"
+								>Sidebar</Tabs.Trigger
+							>
+							<Tabs.Trigger value="tasks" class="flex-1 shrink-0 whitespace-nowrap"
+								>Tasks</Tabs.Trigger
+							>
+							<Tabs.Trigger value="data" class="flex-1 shrink-0 whitespace-nowrap"
+								>Data</Tabs.Trigger
+							>
+							<Tabs.Trigger value="backup" class="flex-1 shrink-0 whitespace-nowrap"
+								>Backup</Tabs.Trigger
+							>
+							<Tabs.Trigger value="shortcuts" class="flex-1 shrink-0 whitespace-nowrap"
+								>Shortcuts</Tabs.Trigger
+							>
+							<Tabs.Trigger value="live" class="flex-1 shrink-0 whitespace-nowrap"
+								>Live</Tabs.Trigger
+							>
+							<Tabs.Trigger value="workspace" class="flex-1 shrink-0 whitespace-nowrap"
+								>Workspace</Tabs.Trigger
+							>
 						</Tabs.List>
 					</div>
 

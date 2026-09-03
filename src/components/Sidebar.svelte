@@ -321,10 +321,8 @@
 {/if}
 
 <aside
-	class="flex h-dvh flex-col transition-all duration-200 {collapsed
-		? 'w-12'
-		: 'w-50'} {isMobile
-		? 'fixed left-0 top-0 z-50 bg-sidebar shadow-xl shadow-black/10 max-md:w-60!'
+	class="flex h-dvh flex-col transition-all duration-200 {collapsed ? 'w-12' : 'w-50'} {isMobile
+		? 'fixed top-0 left-0 z-50 bg-sidebar shadow-xl shadow-black/10 max-md:w-60!'
 		: ''} {isMobile && !mobileOpen ? '-translate-x-full' : ''}"
 >
 	<!-- drag region for macOS traffic lights -->
@@ -494,7 +492,7 @@
 
 		<!-- dynamic filter items (reorderable via settings) -->
 		{#if !collapsed}
-			<div class="px-3 pb-1 pt-2 text-[11px] font-medium text-muted-foreground/60">Filters</div>
+			<div class="px-3 pt-2 pb-1 text-[11px] font-medium text-muted-foreground/60">Filters</div>
 			{#each orderedFilterItems as item (item.id)}
 				{#if item.id === 'pinned'}
 					<div
@@ -528,8 +526,8 @@
 							</svg>
 							<span>Pinned</span>
 							{#if pinnedCount > 0}
-								<span
-									class="ml-auto text-[11px] tabular-nums text-muted-foreground/50">{pinnedCount}</span
+								<span class="ml-auto text-[11px] text-muted-foreground/50 tabular-nums"
+									>{pinnedCount}</span
 								>
 							{/if}
 						</button>
@@ -566,8 +564,8 @@
 							>
 							<span>Today</span>
 							{#if todayCount > 0}
-								<span
-									class="ml-auto text-[11px] tabular-nums text-muted-foreground/50">{todayCount}</span
+								<span class="ml-auto text-[11px] text-muted-foreground/50 tabular-nums"
+									>{todayCount}</span
 								>
 							{/if}
 						</button>
@@ -604,8 +602,8 @@
 							>
 							<span>Upcoming</span>
 							{#if upcomingCount > 0}
-								<span
-									class="ml-auto text-[11px] tabular-nums text-muted-foreground/50">{upcomingCount}</span
+								<span class="ml-auto text-[11px] text-muted-foreground/50 tabular-nums"
+									>{upcomingCount}</span
 								>
 							{/if}
 						</button>
@@ -642,9 +640,7 @@
 							>
 							<span>Overdue</span>
 							{#if overdueCount > 0}
-								<span
-									class="ml-auto text-[11px] tabular-nums text-red-400/80">{overdueCount}</span
-								>
+								<span class="ml-auto text-[11px] text-red-400/80 tabular-nums">{overdueCount}</span>
 							{/if}
 						</button>
 					</div>

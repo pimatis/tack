@@ -198,17 +198,6 @@
 						/></svg
 					>
 				</Button>
-				<Button
-					variant="ghost"
-					size="icon-xs"
-					class="ml-0.5 hidden h-7 rounded-md px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:flex"
-					onclick={() => {
-						const now = new Date();
-						month = new Date(now.getFullYear(), now.getMonth(), 1);
-					}}
-				>
-					Today
-				</Button>
 			</div>
 		</div>
 	</div>
@@ -216,7 +205,9 @@
 	<!-- weekday header -->
 	<div class="grid grid-cols-7 border-b border-border/60 pb-2">
 		{#each WEEKDAYS as day, idx (day)}
-			<div class="px-1 text-center text-[11px] font-medium text-muted-foreground/70 sm:text-left sm:text-[11px]">
+			<div
+				class="px-1 text-center text-[11px] font-medium text-muted-foreground/70 sm:text-left sm:text-[11px]"
+			>
 				<span class="sm:hidden">{WEEKDAYS_SHORT[idx]}</span>
 				<span class="hidden sm:inline">{day}</span>
 			</div>
@@ -225,12 +216,12 @@
 
 	<!-- day grid: bordered cells so bars flow seamlessly between days -->
 	<div
-		class="grid flex-1 grid-cols-7 grid-rows-6 overflow-hidden rounded-lg border border-border/60"
+		class="grid grid-cols-7 overflow-y-auto rounded-lg border border-border/60 sm:flex-1 sm:grid-rows-6 sm:overflow-hidden"
 	>
 		{#each gridDays as day, i (dayKey(day))}
 			{@const bars = activeBars(i)}
 			<div
-				class="group relative flex min-h-0 cursor-pointer flex-col overflow-hidden border-r border-b border-border/40 p-1.5 transition-colors last:border-r-0 hover:bg-muted/20 sm:p-1.5 {i >=
+				class="group relative flex min-h-[56px] cursor-pointer flex-col overflow-hidden border-r border-b border-border/40 p-1.5 transition-colors last:border-r-0 hover:bg-muted/20 sm:min-h-0 sm:p-1.5 {i >=
 				35
 					? 'border-b-0'
 					: ''} {i % 7 === 6 ? 'border-r-0' : ''} {!inCurrentMonth(day) ? 'bg-muted/10' : ''}"
@@ -256,7 +247,7 @@
 					</span>
 					<button
 						type="button"
-						class="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground/40 transition-opacity hover:bg-muted hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100"
+						class="hidden size-4 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground/40 transition-opacity hover:bg-muted hover:text-foreground sm:flex sm:opacity-0 sm:group-hover:opacity-100"
 						aria-label="Add task on this day"
 						onclick={(e) => {
 							e.stopPropagation();
@@ -275,7 +266,8 @@
 				<!-- bars: every task is rendered; the area scrolls when the
 				     cell is too small, so nothing ever leaks into the row below -->
 				<div
-					class="relative min-h-0 flex-1 overflow-y-auto {bars.length > MORE_THRESHOLD
+					class="relative hidden min-h-0 overflow-y-auto sm:block sm:flex-1 {bars.length >
+					MORE_THRESHOLD
 						? '[mask-image:linear-gradient(to_bottom,black_72%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_bottom,black_72%,transparent_100%)]'
 						: ''}"
 				>
@@ -350,10 +342,27 @@
 					</div>
 				</div>
 
+				<!-- mobile: compact dot indicators instead of text bars -->
+				<div class="flex flex-wrap items-center gap-1 px-0.5 pb-1 sm:hidden">
+					{#each bars.slice(0, 3) as bar (bar.task.id)}
+						<span
+							class="size-1.5 shrink-0 rounded-full {taskDotColor(bar.task)} {bar.task.status ===
+								'done' || bar.task.status === 'canceled'
+								? 'opacity-40'
+								: ''}"
+						></span>
+					{/each}
+					{#if bars.length > 3}
+						<span class="text-[9px] leading-none font-medium text-muted-foreground/60">
+							+{bars.length - 3}
+						</span>
+					{/if}
+				</div>
+
 				{#if bars.length > MORE_THRESHOLD}
 					<button
 						type="button"
-						class="shrink-0 cursor-pointer rounded px-1 py-0.5 text-[10px] font-medium text-muted-foreground/60 transition-colors hover:bg-muted/40 hover:text-foreground sm:px-1 sm:py-0"
+						class="hidden shrink-0 cursor-pointer rounded px-1 py-0.5 text-[10px] font-medium text-muted-foreground/60 transition-colors hover:bg-muted/40 hover:text-foreground sm:block sm:px-1 sm:py-0"
 						onclick={(e) => {
 							e.stopPropagation();
 							selectedDay = day;
