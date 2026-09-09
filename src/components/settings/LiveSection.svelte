@@ -5,6 +5,8 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { isTauri } from '$lib/db/client';
+	import { invoke } from '@tauri-apps/api/core';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { getLiveStatus, type LiveStatus } from '$lib/live/live.service';
 	import type { Settings } from '$lib/types/settings';
 
@@ -23,6 +25,52 @@
 	let copied = $state('');
 	let busy = $state(false);
 	let copyTimer: ReturnType<typeof setTimeout> | undefined;
+
+	// shared password (set / change / remove)
+	let pwDialogOpen = $state(false);
+	let pw = $state('');
+	let pwConfirm = $state('');
+	let pwError = $state('');
+	let pwBusy = $state(false);
+
+	const passwordSet = $derived(settings.livePasswordHash !== '');
+
+	function openPasswordDialog() {
+		pw = '';
+		pwConfirm = '';
+		pwError = '';
+		pwDialogOpen = true;
+	}
+
+	async function savePassword() {
+		if (pw.length < 8) {
+			pwError = 'use at least 8 characters';
+			return;
+		}
+		if (pw !== pwConfirm) {
+			pwError = 'passwords do not match';
+			return;
+		}
+		pwBusy = true;
+		pwError = '';
+		try {
+			// hashing happens in rust (pbkdf2); the plaintext never touches disk
+			const { hash, salt } = await invoke<{ hash: string; salt: string }>('hash_live_password', {
+				password: pw
+			});
+			update('livePasswordHash', hash);
+			update('livePasswordSalt', salt);
+			pwDialogOpen = false;
+		} catch (e) {
+			pwError = String(e);
+		}
+		pwBusy = false;
+	}
+
+	function removePassword() {
+		update('livePasswordHash', '');
+		update('livePasswordSalt', '');
+	}
 
 	async function refresh() {
 		status = await getLiveStatus();
@@ -151,6 +199,28 @@
 		<Separator />
 		<div class="flex flex-wrap items-center justify-between gap-3">
 			<div class="min-w-0">
+				<p class="text-[13px] font-medium">Password</p>
+				<p class="text-xs text-muted-foreground">
+					{#if passwordSet}
+						Visitors must enter the password to open the share
+					{:else}
+						Optional: require a password to open the share
+					{/if}
+				</p>
+			</div>
+			<div class="flex shrink-0 items-center gap-2">
+				{#if passwordSet}
+					<Button variant="outline" size="sm" onclick={openPasswordDialog}>Change</Button>
+					<Button variant="ghost" size="sm" onclick={removePassword}>Remove</Button>
+				{:else}
+					<Button variant="outline" size="sm" onclick={openPasswordDialog}>Set password</Button>
+				{/if}
+			</div>
+		</div>
+
+		<Separator />
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<div class="min-w-0">
 				<p class="text-[13px] font-medium">Status</p>
 				{#if status}
 					<button
@@ -226,7 +296,8 @@
 		{:else}
 			<p class="text-xs text-muted-foreground">
 				Your data stays on this device. While the server is on, any device on your local network can
-				open the address above. Agents can watch changes in real time with
+				open the address above{#if passwordSet}, but they need the password to see anything{/if}.
+				Agents can watch changes in real time with
 				<code class="font-mono text-foreground/80">tack live watch</code>
 				{#if status}or
 					<code class="font-mono text-foreground/80">curl -N {status.url}/api/events/stream</code
@@ -236,4 +307,48 @@
 			</p>
 		{/if}
 	{/if}
+{/if}
+
+{#if pwDialogOpen}
+	<Dialog.Root bind:open={pwDialogOpen}>
+		<Dialog.Content class="w-[calc(100vw-2rem)] max-w-sm gap-4 p-4 sm:p-6">
+			<Dialog.Header class="gap-1.5">
+				<Dialog.Title>{passwordSet ? 'Change password' : 'Set password'}</Dialog.Title>
+				<Dialog.Description>
+					Visitors opening the live share must enter this password.
+				</Dialog.Description>
+			</Dialog.Header>
+			<form
+				class="flex flex-col gap-3"
+				onsubmit={(e) => {
+					e.preventDefault();
+					void savePassword();
+				}}
+			>
+				<Input
+					type="password"
+					placeholder="Password (min 8 characters)"
+					autocomplete="new-password"
+					bind:value={pw}
+					disabled={pwBusy}
+				/>
+				<Input
+					type="password"
+					placeholder="Repeat password"
+					autocomplete="new-password"
+					bind:value={pwConfirm}
+					disabled={pwBusy}
+				/>
+				{#if pwError}
+					<p class="text-xs text-destructive">{pwError}</p>
+				{/if}
+				<Dialog.Footer>
+					<Button type="button" variant="ghost" onclick={() => (pwDialogOpen = false)}>
+						Cancel
+					</Button>
+					<Button type="submit" disabled={pwBusy || pw.length < 8}>Save</Button>
+				</Dialog.Footer>
+			</form>
+		</Dialog.Content>
+	</Dialog.Root>
 {/if}

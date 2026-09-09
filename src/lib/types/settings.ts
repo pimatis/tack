@@ -24,6 +24,10 @@ export type Settings = {
 	backupKeepCount: number;
 	liveEnabled: boolean;
 	livePort: number;
+	// shared password for the live server, stored as pbkdf2 hash + salt
+	// (never plaintext); empty means no password is required
+	livePasswordHash: string;
+	livePasswordSalt: string;
 	sidebarItems: SidebarItemConfig[];
 	shortcuts: Record<string, ShortcutKey[]>;
 };
@@ -51,6 +55,8 @@ export const defaultSettings: Settings = {
 	backupKeepCount: 7,
 	liveEnabled: false,
 	livePort: 17890,
+	livePasswordHash: '',
+	livePasswordSalt: '',
 	sidebarItems: [...defaultSidebarItems],
 	shortcuts: Object.fromEntries(SHORTCUTS.map((s) => [s.id, s.keys])) as Record<
 		string,

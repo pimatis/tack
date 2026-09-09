@@ -1,5 +1,7 @@
 import Database from '@tauri-apps/plugin-sql';
 
+import { requireLiveAuth } from '$lib/live/auth.service';
+
 const DATABASE_URL = 'sqlite:tack.db';
 
 type QueryResult = { rowsAffected: number; lastInsertId?: number };
@@ -66,13 +68,23 @@ class HttpDb implements DbClient {
 	}
 
 	private async post<T>(path: string, body: unknown): Promise<T> {
-		const res = await fetch(path, {
+		let res = await this.send(path, body);
+		if (res.status === 401) {
+			// the live server requires the shared password: pause until the
+			// login dialog completes, then retry once
+			await requireLiveAuth();
+			res = await this.send(path, body);
+		}
+		if (!res.ok) throw new Error(await res.text());
+		return (await res.json()) as T;
+	}
+
+	private send(path: string, body: unknown): Promise<Response> {
+		return fetch(path, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(body)
 		});
-		if (!res.ok) throw new Error(await res.text());
-		return (await res.json()) as T;
 	}
 }
 

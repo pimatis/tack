@@ -75,7 +75,7 @@
 				onclick={() => void handleInstall()}
 				disabled={installing}
 			>
-				{installing ? 'installing…' : 'install path'}
+				{installing ? 'Installing…' : 'Install path'}
 			</Button>
 		{/if}
 	</div>

@@ -445,7 +445,7 @@ pub fn run() {
                 reveal_main_window(webview.app_handle());
             }
         })
-        .invoke_handler(tauri::generate_handler![get_app_version, show_window, write_file, read_file, save_attachment, read_attachment, delete_attachment, download_attachment, create_backup, list_backups, restore_backup, delete_backup, install_cli, cli_installed, live::live_start, live::live_stop, live::live_status])
+        .invoke_handler(tauri::generate_handler![get_app_version, show_window, write_file, read_file, save_attachment, read_attachment, delete_attachment, download_attachment, create_backup, list_backups, restore_backup, delete_backup, install_cli, cli_installed, live::live_start, live::live_stop, live::live_status, live::hash_live_password])
         .setup(|app| {
             let handle = app.handle().clone();
             // fs + shellrc work: keep it off the critical path so the webview
