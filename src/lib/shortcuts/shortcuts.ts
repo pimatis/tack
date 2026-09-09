@@ -53,6 +53,11 @@ export const SHORTCUTS: ShortcutDefinition[] = [
 		id: 'save-task',
 		label: 'Save task',
 		keys: [{ key: 'Enter', mod: metaOrCtrl }]
+	},
+	{
+		id: 'save-note',
+		label: 'Save note',
+		keys: [{ key: 's', mod: metaOrCtrl }]
 	}
 ];
 

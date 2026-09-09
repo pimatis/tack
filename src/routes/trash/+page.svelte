@@ -22,6 +22,7 @@
 	import { searchTaskIds } from '$lib/search/fts.service';
 	import { issueId } from '$lib/task/utils';
 	import { listTrashedNotes, restoreTrashedNote, purgeNote, purgeAllNotes } from '$lib/notes/trash';
+	import { notesState } from '$lib/notes/notesState.svelte';
 	import type { NoteInfo } from '$lib/notes/notesState.svelte';
 
 	type TrashFilter = 'all' | 'tasks' | 'notes';
@@ -29,7 +30,8 @@
 	let tasks = $state<Task[]>([]);
 	let projects = $state<Project[]>([]);
 	let trashedNotes = $state<NoteInfo[]>([]);
-	let typeFilter = $state<TrashFilter>('all');
+	// start on the filter matching the tab the trash was opened from
+	let typeFilter = $state<TrashFilter>(notesState.activeTab === 'notes' ? 'notes' : 'tasks');
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let searchQuery = $state('');

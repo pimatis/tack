@@ -113,28 +113,6 @@
 					</DropdownMenu.RadioGroup>
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
-			<Tooltip.Root>
-				<Tooltip.Trigger>
-					{#snippet child({ props })}
-						<Button
-							{...props}
-							variant="ghost"
-							size="icon-sm"
-							class="text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-							onclick={() => void notesState.createNote()}
-							aria-label="New note"
-						>
-							<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-								><path
-									fill="currentColor"
-									d="M10.5 20a1.5 1.5 0 0 0 3 0v-6.5H20a1.5 1.5 0 0 0 0-3h-6.5V4a1.5 1.5 0 0 0-3 0v6.5H4a1.5 1.5 0 0 0 0 3h6.5z"
-								/></svg
-							>
-						</Button>
-					{/snippet}
-				</Tooltip.Trigger>
-				<Tooltip.Content side="right">New note</Tooltip.Content>
-			</Tooltip.Root>
 		</div>
 	{/if}
 

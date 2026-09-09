@@ -7,9 +7,10 @@
 		content: string;
 		class?: string;
 		onToggleLine?: (line: number) => void;
+		onOpenMention?: (href: string) => void;
 	};
 
-	let { content, class: className = '', onToggleLine }: Props = $props();
+	let { content, class: className = '', onToggleLine, onOpenMention }: Props = $props();
 	let html = $derived(renderMarkdown(content));
 	let container = $state<HTMLElement | null>(null);
 
@@ -20,6 +21,13 @@
 
 	// injected buttons and checkboxes are real elements; clicks are handled by delegation here
 	async function handleClick(event: MouseEvent) {
+		// task:/note: mention links navigate inside the app instead of the browser
+		const mention = (event.target as HTMLElement).closest?.('a[href^="task:"], a[href^="note:"]');
+		if (mention instanceof HTMLAnchorElement) {
+			event.preventDefault();
+			onOpenMention?.(mention.getAttribute('href') ?? '');
+			return;
+		}
 		const button = (event.target as HTMLElement).closest?.('.copy-code-btn');
 		if (!(button instanceof HTMLButtonElement)) return;
 		const code = button.parentElement?.querySelector('code')?.textContent ?? '';

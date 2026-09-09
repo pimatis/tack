@@ -22,8 +22,13 @@
 	import { notesState } from '$lib/notes/notesState.svelte';
 	import { isTauri } from '$lib/db/client';
 	import { invoke } from '@tauri-apps/api/core';
+	import { afterNavigate } from '$app/navigation';
 
 	const { children } = $props();
+
+	// notes view only replaces the home route; /trash, /settings etc. still render
+	let pathname = $state('/');
+	afterNavigate(() => (pathname = window.location.pathname));
 
 	// load persisted settings before any child component reads them
 	let settings = $state(initSettings());
@@ -133,7 +138,7 @@
 						{/if}
 					</div>
 					<div class="m-2 min-h-0 flex-1 overflow-auto rounded-xl border border-border bg-card">
-						{#if notesState.activeTab === 'notes'}
+						{#if notesState.activeTab === 'notes' && pathname === '/'}
 							<NotesView />
 						{:else}
 							{@render children()}

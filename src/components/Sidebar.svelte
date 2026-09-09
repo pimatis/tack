@@ -396,7 +396,11 @@
 							variant="ghost"
 							size="icon-sm"
 							aria-label="Search"
-							onclick={() => void goHomeThenDispatch('open-command-palette')}
+							onclick={() => {
+								// keep the active tab; the palette routes to the right search itself
+								if (isMobile) mobileOpen = false;
+								window.dispatchEvent(new Event('open-command-palette'));
+							}}
 							class="text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
 						>
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -468,6 +472,33 @@
 					<Tooltip.Content side="bottom"
 						>New project {@render shortcut('new-project')}</Tooltip.Content
 					>
+				</Tooltip.Root>
+			{/if}
+			{#if notesState.activeTab === 'notes'}
+				<Tooltip.Root>
+					<Tooltip.Trigger>
+						{#snippet child({ props })}
+							<Button
+								{...props}
+								variant="ghost"
+								size="icon-sm"
+								aria-label="New note"
+								onclick={() => {
+									void notesState.createNote();
+									if (isMobile) mobileOpen = false;
+								}}
+								class="text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+							>
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+									><path
+										fill="currentColor"
+										d="M10.5 20a1.5 1.5 0 0 0 3 0v-6.5H20a1.5 1.5 0 0 0 0-3h-6.5V4a1.5 1.5 0 0 0-3 0v6.5H4a1.5 1.5 0 0 0 0 3h6.5z"
+									/></svg
+								>
+							</Button>
+						{/snippet}
+					</Tooltip.Trigger>
+					<Tooltip.Content side="bottom">New note</Tooltip.Content>
 				</Tooltip.Root>
 			{/if}
 		</div>
@@ -1096,7 +1127,7 @@
 				: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}
 			aria-label="Trash"
 			onclick={() => {
-				notesState.activeTab = 'tasks';
+				// keep the active tab so the trash opens on the same tab's items
 				closeMobile();
 			}}
 		>
@@ -1122,7 +1153,7 @@
 				: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}
 			aria-label="Settings"
 			onclick={() => {
-				notesState.activeTab = 'tasks';
+				// keep the active tab; settings renders on its own route
 				closeMobile();
 			}}
 		>

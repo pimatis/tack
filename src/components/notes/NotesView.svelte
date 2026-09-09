@@ -13,11 +13,24 @@
 	import CodeIcon from '@lucide/svelte/icons/code';
 	import HighlighterIcon from '@lucide/svelte/icons/highlighter';
 	import LinkIcon from '@lucide/svelte/icons/link';
+	import StatusIcon from '../StatusIcon.svelte';
+	import { TaskPageState } from '$lib/task/taskState.svelte';
+	import type { Task } from '$lib/types/task';
+	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
 
-	// flush pending edits when leaving the editor
+	// flush pending edits when leaving the editor; Cmd/Ctrl+S saves immediately
 	onMount(() => {
 		void notesState.init();
-		return () => notesState.flushPendingSave();
+		const unregisterSave = getShortcutRegistry().register({
+			id: 'save-note',
+			// fires while typing in the editor textarea
+			allowInInput: true,
+			run: () => notesState.flushPendingSave()
+		});
+		return () => {
+			unregisterSave();
+			notesState.flushPendingSave();
+		};
 	});
 
 	const noteTitle = $derived(
@@ -77,7 +90,13 @@
 
 	function handleEditorInput(event: Event) {
 		notesState.scheduleSave();
-		updateSlashMenu((event.currentTarget as HTMLTextAreaElement).selectionStart ?? 0);
+		const caret = (event.currentTarget as HTMLTextAreaElement).selectionStart ?? 0;
+		updateSlashMenu(caret);
+		if (slashOpen) {
+			if (mentionOpen) mentionOpen = false;
+		} else {
+			updateMentionMenu(caret);
+		}
 	}
 
 	function updateSlashMenu(caret: number) {
@@ -121,6 +140,107 @@
 			editorEl?.setSelectionRange(caret, caret);
 			notesState.scheduleSave();
 		});
+	}
+
+	// @-mention menu: "@query" opens a task/note picker anchored to the caret;
+	// picked items become @[label](task:ID) / @[label](note:PATH) links
+	type MentionItem = { kind: 'task' | 'note'; label: string; href: string; task?: Task };
+	let mentionOpen = $state(false);
+	let mentionStart = $state(0);
+	let mentionCaret = $state(0);
+	let mentionAnchor = $state({ x: 0, y: 0 });
+	let mentionFilter = $state('');
+	const mentionItems = $derived.by(() => {
+		const query = mentionFilter.toLowerCase().trim();
+		const tasks: MentionItem[] = TaskPageState.get()
+			.tasks.filter((t) => !t.deletedAt && t.title.toLowerCase().includes(query))
+			.slice(0, 5)
+			.map((t) => ({
+				kind: 'task' as const,
+				// brackets would break the markdown link label
+				label: t.title.replace(/[[\]]/g, ''),
+				href: `task:${t.id}`,
+				task: t
+			}));
+		const notes: MentionItem[] = notesState.notes
+			.filter((n) => n.name.replace(/\.md$/, '').toLowerCase().includes(query))
+			.slice(0, 5)
+			.map((n) => ({
+				kind: 'note' as const,
+				label: n.name.replace(/\.md$/, '').replace(/[[\]]/g, ''),
+				href: `note:${encodeURIComponent(n.path)}`
+			}));
+		// interleave tasks and notes so both kinds stay visible within the cap
+		const mixed: MentionItem[] = [];
+		for (let i = 0; i < Math.max(tasks.length, notes.length); i++) {
+			if (tasks[i]) mixed.push(tasks[i]);
+			if (notes[i]) mixed.push(notes[i]);
+		}
+		return mixed.slice(0, 5);
+	});
+
+	function updateMentionMenu(caret: number) {
+		const textarea = editorEl;
+		if (!textarea) return;
+		mentionCaret = caret;
+		const before = notesState.content.slice(0, caret);
+		// the mention token must not be mid-word: "@query" after start or whitespace
+		const match = before.match(/(?:^|\s)@([^@\s]*)$/);
+		if (!match) {
+			if (mentionOpen) mentionOpen = false;
+			return;
+		}
+		mentionStart = caret - match[1].length - 1;
+		mentionFilter = match[1];
+		if (TaskPageState.get().tasks.length === 0) void TaskPageState.get().refresh();
+
+		// same caret math as the slash menu
+		const beforeToken = notesState.content.slice(0, mentionStart);
+		const line = beforeToken.split('\n').length - 1;
+		const col = beforeToken.length - (beforeToken.lastIndexOf('\n') + 1);
+		const lineHeight = 21; // matches leading-[21px]
+		const charWidth = 7.8; // 13px monospace
+		mentionAnchor = {
+			x: Math.min(12 + col * charWidth, Math.max(textarea.clientWidth - 270, 0)),
+			y: Math.min(
+				12 + (line + 1) * lineHeight - textarea.scrollTop,
+				Math.max(textarea.clientHeight - 240, 0)
+			)
+		};
+		mentionOpen = true;
+	}
+
+	function applyMention(item: MentionItem) {
+		// replace the "@query" token with the mention link
+		notesState.content =
+			notesState.content.slice(0, mentionStart) +
+			`@[${item.label}](${item.href})` +
+			notesState.content.slice(mentionCaret);
+		mentionOpen = false;
+		void tick().then(() => {
+			editorEl?.focus();
+			const caret = mentionStart + item.label.length + item.href.length + 5;
+			editorEl?.setSelectionRange(caret, caret);
+			notesState.scheduleSave();
+		});
+	}
+
+	// preview clicks on mention links open the task dialog or the note
+	async function openMention(href: string) {
+		if (href.startsWith('note:')) {
+			notesState.activeTab = 'notes';
+			void notesState.openNote(decodeURIComponent(href.slice(5)));
+			return;
+		}
+		if (href.startsWith('task:')) {
+			const id = decodeURIComponent(href.slice(5));
+			const state = TaskPageState.get();
+			if (state.tasks.length === 0) await state.refresh();
+			const task = state.tasks.find((t) => t.id === id);
+			if (!task) return;
+			notesState.activeTab = 'tasks';
+			state.handleEdit(task);
+		}
 	}
 
 	// notion-style selection effects, applied by wrapping the markdown selection
@@ -382,7 +502,11 @@
 		{/if}
 	{:else if notesState.preview}
 		<div class="min-h-0 flex-1 overflow-auto pl-1">
-			<MarkdownRenderer content={notesState.content} onToggleLine={toggleTodoLine} />
+			<MarkdownRenderer
+				content={notesState.content}
+				onToggleLine={toggleTodoLine}
+				onOpenMention={(href) => void openMention(href)}
+			/>
 		</div>
 	{:else}
 		<!-- editor; typing "/" at line start opens the notion-style block menu,
@@ -466,6 +590,71 @@
 					{#if filteredBlocks.length === 0}
 						<div class="px-3 py-2 text-[12px] text-muted-foreground">No blocks found</div>
 					{/if}
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
+			<DropdownMenu.Root bind:open={mentionOpen}>
+				<DropdownMenu.Trigger
+					class="absolute h-0 w-0 outline-none"
+					style="left: {mentionAnchor.x}px; top: {mentionAnchor.y}px"
+					aria-label="Mentions"
+				/>
+				<DropdownMenu.Content class="w-64 p-0" collisionPadding={8}>
+					<div class="flex items-center gap-2 border-b border-border px-3">
+						<svg
+							class="shrink-0 text-muted-foreground/50"
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							><path
+								fill="currentColor"
+								d="M2 10.5a8.5 8.5 0 1 1 15.176 5.262l3.652 3.652a1 1 0 0 1-1.414 1.414l-3.652-3.652A8.5 8.5 0 0 1 2 10.5M10.5 6a1 1 0 0 0 0 2 2.5 2.5 0 0 1 2.5 2.5 1 1 0 1 0 2 0A4.5 4.5 0 0 0 10.5 6"
+							/></svg
+						>
+						<input
+							bind:value={mentionFilter}
+							placeholder="Search tasks and notes..."
+							spellcheck="false"
+							class="h-9 w-full bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50"
+							onkeydown={(e) => {
+								// enter picks the first match, like notion
+								if (e.key === 'Enter') {
+									e.preventDefault();
+									if (mentionItems[0]) applyMention(mentionItems[0]);
+								}
+							}}
+						/>
+					</div>
+					<div class="p-1">
+						{#each mentionItems as item (item.href)}
+							<DropdownMenu.Item class="gap-2.5 py-1.5" onSelect={() => applyMention(item)}>
+								{#if item.task}
+									<StatusIcon status={item.task.status} size={14} />
+								{:else}
+									<svg
+										class="shrink-0 text-muted-foreground"
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										><path
+											fill="currentColor"
+											d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.17a2 2 0 0 0-.59-1.42l-4.58-4.58A2 2 0 0 0 13.41 2zm7.5 1.13L18.87 8H13.5z"
+										/></svg
+									>
+								{/if}
+								<span class="truncate text-[13px]">{item.label}</span>
+								<span
+									class="ml-auto shrink-0 text-[10px] tracking-wide text-muted-foreground uppercase"
+								>
+									{item.kind}
+								</span>
+							</DropdownMenu.Item>
+						{/each}
+						{#if mentionItems.length === 0}
+							<div class="px-3 py-2 text-[12px] text-muted-foreground">No matches</div>
+						{/if}
+					</div>
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
 		</div>
