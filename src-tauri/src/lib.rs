@@ -339,9 +339,10 @@ fn start_db_reporter(app: tauri::AppHandle, hub: Arc<live::LiveHub>) {
 // resolvers for the bundled cli binary and its symlink target (macOS only)
 const PATH_CANDIDATES: [&str; 2] = ["/usr/local/bin", "/opt/homebrew/bin"];
 
-fn bundled_cli_bin(app: &tauri::AppHandle) -> Option<PathBuf> {
-    let resource_dir = app.path().resource_dir().ok()?;
-    let cli_bin = resource_dir.join("tack-cli");
+fn bundled_cli_bin() -> Option<PathBuf> {
+    // sidecar is copied next to the executable in both dev and bundled apps
+    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    let cli_bin = exe_dir.join("tack-cli");
     cli_bin.exists().then_some(cli_bin)
 }
 
@@ -376,26 +377,28 @@ fn ensure_cli_on_path(target: &std::path::Path) {
     let Some(home) = dirs::home_dir() else {
         return;
     };
-    let shell_rc = home.join(".zshrc");
     let dir_str = dir.to_string_lossy().to_string();
-    let already = std::fs::read_to_string(&shell_rc)
-        .map(|c| c.contains(&dir_str))
-        .unwrap_or(false);
-    if already {
-        return;
-    }
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&shell_rc) {
-        use std::io::Write;
-        let _ = writeln!(f, "export PATH=\"{dir_str}:$PATH\"");
+    for rc in [".zshrc", ".bashrc"] {
+        let shell_rc = home.join(rc);
+        let already = std::fs::read_to_string(&shell_rc)
+            .map(|c| c.contains(&dir_str))
+            .unwrap_or(false);
+        if already {
+            continue;
+        }
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&shell_rc) {
+            use std::io::Write;
+            let _ = writeln!(f, "export PATH=\"{dir_str}:$PATH\"");
+        }
     }
 }
 
 // place a symlink to the bundled cli on PATH so `tack` works from any terminal
-fn install_cli_link(app: &tauri::AppHandle) -> Result<bool, String> {
+fn install_cli_link() -> Result<bool, String> {
     if !cfg!(target_os = "macos") {
         return Ok(false);
     }
-    let Some(cli_bin) = bundled_cli_bin(app) else {
+    let Some(cli_bin) = bundled_cli_bin() else {
         return Err("bundled cli not found".to_string());
     };
     let Some(target) = cli_symlink_target() else {
@@ -410,8 +413,8 @@ fn install_cli_link(app: &tauri::AppHandle) -> Result<bool, String> {
 }
 
 #[tauri::command]
-fn install_cli(app: tauri::AppHandle) -> Result<bool, String> {
-    install_cli_link(&app)
+fn install_cli() -> Result<bool, String> {
+    install_cli_link()
 }
 
 #[tauri::command]
@@ -447,9 +450,8 @@ pub fn run() {
             let handle = app.handle().clone();
             // fs + shellrc work: keep it off the critical path so the webview
             // spawns as early as possible
-            let cli_handle = handle.clone();
-            std::thread::spawn(move || {
-                let _ = install_cli_link(&cli_handle);
+            std::thread::spawn(|| {
+                let _ = install_cli_link();
             });
             // migrate before the webview loads the db, so the sql plugin
             // never sees a version it does not know

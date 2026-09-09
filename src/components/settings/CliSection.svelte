@@ -40,36 +40,19 @@
 </script>
 
 <div class="flex flex-wrap items-center justify-between gap-3">
-	<div class="flex min-w-0 items-start gap-3">
-		<div
-			class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/30"
-		>
-			<svg
-				width="17"
-				height="17"
-				viewBox="0 0 24 24"
-				fill="currentColor"
-				class="text-muted-foreground"
-				><path
-					fill="currentColor"
-					d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm-3 11h-2a1 1 0 1 0 0 2h2a1 1 0 1 0 0-2M9.05 8.465a1 1 0 0 0-1.497 1.32l.083.094L9.757 12l-2.12 2.121a1 1 0 0 0 1.32 1.498l.093-.083 2.829-2.829a1 1 0 0 0 .083-1.32l-.083-.094z"
-				/></svg
-			>
-		</div>
-		<div class="min-w-0">
-			<p class="text-[13px] font-medium">Install CLI</p>
-			<p class="text-xs text-muted-foreground">
-				Add the <code class="font-mono text-foreground/80">tack</code> command to your PATH so you can
-				use it from any terminal
+	<div class="min-w-0">
+		<p class="text-[13px] font-medium">Install CLI</p>
+		<p class="text-xs text-muted-foreground">
+			Add the <code class="font-mono text-foreground/80">tack</code> command to your PATH so you can use
+			it from any terminal
+		</p>
+		{#if installingFailed}
+			<p class="mt-1 text-xs text-destructive">
+				{installError
+					? installError
+					: "Couldn't install the CLI. The tack command needs a writable bin directory."}
 			</p>
-			{#if installingFailed}
-				<p class="mt-1 text-xs text-destructive">
-					{installError
-						? installError
-						: "Couldn't install the CLI. The tack command needs a writable bin directory."}
-				</p>
-			{/if}
-		</div>
+		{/if}
 	</div>
 
 	<div class="flex shrink-0 items-center gap-2">

@@ -13,6 +13,7 @@
 		createBackup,
 		restoreBackup,
 		deleteBackup,
+		deleteAllBackups,
 		type BackupInfo
 	} from '$lib/backup/backup.service';
 
@@ -24,6 +25,8 @@
 	let restoring = $state(false);
 	let deleteTarget = $state<BackupInfo | null>(null);
 	let deleting = $state(false);
+	let deleteAllOpen = $state(false);
+	let deletingAll = $state(false);
 	let settings = $state(getSettings());
 
 	const intervalOptions = [
@@ -120,6 +123,20 @@
 		}
 		deleting = false;
 		deleteTarget = null;
+	}
+
+	async function handleDeleteAll() {
+		deletingAll = true;
+		error = null;
+		try {
+			await deleteAllBackups();
+			await load();
+			deleteAllOpen = false;
+		} catch (e) {
+			console.error('delete all failed', e);
+			error = 'Failed to delete snapshots';
+		}
+		deletingAll = false;
 	}
 
 	onMount(() => {
@@ -241,6 +258,19 @@
 				{/if}
 			</span>
 			<span class="ml-auto flex items-center gap-1">
+				{#if !loading && backups.length > 0}
+					<Button
+						variant="ghost"
+						size="sm"
+						class="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+						onclick={(e) => {
+							e.stopPropagation();
+							deleteAllOpen = true;
+						}}
+					>
+						Delete all
+					</Button>
+				{/if}
 				<Button
 					variant="ghost"
 					size="sm"
@@ -384,6 +414,41 @@
 				disabled={deleting}
 			>
 				{deleting ? 'Deleting...' : 'Delete'}
+			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
+
+<!-- delete all dialog -->
+<Dialog.Root
+	open={deleteAllOpen}
+	onOpenChange={(open) => {
+		if (!open && !deletingAll) deleteAllOpen = false;
+	}}
+>
+	<Dialog.Content>
+		<Dialog.Header>
+			<Dialog.Title>Delete all snapshots</Dialog.Title>
+			<Dialog.Description>
+				This will permanently remove all {backups.length} snapshots. Your current data is not affected.
+			</Dialog.Description>
+		</Dialog.Header>
+		<Dialog.Footer>
+			<Button
+				variant="outline"
+				size="sm"
+				onclick={() => (deleteAllOpen = false)}
+				disabled={deletingAll}
+			>
+				Cancel
+			</Button>
+			<Button
+				variant="destructive"
+				size="sm"
+				onclick={() => void handleDeleteAll()}
+				disabled={deletingAll}
+			>
+				{deletingAll ? 'Deleting...' : 'Delete all'}
 			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>

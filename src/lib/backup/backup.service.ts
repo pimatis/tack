@@ -49,6 +49,11 @@ export function deleteBackup(name: string): Promise<void> {
 	return http(`/api/backups/${encodeURIComponent(name)}`, { method: 'DELETE' });
 }
 
+export async function deleteAllBackups(): Promise<void> {
+	const backups = await listBackups();
+	await Promise.all(backups.map((b) => deleteBackup(b.name)));
+}
+
 async function runScheduledBackup(): Promise<string | null> {
 	const { backupEnabled, backupIntervalHours, backupKeepCount } = getSettings();
 	if (!backupEnabled) return null;
