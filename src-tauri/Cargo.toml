@@ -9,7 +9,7 @@ opt-level = "s"
 
 [package]
 name = "tack"
-version = "0.1.5"
+version = "0.1.6"
 description = "A desktop task manager for humans and AI agents"
 authors = ["Pimatis"]
 edition = "2021"
