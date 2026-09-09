@@ -18,12 +18,18 @@
 	import type { Task } from '$lib/types/task';
 	import type { Project } from '$lib/types/project';
 	import { getSettings } from '$lib/stores/settings';
-	import { onDbChanged } from '$lib/db/client';
+	import { onDbChanged, isTauri } from '$lib/db/client';
 	import { searchTaskIds } from '$lib/search/fts.service';
 	import { issueId } from '$lib/task/utils';
+	import { listTrashedNotes, restoreTrashedNote, purgeNote, purgeAllNotes } from '$lib/notes/trash';
+	import type { NoteInfo } from '$lib/notes/notesState.svelte';
+
+	type TrashFilter = 'all' | 'tasks' | 'notes';
 
 	let tasks = $state<Task[]>([]);
 	let projects = $state<Project[]>([]);
+	let trashedNotes = $state<NoteInfo[]>([]);
+	let typeFilter = $state<TrashFilter>('all');
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let searchQuery = $state('');
@@ -32,12 +38,23 @@
 	let appSettings = $state(getSettings());
 
 	let filteredTasks = $derived.by(() => {
+		if (typeFilter === 'notes') return [];
 		const q = searchQuery.toLowerCase().trim();
 		if (!q) return tasks;
 		// fts match (title, description, subtasks) with in-memory fallback while pending
 		if (ftsIds) return tasks.filter((t) => ftsIds?.has(t.id));
 		return tasks.filter((t) => `${t.title} ${t.description ?? ''}`.toLowerCase().includes(q));
 	});
+
+	let filteredNotes = $derived.by(() => {
+		if (typeFilter === 'tasks') return [];
+		const q = searchQuery.toLowerCase().trim();
+		if (!q) return trashedNotes;
+		return trashedNotes.filter((n) => n.name.toLowerCase().includes(q));
+	});
+
+	let totalCount = $derived(tasks.length + trashedNotes.length);
+	let filteredCount = $derived(filteredTasks.length + filteredNotes.length);
 
 	$effect(() => {
 		const query = searchQuery;
@@ -76,6 +93,9 @@
 			const [t, p] = await Promise.all([findTrashed(), findProjects()]);
 			tasks = t;
 			projects = p;
+			// deleted notes live as files in <notes folder>/trash
+			const folder = isTauri() ? localStorage.getItem('tack-notes-folder') : null;
+			trashedNotes = folder ? await listTrashedNotes(folder) : [];
 		} catch (e) {
 			error = 'Failed to load trash';
 			console.error(e);
@@ -105,9 +125,35 @@
 		}
 	}
 
+	async function handleRestoreNote(note: NoteInfo) {
+		const folder = localStorage.getItem('tack-notes-folder');
+		if (!folder) return;
+		try {
+			await restoreTrashedNote(folder, note.name);
+			await load();
+		} catch (e) {
+			error = 'Failed to restore note';
+			console.error(e);
+		}
+	}
+
+	async function handlePurgeNote(note: NoteInfo) {
+		const folder = localStorage.getItem('tack-notes-folder');
+		if (!folder) return;
+		try {
+			await purgeNote(folder, note.name);
+			await load();
+		} catch (e) {
+			error = 'Failed to delete note';
+			console.error(e);
+		}
+	}
+
 	async function handleEmptyTrash() {
 		try {
 			await emptyTrash();
+			const folder = localStorage.getItem('tack-notes-folder');
+			if (folder) await purgeAllNotes(folder);
 			emptyConfirmOpen = false;
 			await load();
 			window.dispatchEvent(new Event('tasks-changed'));
@@ -136,19 +182,22 @@
 		<div class="min-w-0">
 			<div class="flex items-center gap-3">
 				<h1 class="text-base font-semibold tracking-tight sm:text-lg">Trash</h1>
-				{#if !loading && tasks.length > 0}
+				{#if !loading && totalCount > 0}
 					<div class="flex items-center gap-1.5 text-[12px] text-muted-foreground">
 						<span class="size-1.5 rounded-full bg-foreground/30"></span>
-						<span>{tasks.length} {tasks.length === 1 ? 'item' : 'items'}</span>
+						<span
+							>{typeFilter === 'all' ? totalCount : filteredCount}
+							{(typeFilter === 'all' ? totalCount : filteredCount) === 1 ? 'item' : 'items'}</span
+						>
 					</div>
 				{/if}
 			</div>
 			<p class="truncate text-xs text-muted-foreground sm:text-sm">
-				Deleted tasks can be restored or permanently removed
+				Deleted tasks and notes can be restored or permanently removed
 			</p>
 		</div>
 		<div class="flex shrink-0 items-center gap-2">
-			{#if tasks.length > 0}
+			{#if totalCount > 0}
 				<Dialog.Root bind:open={emptyConfirmOpen}>
 					<Dialog.Trigger>
 						{#snippet child({ props })}
@@ -172,8 +221,8 @@
 						<Dialog.Header>
 							<Dialog.Title>Empty trash</Dialog.Title>
 							<Dialog.Description>
-								This will permanently delete {tasks.length}
-								{tasks.length === 1 ? 'task' : 'tasks'} from the trash. This cannot be undone.
+								This will permanently delete {totalCount}
+								{totalCount === 1 ? 'item' : 'items'} from the trash. This cannot be undone.
 							</Dialog.Description>
 						</Dialog.Header>
 						<Dialog.Footer>
@@ -222,7 +271,7 @@
 					<p class="text-[13px] text-destructive" role="alert">{error}</p>
 					<Button variant="outline" size="sm" onclick={load}>Try again</Button>
 				</div>
-			{:else if tasks.length === 0}
+			{:else if totalCount === 0}
 				<div class="flex flex-col items-center justify-center gap-5 py-28">
 					<div class="flex size-14 items-center justify-center rounded-2xl bg-muted/50">
 						<svg
@@ -239,11 +288,13 @@
 					</div>
 					<div class="flex flex-col items-center gap-1.5">
 						<p class="text-[15px] font-semibold text-foreground">Trash is empty</p>
-						<p class="text-[13px] text-muted-foreground">Deleted tasks will appear here</p>
+						<p class="text-[13px] text-muted-foreground">
+							Deleted tasks and notes will appear here
+						</p>
 					</div>
 				</div>
 			{:else}
-				<!-- search -->
+				<!-- search + type filter -->
 				<div class="mb-4 flex items-center gap-2">
 					<div class="relative flex-1">
 						<svg
@@ -260,6 +311,22 @@
 							bind:value={searchQuery}
 							class="h-8 w-full rounded-lg border border-input bg-transparent pr-3 pl-8 text-[13px] text-foreground transition-all outline-none placeholder:text-muted-foreground/50 dark:bg-input/30"
 						/>
+					</div>
+					<div
+						class="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-muted/20 p-0.5"
+					>
+						{#each [['all', 'All'], ['tasks', 'Tasks'], ['notes', 'Notes']] as const as [value, label] (value)}
+							<button
+								type="button"
+								class="flex h-7 items-center rounded-md px-2.5 text-[12px] font-medium transition-colors {typeFilter ===
+								value
+									? 'bg-muted text-foreground'
+									: 'text-muted-foreground hover:text-foreground'}"
+								onclick={() => (typeFilter = value)}
+							>
+								{label}
+							</button>
+						{/each}
 					</div>
 				</div>
 
@@ -344,7 +411,79 @@
 					{/each}
 				</div>
 
-				{#if filteredTasks.length === 0}
+				<!-- note list -->
+				{#if filteredNotes.length > 0}
+					<div class="flex flex-col">
+						{#each filteredNotes as note (note.path)}
+							<ContextMenu.Root>
+								<ContextMenu.Trigger class="contents">
+									<article
+										class="group/task -mx-2 flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-muted/40"
+									>
+										<!-- file icon -->
+										<span class="flex size-5 shrink-0 items-center justify-center">
+											<svg
+												class="text-muted-foreground"
+												width="14"
+												height="14"
+												viewBox="0 0 24 24"
+												fill="none"
+												><path
+													fill="currentColor"
+													d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.17a2 2 0 0 0-.59-1.42l-4.58-4.58A2 2 0 0 0 13.41 2zm7.5 1.13L18.87 8H13.5zM8 12h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2m0 4h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2"
+												/></svg
+											>
+										</span>
+
+										<!-- type badge -->
+										<span
+											class="shrink-0 font-mono text-[11px] font-medium text-muted-foreground/50"
+											>NOTE</span
+										>
+
+										<!-- title -->
+										<span class="min-w-0 flex-1 truncate text-[13px] text-foreground/70">
+											{note.name.replace(/\.md$/, '')}
+										</span>
+
+										<!-- deleted date -->
+										<span
+											class="hidden w-16 shrink-0 text-right text-[11px] text-muted-foreground/40 sm:block"
+										>
+											{formatDate(new Date(note.modified).toISOString())}
+										</span>
+									</article>
+								</ContextMenu.Trigger>
+								<ContextMenu.Content>
+									<ContextMenu.Item onclick={() => void handleRestoreNote(note)}>
+										<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+											><path
+												fill="currentColor"
+												d="M2.614 5.426A1.5 1.5 0 0 1 4 4.5h10a7.5 7.5 0 1 1 0 15H5a1.5 1.5 0 0 1 0-3h9a4.5 4.5 0 1 0 0-9H7.621l.94.94a1.5 1.5 0 0 1-2.122 2.12l-3.5-3.5a1.5 1.5 0 0 1-.325-1.634Z"
+											/></svg
+										>
+										Restore
+									</ContextMenu.Item>
+									<ContextMenu.Separator />
+									<ContextMenu.Item
+										variant="destructive"
+										onclick={() => void handlePurgeNote(note)}
+									>
+										<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+											><path
+												fill="currentColor"
+												d="M14.28 2a2 2 0 0 1 1.897 1.368L16.72 5H20a1 1 0 1 1 0 2l-.003.071-.867 12.143A3 3 0 0 1 16.138 22H7.862a3 3 0 0 1-2.992-2.786L4.003 7.07A1.01 1.01 0 0 1 4 7a1 1 0 0 1 0-2h3.28l.543-1.632A2 2 0 0 1 9.721 2zM9 10a1 1 0 0 0-.993.883L8 11v6a1 1 0 0 0 1.993.117L10 17v-6a1 1 0 0 0-1-1m6 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0v-6a1 1 0 0 0-1-1m-.72-6H9.72l-.333 1h5.226z"
+											/></svg
+										>
+										Delete forever
+									</ContextMenu.Item>
+								</ContextMenu.Content>
+							</ContextMenu.Root>
+						{/each}
+					</div>
+				{/if}
+
+				{#if filteredCount === 0}
 					<div class="flex flex-col items-center gap-3 py-16">
 						<p class="text-[13px] text-muted-foreground">No matching items.</p>
 						<Button

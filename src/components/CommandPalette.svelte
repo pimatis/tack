@@ -9,6 +9,7 @@
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
 	import { issueId } from '$lib/task/utils';
 	import { getSettings } from '$lib/stores/settings';
+	import { notesState } from '$lib/notes/notesState.svelte';
 	import StatusIcon from './StatusIcon.svelte';
 
 	let open = $state(false);
@@ -62,9 +63,18 @@
 	onMount(() => {
 		const registry = getShortcutRegistry();
 
+		// in the notes tab the palette shortcut opens the notes search instead
+		const openPalette = () => {
+			if (notesState.activeTab === 'notes') {
+				window.dispatchEvent(new Event('open-notes-search'));
+				return;
+			}
+			open = !open;
+		};
+
 		const unregisterCommandPalette = registry.register({
 			id: 'command-palette',
-			run: () => (open = !open)
+			run: openPalette
 		});
 
 		const unregisterNewTask = registry.register({
@@ -83,7 +93,7 @@
 			run: () => newProject()
 		});
 
-		const handleOpenPalette = () => (open = true);
+		const handleOpenPalette = openPalette;
 		window.addEventListener('open-command-palette', handleOpenPalette);
 		return () => {
 			unregisterCommandPalette();

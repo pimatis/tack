@@ -17,6 +17,9 @@
 	import { startLiveManager } from '$lib/live/live.service';
 	import { isLiveAuthRequired } from '$lib/live/auth.service';
 	import LiveAuthDialog from '../components/LiveAuthDialog.svelte';
+	import NotesView from '../components/notes/NotesView.svelte';
+	import NotesSearchDialog from '../components/notes/NotesSearchDialog.svelte';
+	import { notesState } from '$lib/notes/notesState.svelte';
 	import { isTauri } from '$lib/db/client';
 	import { invoke } from '@tauri-apps/api/core';
 
@@ -58,6 +61,9 @@
 			settings = getSettings();
 		};
 		window.addEventListener('settings-changed', onSettingsChanged);
+
+		// notes: restore folder + list notes once
+		void notesState.init();
 
 		const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 		const handleThemeChange = () => {
@@ -127,11 +133,16 @@
 						{/if}
 					</div>
 					<div class="m-2 min-h-0 flex-1 overflow-auto rounded-xl border border-border bg-card">
-						{@render children()}
+						{#if notesState.activeTab === 'notes'}
+							<NotesView />
+						{:else}
+							{@render children()}
+						{/if}
 					</div>
 				</main>
 			</div>
 			<CommandPalette />
+			<NotesSearchDialog />
 		</Shortcuts>
 	</Tooltip.Provider>
 {/if}

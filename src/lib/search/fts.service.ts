@@ -1,7 +1,7 @@
 import { getDb } from '$lib/db/client';
 
 // wrap terms as fts5 phrases so user input is matched as literal text
-function toFtsQuery(query: string): string {
+export function toFtsQuery(query: string): string {
 	return query
 		.trim()
 		.split(/\s+/)
