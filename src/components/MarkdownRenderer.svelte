@@ -8,9 +8,18 @@
 		class?: string;
 		onToggleLine?: (line: number) => void;
 		onOpenMention?: (href: string) => void;
+		onMentionHover?: (href: string, anchor: HTMLElement) => void;
+		onMentionLeave?: () => void;
 	};
 
-	let { content, class: className = '', onToggleLine, onOpenMention }: Props = $props();
+	let {
+		content,
+		class: className = '',
+		onToggleLine,
+		onOpenMention,
+		onMentionHover,
+		onMentionLeave
+	}: Props = $props();
 	let html = $derived(renderMarkdown(content));
 	let container = $state<HTMLElement | null>(null);
 
@@ -37,6 +46,24 @@
 			setTimeout(() => (button.innerHTML = COPY_ICON), 1500);
 		} catch {
 			// clipboard unavailable (permissions) - stay quiet
+		}
+	}
+
+	// hover delegation for mention previews; the anchor element lets the
+	// parent position the preview card next to the link
+	function handleMouseOver(event: MouseEvent) {
+		const mention = (event.target as HTMLElement).closest?.('a[href^="task:"], a[href^="note:"]');
+		if (mention instanceof HTMLAnchorElement) {
+			onMentionHover?.(mention.getAttribute('href') ?? '', mention);
+		}
+	}
+
+	function handleMouseOut(event: MouseEvent) {
+		const from = event.target as HTMLElement;
+		const to = event.relatedTarget as HTMLElement | null;
+		const mention = from.closest?.('a[href^="task:"], a[href^="note:"]');
+		if (mention instanceof HTMLAnchorElement && !(to && mention.contains(to))) {
+			onMentionLeave?.();
 		}
 	}
 
@@ -68,10 +95,12 @@
 
 {#if html}
 	<!-- the injected copy buttons are real <button>s; the div is only a click relay -->
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions, a11y_mouse_events_have_key_events -->
 	<div
 		bind:this={container}
 		onclick={handleClick}
+		onmouseover={handleMouseOver}
+		onmouseout={handleMouseOut}
 		class="prose prose-sm max-w-none prose-invert {className}"
 	>
 		<!-- renderMarkdown escapes all user input; {@html} is safe here -->

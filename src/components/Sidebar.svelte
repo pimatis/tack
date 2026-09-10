@@ -329,6 +329,21 @@
 			id: 'toggle-sidebar',
 			run: () => toggleSidebar()
 		});
+		// notes shortcuts mirror the task ones: only in the notes tab, not while typing
+		const notesShortcutReady = () =>
+			notesState.activeTab === 'notes' &&
+			window.location.pathname === '/' &&
+			!document.querySelector("[role='dialog'] input");
+		const unregisterNewNote = registry?.register({
+			id: 'new-note',
+			enabled: notesShortcutReady,
+			run: () => void notesState.createNoteIn(null)
+		});
+		const unregisterTodayNote = registry?.register({
+			id: 'today-note',
+			enabled: notesShortcutReady,
+			run: () => void notesState.openTodayNote()
+		});
 
 		return () => {
 			window.clearTimeout(updateTimer);
@@ -346,6 +361,8 @@
 			window.removeEventListener('clear-filters', clearActiveState);
 			window.removeEventListener('open-note-create-dialog', openNoteCreate);
 			unregisterToggleSidebar?.();
+			unregisterNewNote?.();
+			unregisterTodayNote?.();
 		};
 	});
 </script>

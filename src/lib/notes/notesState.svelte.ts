@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { isTauri } from '$lib/db/client';
+import { reorderArray } from '$lib/dnd';
 import { reindexNotes, indexNote } from './search';
 
 export type NoteInfo = { name: string; path: string; modified: number };
@@ -34,14 +35,22 @@ class NotesPageState {
 	sortBy = $state<'modified' | 'name' | 'manual'>('modified');
 	visitCounts = $state<Record<string, number>>({});
 	selectedPath = $state<string | null>(null);
+	// open editor tabs (ordered note paths); only the active tab loads content
+	noteTabs = $state<string[]>([]);
 	content = $state('');
 	preview = $state(false);
 	loading = $state(false);
 	saving = $state(false);
 	error = $state<string | null>(null);
+	// name-too-long is a user input problem: shown as a dialog, not the error banner
+	nameWarning = $state<string | null>(null);
 
 	// manual drag order per container ('root' or a relative folder path)
 	#manualOrders: Record<string, string[]> = {};
+
+	// per-tab content cache: tab switches skip the disk read; cleared on
+	// refresh so external edits never show stale text
+	#contentCache = new Map<string, string>();
 
 	#initialized = false;
 	#saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -86,12 +95,15 @@ class NotesPageState {
 			this.expandedFolders = {};
 		}
 		if (this.folder) await this.refresh();
+		await this.#loadTabs();
 	}
 
 	async refresh() {
 		if (!this.folder) return;
 		this.loading = true;
 		this.error = null;
+		// disk state changed elsewhere; cached tab contents are no longer trusted
+		this.#contentCache.clear();
 		try {
 			// one recursive listing; notes are grouped by their parent folder
 			const deep = await invoke<NoteInfo[]>('list_notes_deep', { dir: this.folder });
@@ -114,6 +126,12 @@ class NotesPageState {
 			this.#loadPins();
 			this.#loadVisits();
 			this.#loadOrders();
+			// drop tabs for notes that no longer exist on disk
+			const known = new Set(this.allNotes.map((n) => n.path));
+			if (this.noteTabs.some((t) => !known.has(t))) {
+				this.noteTabs = this.noteTabs.filter((t) => known.has(t));
+				this.#persistTabs();
+			}
 			// rebuild the search index so external edits stay searchable; best effort
 			try {
 				const full = await invoke<{ path: string; name: string; content: string }[]>(
@@ -159,7 +177,10 @@ class NotesPageState {
 		if (!this.folder) return;
 		try {
 			const stored = JSON.parse(localStorage.getItem(`tack-notes-visits:${this.folder}`) ?? '{}');
-			this.visitCounts = stored && typeof stored === 'object' ? stored : {};
+			const counts: Record<string, number> = stored && typeof stored === 'object' ? stored : {};
+			// drop entries for notes that no longer exist anywhere
+			const names = new Set([...this.allNotes, ...this.archived].map((n) => n.name));
+			this.visitCounts = Object.fromEntries(Object.entries(counts).filter(([k]) => names.has(k)));
 		} catch {
 			this.visitCounts = {};
 		}
@@ -273,22 +294,135 @@ class NotesPageState {
 		localStorage.setItem(FOLDER_KEY, dir);
 		this.selectedPath = null;
 		this.content = '';
+		this.noteTabs = [];
 		await this.refresh();
+		await this.#loadTabs();
 	}
 
-	async openNote(path: string) {
+	async openNote(path: string, countVisit = true) {
 		if (path === this.selectedPath) return;
 		this.flushPendingSave();
 		this.selectedPath = path;
 		this.preview = false;
 		this.content = '';
 		const name = path.split('/').pop();
-		if (name) this.noteOpened(name);
+		if (name && countVisit) this.noteOpened(name);
+		// cached content makes switching back to a tab instant
+		const cached = this.#contentCache.get(path);
+		if (cached !== undefined) {
+			this.content = cached;
+			if (!this.noteTabs.includes(path)) this.noteTabs = [...this.noteTabs, path];
+			this.#persistTabs();
+			return;
+		}
 		try {
 			this.content = await invoke<string>('read_file', { path });
-		} catch (e) {
-			this.error = String(e);
+			this.#contentCache.set(path, this.content);
+			// the tab is only kept once the read succeeds, so dead links never
+			// leave an empty tab behind
+			if (!this.noteTabs.includes(path)) this.noteTabs = [...this.noteTabs, path];
+			this.#persistTabs();
+		} catch {
+			this.noteTabs = this.noteTabs.filter((t) => t !== path);
+			this.#persistTabs();
+			// drop the selection first so a pending save can't recreate the file as an empty shell
+			this.selectedPath = null;
+			this.content = '';
+			// stale mention link: heal it by finding the note with the same file name
+			const match = name
+				? [...this.allNotes, ...this.archived].find((n) => n.name === name && n.path !== path)
+				: undefined;
+			if (match) {
+				await this.#rewriteMentionLinks(new Map([[path, match.path]]));
+				await this.openNote(match.path, countVisit);
+				return;
+			}
+			this.error = 'Note not found — the link may be outdated (note moved or deleted)';
 		}
+	}
+
+	closeTab(path: string) {
+		const idx = this.noteTabs.indexOf(path);
+		if (idx === -1) return;
+		this.noteTabs = this.noteTabs.filter((t) => t !== path);
+		this.#persistTabs();
+		if (path !== this.selectedPath) return;
+		this.selectedPath = null;
+		this.content = '';
+		// activate the right neighbor, else the left one (vs code behaviour)
+		const next = this.noteTabs[idx] ?? this.noteTabs[idx - 1] ?? null;
+		if (next) void this.openNote(next);
+	}
+
+	cycleTab(delta: 1 | -1) {
+		if (this.noteTabs.length < 2 || !this.selectedPath) return;
+		const idx = this.noteTabs.indexOf(this.selectedPath);
+		const next = this.noteTabs[(idx + delta + this.noteTabs.length) % this.noteTabs.length];
+		if (next) void this.openNote(next);
+	}
+
+	// drag-reorder of the tab strip
+	reorderTabs(dragged: string, target: string, dropPosition: 'before' | 'after') {
+		if (dragged === target) return;
+		this.noteTabs = reorderArray([...this.noteTabs], dragged, target, dropPosition);
+		this.#persistTabs();
+	}
+
+	closeOtherTabs(path: string) {
+		if (!this.noteTabs.includes(path)) return;
+		this.noteTabs = [path];
+		this.#persistTabs();
+		if (this.selectedPath !== path) void this.openNote(path);
+	}
+
+	closeAllTabs() {
+		this.noteTabs = [];
+		this.#persistTabs();
+		this.selectedPath = null;
+		this.content = '';
+	}
+
+	// tabs + active note survive restarts; only paths are stored, content loads on activation
+	#persistTabs() {
+		if (!this.folder) return;
+		try {
+			localStorage.setItem(
+				`tack-notes-tabs:${this.folder}`,
+				JSON.stringify({ paths: this.noteTabs, active: this.selectedPath })
+			);
+		} catch {
+			// storage unavailable (ssr) - not worth reporting
+		}
+	}
+
+	async #loadTabs() {
+		if (!this.folder || !isTauri()) return;
+		let paths: string[] = [];
+		let active: string | null = null;
+		try {
+			const stored = JSON.parse(localStorage.getItem(`tack-notes-tabs:${this.folder}`) ?? '{}');
+			if (Array.isArray(stored?.paths)) {
+				paths = stored.paths.filter((p: unknown) => typeof p === 'string');
+			}
+			if (typeof stored?.active === 'string') active = stored.active;
+		} catch {
+			// no stored tabs is fine
+		}
+		const known = new Set(this.allNotes.map((n) => n.path));
+		this.noteTabs = paths.filter((p) => known.has(p));
+		const target =
+			active && this.noteTabs.includes(active) ? active : (this.noteTabs.at(-1) ?? null);
+		if (target) await this.openNote(target, false);
+	}
+
+	// open (or create) the daily note named YYYY-MM-DD.md in the notes root
+	async openTodayNote() {
+		if (!this.folder) return;
+		const today = new Date().toLocaleDateString('en-CA');
+		const name = `${today}.md`;
+		const existing = this.allNotes.find((n) => n.name.toLowerCase() === name.toLowerCase());
+		if (existing) await this.openNote(existing.path);
+		else await this.createNoteIn(null, today);
 	}
 
 	scheduleSave() {
@@ -309,6 +443,7 @@ class NotesPageState {
 		this.saving = true;
 		try {
 			await invoke('write_file', { path: this.selectedPath, content: this.content });
+			this.#contentCache.set(this.selectedPath, this.content);
 			const name = this.selectedPath.split('/').pop() ?? '';
 			await indexNote(this.selectedPath, name, this.content).catch(() => {});
 		} catch (e) {
@@ -318,6 +453,63 @@ class NotesPageState {
 		}
 	}
 
+	// mention links embed absolute file paths; after a rename/move every
+	// @[label](note:OLD) reference must be rewritten to the new path
+	async #rewriteMentionLinks(remap: Map<string, string>) {
+		if (!this.folder || remap.size === 0) return;
+		this.flushPendingSave();
+		const all = await invoke<{ path: string; content: string }[]>('read_notes_deep', {
+			dir: this.folder
+		}).catch(() => []);
+		for (const note of all) {
+			let content = note.content;
+			let changed = false;
+			for (const [oldPath, newPath] of remap) {
+				const token = `](note:${encodeURIComponent(oldPath)})`;
+				if (content.includes(token)) {
+					content = content.split(token).join(`](note:${encodeURIComponent(newPath)})`);
+					changed = true;
+				}
+			}
+			if (!changed) continue;
+			await invoke('write_file', { path: note.path, content });
+			// keep the open editor in sync if its content was just rewritten
+			if (note.path === this.selectedPath) this.content = content;
+		}
+		// keep editor tabs pointing at the renamed/moved paths
+		if (this.noteTabs.some((t) => remap.has(t))) {
+			this.noteTabs = this.noteTabs.map((t) => remap.get(t) ?? t);
+			if (this.selectedPath && remap.has(this.selectedPath)) {
+				this.selectedPath = remap.get(this.selectedPath) ?? this.selectedPath;
+			}
+			// keep the content cache consistent with the new paths
+			for (const [oldPath, newPath] of remap) {
+				const content = this.#contentCache.get(oldPath);
+				if (content !== undefined) {
+					this.#contentCache.delete(oldPath);
+					this.#contentCache.set(newPath, content);
+				}
+			}
+			this.#persistTabs();
+		}
+	}
+
+	// remap for every note inside a moved/renamed folder
+	#folderRemap(rel: string, nextRel: string): Map<string, string> {
+		const remap = new Map<string, string>();
+		if (!this.folder) return remap;
+		const rootAbs = this.folder.replace(/\/+$/, '');
+		for (const note of this.allNotes) {
+			if (note.path.startsWith(`${rootAbs}/${rel}/`)) {
+				remap.set(
+					note.path,
+					`${rootAbs}/${nextRel}/${note.path.slice(rootAbs.length + rel.length + 2)}`
+				);
+			}
+		}
+		return remap;
+	}
+
 	// sanitize a user-typed name into a safe file/folder name
 	#sanitizeName(raw: string): string | null {
 		const name = raw
@@ -325,6 +517,17 @@ class NotesPageState {
 			.replace(/[/\\:]/g, '-')
 			.replace(/\.md$/i, '');
 		return name && name !== '.' && name !== '..' ? name : null;
+	}
+
+	// route fs failures: name-too-long warns in a dialog, everything else
+	// goes to the error banner
+	#fail(e: unknown) {
+		const msg = String(e);
+		if (/os error 63|file name too long/i.test(msg)) {
+			this.nameWarning = 'This name is too long for the file system. Please pick a shorter one.';
+			return;
+		}
+		this.error = msg;
 	}
 
 	async createNote() {
@@ -345,11 +548,12 @@ class NotesPageState {
 		try {
 			await invoke('write_file', { path, content: '' });
 		} catch (e) {
-			this.error = String(e);
+			this.#fail(e);
 			return;
 		}
 		await this.refresh();
-		await this.openNote(path);
+		// creating a note is not a visit: "Jump back in" counts only real opens
+		await this.openNote(path, false);
 	}
 
 	// create a folder under the given parent (null = notes root)
@@ -362,7 +566,7 @@ class NotesPageState {
 		try {
 			await invoke('create_folder', { dir: this.folder, name: target });
 		} catch (e) {
-			this.error = String(e);
+			this.#fail(e);
 			return;
 		}
 		await this.refresh();
@@ -383,7 +587,7 @@ class NotesPageState {
 		try {
 			await invoke('rename_note', { oldPath: path, newPath });
 		} catch (e) {
-			this.error = String(e);
+			this.#fail(e);
 			return;
 		}
 		// the note left its container; drop it from every manual order list
@@ -391,6 +595,7 @@ class NotesPageState {
 			this.#manualOrders[key] = this.#manualOrders[key].filter((n) => n !== name);
 		}
 		if (this.selectedPath === path) this.selectedPath = newPath;
+		await this.#rewriteMentionLinks(new Map([[path, newPath]]));
 		await this.refresh();
 	}
 
@@ -413,10 +618,11 @@ class NotesPageState {
 				newPath: `${rootAbs}/${nextRel}`
 			});
 		} catch (e) {
-			this.error = String(e);
+			this.#fail(e);
 			return;
 		}
 		this.#remapKeys(rel, nextRel);
+		await this.#rewriteMentionLinks(this.#folderRemap(rel, nextRel));
 		await this.refresh();
 	}
 
@@ -438,10 +644,11 @@ class NotesPageState {
 				newPath: `${rootAbs}/${nextRel}`
 			});
 		} catch (e) {
-			this.error = String(e);
+			this.#fail(e);
 			return;
 		}
 		this.#remapKeys(rel, nextRel);
+		await this.#rewriteMentionLinks(this.#folderRemap(rel, nextRel));
 		await this.refresh();
 	}
 
@@ -492,10 +699,11 @@ class NotesPageState {
 		try {
 			await invoke('rename_note', { oldPath: path, newPath });
 		} catch (e) {
-			this.error = String(e);
+			this.#fail(e);
 			return;
 		}
 		if (this.selectedPath === path) this.selectedPath = newPath;
+		await this.#rewriteMentionLinks(new Map([[path, newPath]]));
 		await this.refresh();
 	}
 
@@ -505,13 +713,14 @@ class NotesPageState {
 		try {
 			await invoke('rename_note', { oldPath: path, newPath: `${this.archiveDir}/${name}` });
 		} catch (e) {
-			this.error = String(e);
+			this.#fail(e);
 			return;
 		}
 		if (this.selectedPath === path) {
 			this.selectedPath = null;
 			this.content = '';
 		}
+		await this.#rewriteMentionLinks(new Map([[path, `${this.archiveDir}/${name}`]]));
 		await this.refresh();
 	}
 
@@ -524,13 +733,16 @@ class NotesPageState {
 				newPath: `${this.folder.replace(/\/+$/, '')}/${name}`
 			});
 		} catch (e) {
-			this.error = String(e);
+			this.#fail(e);
 			return;
 		}
 		if (this.selectedPath === path) {
 			this.selectedPath = null;
 			this.content = '';
 		}
+		await this.#rewriteMentionLinks(
+			new Map([[path, `${this.folder.replace(/\/+$/, '')}/${name}`]])
+		);
 		await this.refresh();
 	}
 
@@ -541,13 +753,14 @@ class NotesPageState {
 		try {
 			await invoke('rename_note', { oldPath: path, newPath: `${this.trashDir}/${name}` });
 		} catch (e) {
-			this.error = String(e);
+			this.#fail(e);
 			return;
 		}
 		if (this.selectedPath === path) {
 			this.selectedPath = null;
 			this.content = '';
 		}
+		await this.#rewriteMentionLinks(new Map([[path, `${this.trashDir}/${name}`]]));
 		await this.refresh();
 	}
 }

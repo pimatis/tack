@@ -250,3 +250,86 @@ pub fn create_folder(dir: String, name: String) -> Result<(), String> {
 pub fn delete_folder(path: String) -> Result<(), String> {
     std::fs::remove_dir(&path).map_err(|e| e.to_string())
 }
+
+#[derive(Serialize)]
+pub struct NoteDetails {
+    pub kind: String, // "note" | "folder"
+    pub name: String,
+    pub path: String,
+    pub size_bytes: u64,
+    pub created: u64,
+    pub modified: u64,
+    pub word_count: u64,
+    pub note_count: u64, // folder only, recursive
+    pub folder_count: u64,
+}
+
+fn epoch_millis(t: std::io::Result<std::time::SystemTime>) -> u64 {
+    t.ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+// stats for the "get info" dialog: file or folder metadata
+#[tauri::command]
+pub fn note_info(path: String) -> Result<NoteDetails, String> {
+    let p = std::path::Path::new(&path);
+    let meta = std::fs::metadata(p).map_err(|e| e.to_string())?;
+    let name = p
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let (kind, size, note_count, folder_count, word_count);
+    if meta.is_dir() {
+        let mut total = 0u64;
+        let mut notes = 0u64;
+        let mut dirs = 0u64;
+        let mut words = 0u64;
+        let mut stack = vec![p.to_path_buf()];
+        while let Some(d) = stack.pop() {
+            let entries = match std::fs::read_dir(&d) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            for entry in entries.flatten() {
+                let ep = entry.path();
+                if ep.is_dir() {
+                    dirs += 1;
+                    stack.push(ep);
+                } else if ep.extension().map(|e| e == "md").unwrap_or(false) {
+                    notes += 1;
+                    if let Ok(content) = std::fs::read_to_string(&ep) {
+                        words += content.split_whitespace().count() as u64;
+                    }
+                    total += entry.metadata().map(|m| m.len()).unwrap_or(0);
+                }
+            }
+        }
+        kind = "folder".to_string();
+        size = total;
+        note_count = notes;
+        folder_count = dirs;
+        word_count = words;
+    } else {
+        let words = std::fs::read_to_string(p)
+            .map(|c| c.split_whitespace().count() as u64)
+            .unwrap_or(0);
+        kind = "note".to_string();
+        size = meta.len();
+        note_count = 0;
+        folder_count = 0;
+        word_count = words;
+    }
+    Ok(NoteDetails {
+        kind,
+        name,
+        path,
+        size_bytes: size,
+        created: epoch_millis(meta.created()),
+        modified: epoch_millis(meta.modified()),
+        word_count,
+        note_count,
+        folder_count,
+    })
+}

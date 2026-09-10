@@ -1,13 +1,34 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import * as Command from '$lib/components/ui/command/index.js';
 	import { notesState } from '$lib/notes/notesState.svelte';
 	import { searchNotes, type NoteSearchResult } from '$lib/notes/search';
+	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
 	import { isTauri } from '$lib/db/client';
 
 	let open = $state(false);
 	let query = $state('');
 	// null = no query yet, show the plain note list; [] = searched, nothing found
 	let results = $state<NoteSearchResult[] | null>(null);
+
+	// Cmd/Ctrl+P opens the notes search while the notes tab is active
+	onMount(() => {
+		const unregister = getShortcutRegistry().register({
+			id: 'notes-search',
+			enabled: () => notesState.activeTab === 'notes',
+			run: () => (open = true)
+		});
+		return unregister;
+	});
+
+	// folder path of a note relative to the notes root ('' for root notes)
+	function folderLabel(path: string): string {
+		const root = notesState.folder?.replace(/\/+$/, '');
+		if (!root || !path.startsWith(`${root}/`)) return '';
+		const parts = path.slice(root.length + 1).split('/');
+		parts.pop();
+		return parts.join(' / ');
+	}
 
 	$effect(() => {
 		const handleOpen = () => (open = true);
@@ -81,6 +102,11 @@
 						>
 						<span class="flex min-w-0 flex-col">
 							<span class="truncate">{note.name.replace(/\.md$/, '')}</span>
+							{#if folderLabel(note.path)}
+								<span class="truncate text-[10px] text-muted-foreground/60">
+									{folderLabel(note.path)}
+								</span>
+							{/if}
 							{#if note.snippet}
 								<span class="truncate text-[11px] text-muted-foreground">{note.snippet}</span>
 							{/if}

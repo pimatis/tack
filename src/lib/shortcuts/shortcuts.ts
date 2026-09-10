@@ -58,6 +58,41 @@ export const SHORTCUTS: ShortcutDefinition[] = [
 		id: 'save-note',
 		label: 'Save note',
 		keys: [{ key: 's', mod: metaOrCtrl }]
+	},
+	{
+		id: 'new-note',
+		label: 'Create new note',
+		keys: [{ key: 'n', mod: metaOrCtrl, shift: true }]
+	},
+	{
+		id: 'notes-search',
+		label: 'Search notes',
+		keys: [{ key: 'p', mod: metaOrCtrl }]
+	},
+	{
+		id: 'today-note',
+		label: "Open today's note",
+		keys: [{ key: 't', mod: metaOrCtrl, shift: true }]
+	},
+	{
+		id: 'find-note',
+		label: 'Find in note',
+		keys: [{ key: 'f', mod: metaOrCtrl }]
+	},
+	{
+		id: 'close-note-tab',
+		label: 'Close note tab',
+		keys: [{ key: 'w', mod: metaOrCtrl }]
+	},
+	{
+		id: 'next-note-tab',
+		label: 'Next note tab',
+		keys: [{ key: 'Tab', mod: metaOrCtrl }]
+	},
+	{
+		id: 'prev-note-tab',
+		label: 'Previous note tab',
+		keys: [{ key: 'Tab', mod: metaOrCtrl, shift: true }]
 	}
 ];
 
