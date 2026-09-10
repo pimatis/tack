@@ -250,11 +250,11 @@ class NotesPageState {
 	}
 
 	get archiveDir(): string {
-		return this.folder ? `${this.folder.replace(/\/+$/, '')}/archive` : '';
+		return this.folder ? `${this.folder.replace(/\/+$/, '')}/.tack/archive` : '';
 	}
 
 	get trashDir(): string {
-		return this.folder ? `${this.folder.replace(/\/+$/, '')}/trash` : '';
+		return this.folder ? `${this.folder.replace(/\/+$/, '')}/.tack/trash` : '';
 	}
 
 	async pickFolder() {
@@ -343,7 +343,7 @@ class NotesPageState {
 		for (let i = 2; siblings.some((n) => n.name === name); i++) name = `${base} ${i}.md`;
 		const path = parentRel ? `${rootAbs}/${parentRel}/${name}` : `${rootAbs}/${name}`;
 		try {
-			await invoke('write_file', { path, content: `# ${name.replace(/\.md$/, '')}\n\n` });
+			await invoke('write_file', { path, content: '' });
 		} catch (e) {
 			this.error = String(e);
 			return;

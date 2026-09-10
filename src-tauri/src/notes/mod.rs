@@ -98,7 +98,42 @@ fn sanitize_name(name: &str) -> Result<String, String> {
 }
 
 // every subfolder of the notes folder, recursively, as relative paths;
-// archive and trash stay hidden from the tree
+// system folders (archive, trash, .tack) stay hidden from the tree
+fn is_hidden_rel(rel: &str) -> bool {
+    rel == "archive" || rel == "trash" || rel == ".tack" || rel.starts_with(".tack/")
+}
+
+// legacy archive/trash folders lived at the notes root; move them under the
+// hidden .tack system folder so they stay out of the user's notes
+fn migrate_system_dirs(base: &std::path::Path) {
+    let tack = base.join(".tack");
+    for name in ["archive", "trash"] {
+        let legacy = base.join(name);
+        if !legacy.is_dir() {
+            continue;
+        }
+        let target = tack.join(name);
+        if !target.exists() {
+            let _ = std::fs::create_dir_all(&tack);
+            // fast path: nothing to merge, just move the whole folder
+            if std::fs::rename(&legacy, &target).is_ok() {
+                continue;
+            }
+        }
+        // target exists: merge file by file, never overwrite
+        let _ = std::fs::create_dir_all(&target);
+        if let Ok(entries) = std::fs::read_dir(&legacy) {
+            for entry in entries.flatten() {
+                let dest = target.join(entry.file_name());
+                if !dest.exists() {
+                    let _ = std::fs::rename(entry.path(), dest);
+                }
+            }
+        }
+        let _ = std::fs::remove_dir(&legacy);
+    }
+}
+
 fn walk_folders(base: &std::path::Path, dir: &std::path::Path, out: &mut Vec<String>) {
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
@@ -113,7 +148,7 @@ fn walk_folders(base: &std::path::Path, dir: &std::path::Path, out: &mut Vec<Str
             Ok(r) => r.to_string_lossy().replace('\\', "/"),
             Err(_) => continue,
         };
-        if rel == "archive" || rel == "trash" {
+        if is_hidden_rel(&rel) {
             continue;
         }
         out.push(rel.clone());
@@ -124,6 +159,7 @@ fn walk_folders(base: &std::path::Path, dir: &std::path::Path, out: &mut Vec<Str
 #[tauri::command]
 pub fn list_note_folders(dir: String) -> Result<Vec<String>, String> {
     let base = std::path::Path::new(&dir);
+    migrate_system_dirs(base);
     let mut out = Vec::new();
     walk_folders(base, base, &mut out);
     out.sort();
@@ -143,7 +179,7 @@ fn walk_notes(base: &std::path::Path, dir: &std::path::Path, out: &mut Vec<NoteI
                 Ok(r) => r.to_string_lossy().replace('\\', "/"),
                 Err(_) => continue,
             };
-            if rel == "archive" || rel == "trash" {
+            if is_hidden_rel(&rel) {
                 continue;
             }
             walk_notes(base, &path, out);
@@ -171,6 +207,7 @@ fn walk_notes(base: &std::path::Path, dir: &std::path::Path, out: &mut Vec<NoteI
 #[tauri::command]
 pub fn list_notes_deep(dir: String) -> Result<Vec<NoteInfo>, String> {
     let base = std::path::Path::new(&dir);
+    migrate_system_dirs(base);
     let mut out = Vec::new();
     walk_notes(base, base, &mut out);
     Ok(out)
@@ -179,8 +216,10 @@ pub fn list_notes_deep(dir: String) -> Result<Vec<NoteInfo>, String> {
 // recursive read for the search index; includes subfolder notes
 #[tauri::command]
 pub fn read_notes_deep(dir: String) -> Result<Vec<NoteFull>, String> {
+    let base = std::path::Path::new(&dir);
+    migrate_system_dirs(base);
     let mut infos = Vec::new();
-    walk_notes(std::path::Path::new(&dir), std::path::Path::new(&dir), &mut infos);
+    walk_notes(base, base, &mut infos);
     Ok(infos
         .into_iter()
         .map(|info| {

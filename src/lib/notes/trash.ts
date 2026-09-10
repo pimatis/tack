@@ -1,10 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { NoteInfo } from './notesState.svelte';
 
-// helpers for the trash page; work on <folder>/trash where deleted notes go
+// helpers for the trash page; work on <folder>/.tack/trash where deleted notes go
 
 function trashDir(folder: string): string {
-	return `${folder.replace(/\/+$/, '')}/trash`;
+	return `${folder.replace(/\/+$/, '')}/.tack/trash`;
 }
 
 export async function listTrashedNotes(folder: string): Promise<NoteInfo[]> {

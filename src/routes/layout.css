@@ -345,6 +345,7 @@ body {
 
 /* drop zone - subtle primary tint with inner glow when hovered */
 .drag-over {
+	border-radius: var(--radius-md);
 	background-color: color-mix(in oklch, var(--primary) 6%, transparent);
 	box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--primary) 12%, transparent);
 	transition:
