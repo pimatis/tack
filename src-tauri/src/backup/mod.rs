@@ -59,6 +59,7 @@ fn backup_dirs(db_path: &Path) -> Result<Vec<PathBuf>> {
 
 fn open_conn(db_path: &Path) -> Result<Connection> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    conn.busy_timeout(Duration::from_secs(5)).map_err(|e| e.to_string())?;
+    conn.busy_timeout(Duration::from_secs(5))
+        .map_err(|e| e.to_string())?;
     Ok(conn)
 }

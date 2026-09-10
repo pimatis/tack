@@ -1,5 +1,5 @@
-use rusqlite::{params, Connection};
 use crate::db::*;
+use rusqlite::{params, Connection};
 use serde_json::json;
 
 pub fn list(conn: &Connection, json: bool, task_id: &str) -> Result<()> {
@@ -13,10 +13,17 @@ pub fn list(conn: &Connection, json: bool, task_id: &str) -> Result<()> {
             let field: Option<String> = row.get(2)?;
             let old_val: Option<String> = row.get(3)?;
             let new_val: Option<String> = row.get(4)?;
-            let source: String = row.get::<_, Option<String>>(5)?.unwrap_or_else(|| "gui".to_string());
+            let source: String = row
+                .get::<_, Option<String>>(5)?
+                .unwrap_or_else(|| "gui".to_string());
             let created: String = row.get(6)?;
 
-            let message = format_activity(&action, field.as_deref(), old_val.as_deref(), new_val.as_deref());
+            let message = format_activity(
+                &action,
+                field.as_deref(),
+                old_val.as_deref(),
+                new_val.as_deref(),
+            );
             Ok(vec![
                 row.get::<_, String>(0)?,
                 action,
@@ -30,22 +37,35 @@ pub fn list(conn: &Connection, json: bool, task_id: &str) -> Result<()> {
         .collect();
 
     if json {
-        let items: Vec<serde_json::Value> = rows.iter().map(|r| json!({
-            "id": r[0],
-            "action": r[1],
-            "message": r[2],
-            "source": r[3],
-            "created_at": r[4],
-        })).collect();
-        println!("{}", serde_json::to_string_pretty(&json!({ "task_id": task_id, "activity": items }))
-            .map_err(|e| e.to_string())?);
+        let items: Vec<serde_json::Value> = rows
+            .iter()
+            .map(|r| {
+                json!({
+                    "id": r[0],
+                    "action": r[1],
+                    "message": r[2],
+                    "source": r[3],
+                    "created_at": r[4],
+                })
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({ "task_id": task_id, "activity": items }))
+                .map_err(|e| e.to_string())?
+        );
     } else {
         print_table(&["ID", "ACTION", "MESSAGE", "SOURCE", "CREATED"], &rows);
     }
     Ok(())
 }
 
-fn format_activity(action: &str, field: Option<&str>, old_val: Option<&str>, new_val: Option<&str>) -> String {
+fn format_activity(
+    action: &str,
+    field: Option<&str>,
+    old_val: Option<&str>,
+    new_val: Option<&str>,
+) -> String {
     let f = field.unwrap_or("");
     let old = old_val.unwrap_or("");
     let new = new_val.unwrap_or("");
@@ -56,8 +76,11 @@ fn format_activity(action: &str, field: Option<&str>, old_val: Option<&str>, new
         "title_changed" => "updated the title".to_string(),
         "description_changed" => "updated the description".to_string(),
         "due_date_changed" => {
-            if new.is_empty() { "removed the due date".to_string() }
-            else { format!("set due date to {}", new) }
+            if new.is_empty() {
+                "removed the due date".to_string()
+            } else {
+                format!("set due date to {}", new)
+            }
         }
         "label_added" => format!("added label {}", new),
         "label_removed" => format!("removed label {}", old),

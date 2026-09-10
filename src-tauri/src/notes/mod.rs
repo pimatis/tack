@@ -46,6 +46,8 @@ pub struct NoteFull {
     pub path: String,
     pub name: String,
     pub content: String,
+    pub modified: u64,
+    pub size: u64,
 }
 
 // read every .md note with its content; used to build the search index
@@ -64,10 +66,19 @@ pub fn read_notes(dir: String) -> Result<Vec<NoteFull>, String> {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
         let content = std::fs::read_to_string(&path).unwrap_or_default();
+        let modified = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
         notes.push(NoteFull {
             path: path.to_string_lossy().into_owned(),
             name,
             content,
+            modified,
+            size: entry.metadata().map(|m| m.len()).unwrap_or(0),
         });
     }
     Ok(notes)
@@ -226,13 +237,77 @@ pub fn read_notes_deep(dir: String) -> Result<Vec<NoteFull>, String> {
         .into_iter()
         .map(|info| {
             let content = std::fs::read_to_string(&info.path).unwrap_or_default();
+            let size = std::fs::metadata(&info.path).map(|m| m.len()).unwrap_or(0);
             NoteFull {
                 path: info.path,
                 name: info.name,
                 content,
+                modified: info.modified,
+                size,
             }
         })
         .collect())
+}
+
+// write a note and snapshot the previous version into the history folder
+// before overwriting; keeps the newest `keep` snapshots per note
+#[tauri::command]
+pub fn save_note_with_history(
+    path: String,
+    content: String,
+    history_root: String,
+    key: String,
+    keep: u32,
+) -> Result<(), String> {
+    // the key is a filesystem-safe encoding of the note's relative path
+    if key.contains('/') || key.contains('\\') || key.contains("..") {
+        return Err("Invalid history key".into());
+    }
+    let p = std::path::Path::new(&path);
+    let previous = std::fs::read_to_string(p).ok();
+    std::fs::write(p, &content).map_err(|e| e.to_string())?;
+    let Some(prev) = previous else { return Ok(()) };
+    if prev == content {
+        return Ok(());
+    }
+    let dir = std::path::Path::new(&history_root).join(&key);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let stamp = chrono::Utc::now().timestamp_millis();
+    let file = dir.join(format!("{}.md", stamp));
+    std::fs::write(&file, prev).map_err(|e| e.to_string())?;
+    // prune: keep only the newest `keep` snapshots
+    let mut snaps: Vec<(std::path::PathBuf, u64)> = std::fs::read_dir(&dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|e| e.path().extension().map(|x| x == "md").unwrap_or(false))
+                .map(|e| {
+                    let m = e
+                        .metadata()
+                        .and_then(|m| m.modified())
+                        .ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_millis() as u64)
+                        .unwrap_or(0);
+                    (e.path(), m)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if snaps.len() > keep as usize {
+        snaps.sort_by_key(|(_, m)| *m);
+        let excess = snaps.len() - keep as usize;
+        for (path, _) in snaps.into_iter().take(excess) {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+    Ok(())
+}
+
+// write binary data (pasted/dropped images land here as note attachments)
+#[tauri::command]
+pub fn write_binary_file(path: String, bytes: Vec<u8>) -> Result<(), String> {
+    std::fs::write(&path, bytes).map_err(|e| e.to_string())
 }
 
 // create a notes subfolder; the name may be a relative path like "a/b",

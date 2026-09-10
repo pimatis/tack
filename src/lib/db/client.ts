@@ -8,7 +8,7 @@ type QueryResult = { rowsAffected: number; lastInsertId?: number };
 
 // minimal surface shared by the tauri sql plugin and the browser http shim,
 // so repositories work unchanged in both the app and the live site
-type DbClient = {
+export type DbClient = {
 	select<T>(query: string, params?: unknown[]): Promise<T>;
 	execute(query: string, params?: unknown[]): Promise<QueryResult>;
 	close(): Promise<boolean>;
@@ -114,17 +114,27 @@ export function onDbChanged(callback: () => void): () => void {
 }
 
 // notes live on the filesystem; the desktop app watches the notes folder
-// and emits notes-changed when a cli or external edit touches it
+// and emits notes-changed when a cli or external edit touches it. in the
+// browser the live server folds note mutations into the same db-changed
+// sse signal, so clients refresh from that
 export function onNotesChanged(callback: () => void): () => void {
-	if (!isTauri()) return () => {};
-	let cancelled = false;
-	let unlisten: (() => void) | undefined;
-	void import('@tauri-apps/api/event').then(async ({ listen }) => {
-		if (cancelled) return;
-		unlisten = await listen('notes-changed', callback);
-	});
+	if (isTauri()) {
+		let cancelled = false;
+		let unlisten: (() => void) | undefined;
+		void import('@tauri-apps/api/event').then(async ({ listen }) => {
+			if (cancelled) return;
+			unlisten = await listen('notes-changed', callback);
+		});
+		return () => {
+			cancelled = true;
+			unlisten?.();
+		};
+	}
+	const source = new EventSource('/api/events/stream');
+	const onEvent = () => callback();
+	source.addEventListener('db-changed', onEvent);
 	return () => {
-		cancelled = true;
-		unlisten?.();
+		source.removeEventListener('db-changed', onEvent);
+		source.close();
 	};
 }

@@ -93,6 +93,11 @@ export const SHORTCUTS: ShortcutDefinition[] = [
 		id: 'prev-note-tab',
 		label: 'Previous note tab',
 		keys: [{ key: 'Tab', mod: metaOrCtrl, shift: true }]
+	},
+	{
+		id: 'focus-mode',
+		label: 'Toggle note focus mode',
+		keys: [{ key: 'e', mod: metaOrCtrl, shift: true }]
 	}
 ];
 

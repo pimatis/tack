@@ -174,7 +174,8 @@ pub fn delete_backup(db_path: &Path, name: &str) -> Result<()> {
 
 fn open_conn(db_path: &Path) -> Result<Connection> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    conn.busy_timeout(Duration::from_secs(5)).map_err(|e| e.to_string())?;
+    conn.busy_timeout(Duration::from_secs(5))
+        .map_err(|e| e.to_string())?;
     Ok(conn)
 }
 
@@ -198,9 +199,15 @@ pub fn restore_backup(db_path: &Path, name: &str) -> Result<()> {
     // copy into temp files first, then swap into place so a failed copy never
     // leaves the live db or attachments half-restored
     let tmp_db = PathBuf::from(format!("{}.restore-tmp", db_path.display()));
-    let tmp_attachments = PathBuf::from(format!("{}.restore-tmp", attachments_dir(db_path).display()));
+    let tmp_attachments = PathBuf::from(format!(
+        "{}.restore-tmp",
+        attachments_dir(db_path).display()
+    ));
     let old_db = PathBuf::from(format!("{}.restore-old", db_path.display()));
-    let old_attachments = PathBuf::from(format!("{}.restore-old", attachments_dir(db_path).display()));
+    let old_attachments = PathBuf::from(format!(
+        "{}.restore-old",
+        attachments_dir(db_path).display()
+    ));
     let _ = fs::remove_file(&tmp_db);
     let _ = fs::remove_dir_all(&tmp_attachments);
     let _ = fs::remove_file(&old_db);

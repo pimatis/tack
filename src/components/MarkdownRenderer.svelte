@@ -10,6 +10,9 @@
 		onOpenMention?: (href: string) => void;
 		onMentionHover?: (href: string, anchor: HTMLElement) => void;
 		onMentionLeave?: () => void;
+		onOpenWiki?: (name: string) => void;
+		onOpenTag?: (tag: string) => void;
+		resolveAsset?: (rel: string) => string;
 	};
 
 	let {
@@ -18,9 +21,12 @@
 		onToggleLine,
 		onOpenMention,
 		onMentionHover,
-		onMentionLeave
+		onMentionLeave,
+		onOpenWiki,
+		onOpenTag,
+		resolveAsset
 	}: Props = $props();
-	let html = $derived(renderMarkdown(content));
+	let html = $derived(renderMarkdown(content, { resolveAsset }));
 	let container = $state<HTMLElement | null>(null);
 
 	const COPY_ICON =
@@ -35,6 +41,19 @@
 		if (mention instanceof HTMLAnchorElement) {
 			event.preventDefault();
 			onOpenMention?.(mention.getAttribute('href') ?? '');
+			return;
+		}
+		// [[wiki]] links resolve by note name in the host
+		const wiki = (event.target as HTMLElement).closest?.('a[data-wiki]');
+		if (wiki instanceof HTMLAnchorElement) {
+			event.preventDefault();
+			onOpenWiki?.(wiki.dataset.wiki ?? '');
+			return;
+		}
+		// inline #tags filter the sidebar list
+		const tag = (event.target as HTMLElement).closest?.('span[data-tag]');
+		if (tag instanceof HTMLElement) {
+			onOpenTag?.(tag.dataset.tag ?? '');
 			return;
 		}
 		const button = (event.target as HTMLElement).closest?.('.copy-code-btn');

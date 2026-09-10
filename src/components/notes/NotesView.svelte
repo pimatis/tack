@@ -5,7 +5,9 @@
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import MarkdownRenderer from '../MarkdownRenderer.svelte';
 	import { notesState } from '$lib/notes/notesState.svelte';
+	import { convertFileSrc } from '@tauri-apps/api/core';
 	import { isTauri } from '$lib/db/client';
+	import { notesInvoke, noteAssetUrl } from '$lib/notes/liveNotes';
 	import BoldIcon from '@lucide/svelte/icons/bold';
 	import ItalicIcon from '@lucide/svelte/icons/italic';
 	import UnderlineIcon from '@lucide/svelte/icons/underline';
@@ -18,12 +20,13 @@
 	import type { Task } from '$lib/types/task';
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
 	import { onDbChanged, onNotesChanged } from '$lib/db/client';
-	import { getBacklinks, type Backlink } from '$lib/notes/backlinks';
+	import { getBacklinks, getUnlinkedMentions, type Backlink } from '$lib/notes/backlinks';
+	import { wikiToFileName } from '$lib/notes/links';
+	import { create as createTaskRepo } from '$lib/repositories/task.repository';
 	import MentionPreviewCard from './MentionPreviewCard.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as ContextMenu from '$lib/components/ui/context-menu/index.js';
 	import { sortableItem, type DragDropState } from '$lib/dnd';
-	import ListIcon from '@lucide/svelte/icons/list';
 
 	// flush pending edits when leaving the editor; Cmd/Ctrl+S saves immediately
 	onMount(() => {
@@ -57,6 +60,17 @@
 			allowInInput: true,
 			run: () => notesState.cycleTab(-1)
 		});
+		const unregisterFocus = getShortcutRegistry().register({
+			id: 'focus-mode',
+			allowInInput: true,
+			run: () => (notesState.focusMode = !notesState.focusMode)
+		});
+		// note → task conversion from the sidebar context menu
+		const convertHandler = (event: Event) => {
+			const path = (event as CustomEvent).detail?.path;
+			if (typeof path === 'string') void convertNoteToTask(path);
+		};
+		window.addEventListener('convert-note-to-task', convertHandler);
 		// cli/external edits: the watcher emits notes-changed, the db writer
 		// (pin changes) rides db-changed; both debounce into one sync
 		let syncTimer: ReturnType<typeof setTimeout> | undefined;
@@ -74,6 +88,8 @@
 			unregisterCloseTab();
 			unregisterNextTab();
 			unregisterPrevTab();
+			unregisterFocus();
+			window.removeEventListener('convert-note-to-task', convertHandler);
 			notesState.flushPendingSave();
 		};
 	});
@@ -404,8 +420,9 @@
 		textarea.scrollTop = Math.max(0, entry.line * 21 - textarea.clientHeight / 2);
 	}
 
-	// ---- backlinks: notes that mention this note via @[label](note:PATH) ----
+	// ---- backlinks + unlinked mentions for the open note ----
 	let backlinks = $state<Backlink[]>([]);
+	let unlinkedMentions = $state<Backlink[]>([]);
 	$effect(() => {
 		const path = notesState.selectedPath;
 		// content read keeps the scan debounced while typing
@@ -413,13 +430,119 @@
 		const folder = notesState.folder;
 		if (!path || !folder) {
 			backlinks = [];
+			unlinkedMentions = [];
 			return;
 		}
 		const timer = setTimeout(async () => {
 			backlinks = await getBacklinks(folder, path);
+			unlinkedMentions = await getUnlinkedMentions(folder, path);
 		}, 600);
 		return () => clearTimeout(timer);
 	});
+
+	// ---- [[wiki]] links and #tag clicks in the preview ----
+	// resolve a wiki name against existing notes; missing notes are created,
+	// matching obsidian's behaviour
+	async function openWiki(name: string) {
+		const clean = name.trim();
+		if (!clean) return;
+		const fileName = wikiToFileName(clean);
+		const match = notesState.allNotes.find((n) => n.name.toLowerCase() === fileName.toLowerCase());
+		if (match) {
+			await notesState.openNote(match.path);
+			return;
+		}
+		// also try a plain name match without the .md suffix
+		const loose = notesState.allNotes.find((n) =>
+			n.name.toLowerCase().startsWith(clean.toLowerCase())
+		);
+		if (loose) {
+			await notesState.openNote(loose.path);
+			return;
+		}
+		await notesState.createNoteIn(null, clean);
+	}
+
+	// preview images resolve relative .tack/assets paths through the asset
+	// protocol on desktop, through the live server in the browser
+	function resolveAsset(rel: string): string {
+		const folder = notesState.folder;
+		if (!folder) return rel;
+		const abs = rel.startsWith('/') ? rel : `${folder.replace(/\/+$/, '')}/${rel}`;
+		if (!isTauri()) return noteAssetUrl(abs);
+		return convertFileSrc(abs);
+	}
+
+	// convert a note into a task: title becomes the task title, the markdown
+	// body the description; the note itself is left untouched
+	async function convertNoteToTask(path: string) {
+		const content = await notesInvoke<string>('read_file', { path }).catch(() => null);
+		if (content === null) return;
+		const title = path.split('/').pop()?.replace(/\.md$/i, '') ?? 'Note';
+		await createTaskRepo({ title, description: content });
+		window.dispatchEvent(new Event('tasks-changed'));
+	}
+
+	// ---- image attachments: paste or drop straight into the editor ----
+	async function insertImageFile(file: File) {
+		const bytes = new Uint8Array(await file.arrayBuffer());
+		const rel = await notesState.saveAttachment(file.name || 'image.png', bytes);
+		if (!rel) {
+			notesState.error = 'Image could not be saved';
+			return;
+		}
+		insertAtCaret(`![${file.name}](${rel})`);
+	}
+
+	function insertAtCaret(text: string) {
+		const textarea = editorEl;
+		if (!textarea) {
+			notesState.content += text;
+			return;
+		}
+		const start = textarea.selectionStart ?? notesState.content.length;
+		const end = textarea.selectionEnd ?? start;
+		const before = notesState.content.slice(0, start);
+		const after = notesState.content.slice(end);
+		notesState.content = `${before}${text}${after}`;
+		const caret = start + text.length;
+		tick().then(() => {
+			textarea.focus();
+			textarea.setSelectionRange(caret, caret);
+		});
+	}
+
+	function handlePaste(e: ClipboardEvent) {
+		const item = [...(e.clipboardData?.items ?? [])].find((i) => i.type.startsWith('image/'));
+		if (!item) return;
+		e.preventDefault();
+		const file = item.getAsFile();
+		if (file) void insertImageFile(file);
+	}
+
+	function handleDropImage(e: DragEvent) {
+		const file = [...(e.dataTransfer?.files ?? [])].find((f) => f.type.startsWith('image/'));
+		if (!file) return;
+		e.preventDefault();
+		void insertImageFile(file);
+	}
+
+	// ---- daily note navigation: prev/next day around a YYYY-MM-DD note ----
+	const dailyDate = $derived.by(() => {
+		const m = noteTitle?.match(/^(\d{4}-\d{2}-\d{2})$/);
+		return m ? m[1] : null;
+	});
+	function navigateDaily(days: number) {
+		if (!dailyDate) return;
+		const next = notesState.shiftDate(dailyDate, days);
+		if (next) void notesState.openDailyNote(next);
+	}
+
+	// status bar counts; reading time uses the classic 200 wpm
+	const words = $derived(
+		notesState.content.trim() ? notesState.content.trim().split(/\s+/).length : 0
+	);
+	const chars = $derived(notesState.content.length);
 
 	// ---- find & replace (Cmd/Ctrl+F) ----
 	// caret-relative like obsidian/vscode: navigation starts where you are,
@@ -602,7 +725,7 @@
 {/snippet}
 
 <section class="flex h-full flex-col px-3 py-3 sm:px-5 sm:py-5 lg:px-8 lg:py-8">
-	{#if notesState.noteTabs.length > 0}
+	{#if notesState.noteTabs.length > 0 && !notesState.focusMode}
 		<!-- editor tabs: vs code/chrome pattern softened to match the app chrome -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
@@ -695,6 +818,47 @@
 	{/if}
 	<header class="flex flex-wrap items-center justify-between gap-2 pb-4 sm:pb-5">
 		<div class="flex min-w-0 flex-1 items-center gap-3">
+			{#if dailyDate}
+				<!-- daily note navigation: prev / today / next like obsidian's daily notes -->
+				<div class="flex items-center gap-0.5">
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						class="size-7 text-muted-foreground hover:text-foreground"
+						aria-label="Previous day"
+						onclick={() => navigateDaily(-1)}
+					>
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+							><path
+								fill="currentColor"
+								d="M7.058 15.944a1 1 0 0 1-1.28.095l-.094-.08-.057-.058-4.575-4.575a1 1 0 0 1 0-1.431l4.575-4.576a1 1 0 0 1 1.431 1.431L3.911 10.5h16.087a1 1 0 0 1 0 2H3.91l3.148 3.148a1 1 0 0 1 0 1.431z"
+							/></svg
+						>
+					</Button>
+					<Button
+						variant="ghost"
+						size="sm"
+						class="h-7 text-[12px] text-muted-foreground hover:text-foreground"
+						onclick={() => void notesState.openDailyNote(new Date().toLocaleDateString('en-CA'))}
+					>
+						Today
+					</Button>
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						class="size-7 text-muted-foreground hover:text-foreground"
+						aria-label="Next day"
+						onclick={() => navigateDaily(1)}
+					>
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+							><path
+								fill="currentColor"
+								d="M16.942 15.944a1 1 0 0 0 1.28.095l.094-.08.057-.058 4.575-4.575a1 1 0 0 0 0-1.431l-4.575-4.576a1 1 0 0 0-1.431 1.431l3.147 3.15H4.002a1 1 0 0 0 0 2h16.087l-3.148 3.148a1 1 0 0 0 0 1.431z"
+							/></svg
+						>
+					</Button>
+				</div>
+			{/if}
 			{#if noteTitle}
 				<!-- editable title: committing renames the underlying .md file;
 				     display caps at 100 chars so long titles never break the ui -->
@@ -797,35 +961,75 @@
 								onclick={() => (outlineOpen = !outlineOpen)}
 								aria-label="Toggle outline"
 							>
-								<ListIcon class="size-[15px]" />
+								<svg class="size-[15px]" viewBox="0 0 24 24" fill="none" aria-hidden="true"
+									><path
+										fill="currentColor"
+										d="M7 13a2 2 0 0 1 1.995 1.85L9 15v3a2 2 0 0 1-1.85 1.995L7 20H4a2 2 0 0 1-1.995-1.85L2 18v-3a2 2 0 0 1 1.85-1.995L4 13zm9 4a1 1 0 0 1 .117 1.993L16 19h-4a1 1 0 0 1-.117-1.993L12 17zm4-4a1 1 0 1 1 0 2h-8a1 1 0 1 1 0-2zM7 3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm9 4a1 1 0 0 1 .117 1.993L16 9h-4a1 1 0 0 1-.117-1.993L12 7zm4-4a1 1 0 0 1 .117 1.993L20 5h-8a1 1 0 0 1-.117-1.993L12 3z"
+									/></svg
+								>
 							</Button>
 						{/snippet}
 					</Tooltip.Trigger>
 					<Tooltip.Content side="bottom">Outline</Tooltip.Content>
 				</Tooltip.Root>
+				<Tooltip.Root>
+					<Tooltip.Trigger>
+						{#snippet child({ props })}
+							<Button
+								{...props}
+								variant="ghost"
+								size="icon-sm"
+								class="flex h-7 w-7 items-center justify-center rounded-md transition-colors {notesState.focusMode
+									? 'bg-muted text-foreground'
+									: 'text-muted-foreground hover:text-foreground'}"
+								onclick={() => (notesState.focusMode = !notesState.focusMode)}
+								aria-label="Toggle focus mode"
+							>
+								<svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+									><path
+										fill="currentColor"
+										d="M12 2a1 1 0 0 1 .993.883L13 3v.055a9.005 9.005 0 0 1 7.911 7.674l.034.271H21a1 1 0 0 1 .117 1.993L21 13h-.055a9.005 9.005 0 0 1-7.674 7.911l-.271.034V21a1 1 0 0 1-1.993.117L11 21v-.055a9.005 9.005 0 0 1-7.911-7.674L3.055 13H3a1 1 0 0 1-.117-1.993L3 11h.055a9.005 9.005 0 0 1 7.674-7.911L11 3.055V3a1 1 0 0 1 1-1m0 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10m0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6"
+									/></svg
+								>
+							</Button>
+						{/snippet}
+					</Tooltip.Trigger>
+					<Tooltip.Content side="bottom">Focus mode</Tooltip.Content>
+				</Tooltip.Root>
 			</div>
 		{/if}
 	</header>
-	{#if noteTitle && backlinks.length > 0}
-		<!-- backlinks: notes that link here via @-mentions -->
+	{#if noteTitle && (backlinks.length > 0 || unlinkedMentions.length > 0) && !notesState.focusMode}
+		<!-- backlinks: notes that link here via @-mentions; unlinked mentions
+		     contain the note title as plain text -->
 		<div class="flex flex-wrap items-center gap-1.5 pb-3">
-			<span class="text-[11px] text-muted-foreground/70">Linked notes</span>
-			{#each backlinks as backlink (backlink.path)}
-				<button
-					type="button"
-					class="max-w-52 truncate rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-					onclick={() => void notesState.openNote(backlink.path)}
-				>
-					{backlink.name.replace(/\.md$/, '')}
-				</button>
-			{/each}
+			{#if backlinks.length > 0}
+				<span class="text-[11px] text-muted-foreground/70">Linked notes</span>
+				{#each backlinks as backlink (backlink.path)}
+					<button
+						type="button"
+						class="max-w-52 truncate rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+						onclick={() => void notesState.openNote(backlink.path)}
+					>
+						{backlink.name.replace(/\.md$/, '')}
+					</button>
+				{/each}
+			{/if}
+			{#if unlinkedMentions.length > 0}
+				<span class="text-[11px] text-muted-foreground/70">Unlinked mentions</span>
+				{#each unlinkedMentions as backlink (backlink.path)}
+					<button
+						type="button"
+						class="max-w-52 truncate rounded-full border border-dashed border-border bg-transparent px-2 py-0.5 text-[11px] text-muted-foreground/80 transition-colors hover:bg-muted/60 hover:text-foreground"
+						onclick={() => void notesState.openNote(backlink.path)}
+					>
+						{backlink.name.replace(/\.md$/, '')}
+					</button>
+				{/each}
+			{/if}
 		</div>
 	{/if}
-	{#if !isTauri()}
-		<div class="flex flex-1 items-center justify-center text-[13px] text-muted-foreground">
-			Notes are only available in the desktop app.
-		</div>
-	{:else if !notesState.folder}
+	{#if !notesState.folder}
 		<!-- first run: choose where notes live -->
 		<div class="flex flex-1 flex-col items-center justify-center gap-3 text-center">
 			<svg class="text-muted-foreground/50" width="36" height="36" viewBox="0 0 24 24" fill="none"
@@ -895,6 +1099,9 @@
 					onOpenMention={(href) => void openMention(href)}
 					onMentionHover={handleMentionHover}
 					onMentionLeave={handleMentionLeave}
+					onOpenWiki={(name) => void openWiki(name)}
+					onOpenTag={(tag) => notesState.setActiveTag(tag)}
+					{resolveAsset}
 				/>
 			</div>
 			{#if outlineOpen}
@@ -912,7 +1119,9 @@
 					oninput={handleEditorInput}
 					oncontextmenu={handleEditorContextMenu}
 					onkeydown={handleFindTextareaKeydown}
-					spellcheck="false"
+					onpaste={handlePaste}
+					ondrop={handleDropImage}
+					spellcheck={notesState.spellcheck}
 					placeholder="Write in markdown…"
 					class="h-full w-full resize-none bg-transparent p-3 font-mono text-[13px] leading-[21px] text-foreground outline-none placeholder:text-muted-foreground/50"
 				></textarea>
@@ -1143,6 +1352,40 @@
 				{@render outlinePanel()}
 			{/if}
 		</div>
+		{#if !notesState.focusMode}
+			<!-- status bar: word/char count left, saving state + toggles right -->
+			<div
+				class="flex items-center justify-between border-t border-border/60 pt-2 text-[11px] text-muted-foreground tabular-nums"
+			>
+				<span>
+					{words} words · {chars} chars
+				</span>
+				<span class="flex items-center gap-3">
+					{#if notesState.saving}
+						<span>Saving…</span>
+					{/if}
+					<Tooltip.Root>
+						<Tooltip.Trigger>
+							{#snippet child({ props })}
+								<button
+									{...props}
+									type="button"
+									class="transition-colors hover:text-foreground {notesState.spellcheck
+										? 'text-foreground'
+										: ''}"
+									onclick={() => notesState.toggleSpellcheck()}
+								>
+									Spellcheck
+								</button>
+							{/snippet}
+						</Tooltip.Trigger>
+						<Tooltip.Content side="top">
+							Toggle the browser's spell checker in the editor
+						</Tooltip.Content>
+					</Tooltip.Root>
+				</span>
+			</div>
+		{/if}
 	{/if}
 	{#if mentionPreview}
 		<!-- fixed peek card anchored to the hovered mention link -->

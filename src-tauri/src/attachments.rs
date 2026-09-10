@@ -3,10 +3,7 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
 pub(crate) fn attachments_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let dir = data_dir.join("attachments");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir)
@@ -43,7 +40,11 @@ pub fn read_attachment(app: AppHandle, id: String, mime_type: String) -> Result<
     let dir = attachments_dir(&app)?;
     let path = dir.join(&id);
     let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-    Ok(format!("data:{};base64,{}", mime_type, base64_encode(&bytes)))
+    Ok(format!(
+        "data:{};base64,{}",
+        mime_type,
+        base64_encode(&bytes)
+    ))
 }
 
 // delete file from disk

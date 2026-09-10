@@ -243,6 +243,8 @@
 	let noteCreateType = $state<'note' | 'folder'>('note');
 	let noteCreateName = $state('');
 	let noteCreateParent = $state<string>('root');
+	let noteCreateTemplate = $state('none');
+	let noteCreateTemplates = $state<string[]>([]);
 
 	async function openNoteCreateDialog(type: 'note' | 'folder', parent: string | null = null) {
 		if (isMobile) mobileOpen = false;
@@ -254,6 +256,10 @@
 		noteCreateType = type;
 		noteCreateParent = parent ?? 'root';
 		noteCreateName = '';
+		noteCreateTemplate = 'none';
+		noteCreateTemplates = (await notesState.loadTemplates()).map((t) =>
+			t.name.replace(/\.md$/i, '')
+		);
 		noteCreateOpen = true;
 	}
 
@@ -262,8 +268,13 @@
 		const name = noteCreateName.trim();
 		if (!name) return;
 		const parent = noteCreateParent === 'root' ? null : noteCreateParent;
-		if (noteCreateType === 'note') void notesState.createNoteIn(parent, name);
-		else void notesState.createFolder(parent, name);
+		if (noteCreateType === 'note') {
+			void notesState.createNoteIn(
+				parent,
+				name,
+				noteCreateTemplate === 'none' ? undefined : noteCreateTemplate
+			);
+		} else void notesState.createFolder(parent, name);
 		noteCreateOpen = false;
 	}
 
@@ -1269,6 +1280,23 @@
 					bind:value={noteCreateName}
 					placeholder={noteCreateType === 'note' ? 'Untitled' : 'New Folder'}
 				/>
+				{#if noteCreateType === 'note' && noteCreateTemplates.length > 0}
+					<Select.Root
+						type="single"
+						value={noteCreateTemplate}
+						onValueChange={(v) => (noteCreateTemplate = v)}
+					>
+						<Select.Trigger class="w-full">
+							{noteCreateTemplate === 'none' ? 'Empty note' : `Template: ${noteCreateTemplate}`}
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="none" label="Empty note">Empty note</Select.Item>
+							{#each noteCreateTemplates as template (template)}
+								<Select.Item value={template} label={template}>{template}</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				{/if}
 				<Select.Root
 					type="single"
 					value={noteCreateParent}

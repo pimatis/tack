@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { invoke } from '@tauri-apps/api/core';
+	import { notesInvoke } from '$lib/notes/liveNotes';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Card, CardContent } from '$lib/components/ui/card/index.js';
@@ -28,7 +28,7 @@
 		open = true;
 		info = null;
 		error = null;
-		void invoke<NoteDetails>('note_info', { path })
+		void notesInvoke<NoteDetails>('note_info', { path })
 			.then((d) => (info = d))
 			.catch((err) => (error = String(err)));
 	}

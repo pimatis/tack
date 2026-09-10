@@ -1,20 +1,18 @@
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{params, Connection, OptionalExtension};
 use sha2::{Digest, Sha384};
 use std::path::PathBuf;
 
 pub type Result<T> = std::result::Result<T, String>;
 
 pub fn get_db_path() -> PathBuf {
-    let data_dir = dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."));
+    let data_dir = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
     let app_dir = data_dir.join("com.pimatis.tack");
     std::fs::create_dir_all(&app_dir).ok();
     app_dir.join("tack.db")
 }
 
 pub fn connect(db_path: &PathBuf) -> Result<Connection> {
-    let conn = Connection::open(db_path)
-        .map_err(|e| format!("Failed to open database: {}", e))?;
+    let conn = Connection::open(db_path).map_err(|e| format!("Failed to open database: {}", e))?;
     conn.pragma_update(None, "journal_mode", "WAL")
         .map_err(|e| format!("Failed to set WAL mode: {}", e))?;
     run_migrations(&conn)?;
@@ -23,25 +21,90 @@ pub fn connect(db_path: &PathBuf) -> Result<Connection> {
 
 fn run_migrations(conn: &Connection) -> Result<()> {
     let migrations: &[(i32, &str, &str)] = &[
-        (1, "create_tasks_table", include_str!("../../migrations/001_initial.sql")),
-        (2, "create_projects_table", include_str!("../../migrations/002_projects.sql")),
-        (3, "create_attachments_table", include_str!("../../migrations/003_attachments.sql")),
-        (4, "create_labels_table", include_str!("../../migrations/004_labels.sql")),
-        (5, "add_due_date_to_tasks", include_str!("../../migrations/005_due_date.sql")),
-        (6, "add_task_number", include_str!("../../migrations/006_task_number.sql")),
-        (7, "add_project_description", include_str!("../../migrations/007_project_description.sql")),
-        (8, "add_subtasks_activity_log_sort_order", include_str!("../../migrations/008_subtasks_activity_sort.sql")),
-        (9, "add_pinned_to_tasks", include_str!("../../migrations/009_pinned.sql")),
-        (10, "create_settings_table", include_str!("../../migrations/010_settings.sql")),
-        (11, "add_source_to_activity_log", include_str!("../../migrations/011_activity_source.sql")),
-        (12, "add_deleted_at_to_tasks", include_str!("../../migrations/012_trash.sql")),
-        (13, "migrate_attachment_file_path", include_str!("../../migrations/013_attachment_file_path.sql")),
-        (14, "create_fts_search_index", include_str!("../../migrations/014_fts_search.sql")),
-        (15, "fix_fts_triggers", include_str!("../../migrations/015_fix_fts_triggers.sql")),
-        (16, "add_end_date_to_tasks", include_str!("../../migrations/016_end_date.sql")),
+        (
+            1,
+            "create_tasks_table",
+            include_str!("../../migrations/001_initial.sql"),
+        ),
+        (
+            2,
+            "create_projects_table",
+            include_str!("../../migrations/002_projects.sql"),
+        ),
+        (
+            3,
+            "create_attachments_table",
+            include_str!("../../migrations/003_attachments.sql"),
+        ),
+        (
+            4,
+            "create_labels_table",
+            include_str!("../../migrations/004_labels.sql"),
+        ),
+        (
+            5,
+            "add_due_date_to_tasks",
+            include_str!("../../migrations/005_due_date.sql"),
+        ),
+        (
+            6,
+            "add_task_number",
+            include_str!("../../migrations/006_task_number.sql"),
+        ),
+        (
+            7,
+            "add_project_description",
+            include_str!("../../migrations/007_project_description.sql"),
+        ),
+        (
+            8,
+            "add_subtasks_activity_log_sort_order",
+            include_str!("../../migrations/008_subtasks_activity_sort.sql"),
+        ),
+        (
+            9,
+            "add_pinned_to_tasks",
+            include_str!("../../migrations/009_pinned.sql"),
+        ),
+        (
+            10,
+            "create_settings_table",
+            include_str!("../../migrations/010_settings.sql"),
+        ),
+        (
+            11,
+            "add_source_to_activity_log",
+            include_str!("../../migrations/011_activity_source.sql"),
+        ),
+        (
+            12,
+            "add_deleted_at_to_tasks",
+            include_str!("../../migrations/012_trash.sql"),
+        ),
+        (
+            13,
+            "migrate_attachment_file_path",
+            include_str!("../../migrations/013_attachment_file_path.sql"),
+        ),
+        (
+            14,
+            "create_fts_search_index",
+            include_str!("../../migrations/014_fts_search.sql"),
+        ),
+        (
+            15,
+            "fix_fts_triggers",
+            include_str!("../../migrations/015_fix_fts_triggers.sql"),
+        ),
+        (
+            16,
+            "add_end_date_to_tasks",
+            include_str!("../../migrations/016_end_date.sql"),
+        ),
     ];
 
-    let known: std::collections::HashSet<i64> = migrations.iter().map(|(v, _, _)| *v as i64).collect();
+    let known: std::collections::HashSet<i64> =
+        migrations.iter().map(|(v, _, _)| *v as i64).collect();
 
     // track applied versions via the same table the tauri app uses, so
     // non-idempotent migrations (e.g. 013 column rename) only run once
@@ -127,7 +190,9 @@ fn run_migrations(conn: &Connection) -> Result<()> {
 }
 
 pub fn now_iso() -> String {
-    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+    chrono::Utc::now()
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string()
 }
 
 pub fn new_id() -> String {
@@ -186,7 +251,11 @@ pub fn print_table(headers: &[&str], rows: &[Vec<String>]) {
             .iter()
             .enumerate()
             .map(|(i, cell)| {
-                let w = if i < widths.len() { widths[i] } else { cell.len() };
+                let w = if i < widths.len() {
+                    widths[i]
+                } else {
+                    cell.len()
+                };
                 format!("{:<width$}", cell, width = w)
             })
             .collect::<Vec<_>>()
@@ -221,7 +290,8 @@ pub fn get_setting(conn: &Connection, key: &str) -> Option<String> {
         "SELECT value FROM settings WHERE key = ?1",
         params![key],
         |row| row.get(0),
-    ).ok()
+    )
+    .ok()
 }
 
 pub fn get_default_status(conn: &Connection) -> String {
@@ -234,7 +304,11 @@ pub fn get_default_priority(conn: &Connection) -> i32 {
         .unwrap_or(0)
 }
 
-pub fn resolve_project_id(conn: &Connection, project: Option<&str>, prefix: Option<&str>) -> Result<Option<String>> {
+pub fn resolve_project_id(
+    conn: &Connection,
+    project: Option<&str>,
+    prefix: Option<&str>,
+) -> Result<Option<String>> {
     if let Some(id) = project {
         return Ok(Some(id.to_string()));
     }

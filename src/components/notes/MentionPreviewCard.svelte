@@ -5,7 +5,7 @@
 	import MarkdownRenderer from '../MarkdownRenderer.svelte';
 	import { TaskPageState } from '$lib/task/taskState.svelte';
 	import { statusConfig, priorityConfig } from '$lib/task/constants';
-	import { invoke } from '@tauri-apps/api/core';
+	import { notesInvoke } from '$lib/notes/liveNotes';
 
 	// mention href: "task:<id>" or "note:<encoded path>"
 	let { href }: { href: string } = $props();
@@ -28,7 +28,7 @@
 		const path = notePath;
 		noteContent = null;
 		noteError = false;
-		void invoke<string>('read_file', { path }).then(
+		void notesInvoke<string>('read_file', { path }).then(
 			(content) => {
 				// ignore stale reads if the hover target changed meanwhile
 				if (notePath === path) noteContent = content;

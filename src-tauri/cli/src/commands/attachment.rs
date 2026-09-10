@@ -1,33 +1,34 @@
-use rusqlite::{params, Connection};
 use crate::db::*;
+use rusqlite::{params, Connection};
 use serde_json::json;
 use std::path::Path;
 
 pub fn add(conn: &Connection, json: bool, task_id: &str, file_path: &str) -> Result<()> {
-    let exists: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ?1)",
-        params![task_id],
-        |row| row.get(0),
-    ).map_err(|e| e.to_string())?;
+    let exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ?1)",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
     if !exists {
         return Err(format!("Task {} not found", task_id));
     }
 
     let path = Path::new(file_path);
-    let file_name = path.file_name()
+    let file_name = path
+        .file_name()
         .and_then(|n| n.to_str())
         .ok_or_else(|| format!("Invalid file path: {}", file_path))?;
 
-    let metadata = std::fs::metadata(path)
-        .map_err(|e| format!("File not found: {}", e))?;
+    let metadata = std::fs::metadata(path).map_err(|e| format!("File not found: {}", e))?;
     let file_size = metadata.len() as i64;
 
     if file_size > 10 * 1024 * 1024 {
         return Err(format!("File {} exceeds 10MB limit", file_name));
     }
 
-    let file_bytes = std::fs::read(path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let file_bytes = std::fs::read(path).map_err(|e| format!("Failed to read file: {}", e))?;
     let file_data = base64_encode(&file_bytes);
 
     let mime_type = mime_from_ext(path);
@@ -40,7 +41,15 @@ pub fn add(conn: &Connection, json: bool, task_id: &str, file_path: &str) -> Res
         params![id, task_id, file_name, file_data, mime_type, file_size, now],
     ).map_err(|e| format!("Failed to add attachment: {}", e))?;
 
-    let _ = log_activity(conn, task_id, "attachment_added", None, None, Some(file_name), "cli");
+    let _ = log_activity(
+        conn,
+        task_id,
+        "attachment_added",
+        None,
+        None,
+        Some(file_name),
+        "cli",
+    );
     if json {
         println!("{}", serde_json::to_string_pretty(&json!({
             "success": true,
@@ -82,15 +91,23 @@ pub fn list(conn: &Connection, json: bool, task_id: &str) -> Result<()> {
         .collect();
 
     if json {
-        let items: Vec<serde_json::Value> = rows.iter().map(|r| json!({
-            "id": r[0],
-            "file_name": r[1],
-            "mime_type": r[2],
-            "size": r[3],
-            "created_at": r[4],
-        })).collect();
-        println!("{}", serde_json::to_string_pretty(&json!({ "task_id": task_id, "attachments": items }))
-            .map_err(|e| e.to_string())?);
+        let items: Vec<serde_json::Value> = rows
+            .iter()
+            .map(|r| {
+                json!({
+                    "id": r[0],
+                    "file_name": r[1],
+                    "mime_type": r[2],
+                    "size": r[3],
+                    "created_at": r[4],
+                })
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({ "task_id": task_id, "attachments": items }))
+                .map_err(|e| e.to_string())?
+        );
     } else {
         print_table(&["ID", "FILE", "TYPE", "SIZE", "CREATED"], &rows);
     }
@@ -98,25 +115,40 @@ pub fn list(conn: &Connection, json: bool, task_id: &str) -> Result<()> {
 }
 
 pub fn delete(conn: &Connection, json: bool, id: &str) -> Result<()> {
-    let task_id: String = conn.query_row(
-        "SELECT task_id FROM task_attachments WHERE id = ?1",
-        params![id],
-        |row| row.get(0),
-    ).map_err(|_| format!("Attachment {} not found", id))?;
+    let task_id: String = conn
+        .query_row(
+            "SELECT task_id FROM task_attachments WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
+        .map_err(|_| format!("Attachment {} not found", id))?;
 
-    let result = conn.execute("DELETE FROM task_attachments WHERE id = ?1", params![id])
+    let result = conn
+        .execute("DELETE FROM task_attachments WHERE id = ?1", params![id])
         .map_err(|e| format!("Failed to delete attachment: {}", e))?;
 
     if result == 0 {
         return Err(format!("Attachment {} not found", id));
     }
-    let _ = log_activity(conn, &task_id, "attachment_removed", None, None, None, "cli");
+    let _ = log_activity(
+        conn,
+        &task_id,
+        "attachment_removed",
+        None,
+        None,
+        None,
+        "cli",
+    );
     if json {
-        println!("{}", serde_json::to_string_pretty(&json!({
-            "success": true,
-            "action": "attachment_deleted",
-            "attachment": { "id": id }
-        })).map_err(|e| e.to_string())?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": true,
+                "action": "attachment_deleted",
+                "attachment": { "id": id }
+            }))
+            .map_err(|e| e.to_string())?
+        );
     } else {
         println!("Deleted attachment: {}", id);
     }
@@ -124,22 +156,31 @@ pub fn delete(conn: &Connection, json: bool, id: &str) -> Result<()> {
 }
 
 pub fn download(conn: &Connection, json: bool, id: &str, output_path: &str) -> Result<()> {
-    let (file_name, file_data): (String, String) = conn.query_row(
-        "SELECT file_name, file_data FROM task_attachments WHERE id = ?1",
-        params![id],
-        |row| Ok((row.get(0)?, row.get(1)?)),
-    ).map_err(|_| format!("Attachment {} not found", id))?;
+    let (file_name, file_data): (String, String) = conn
+        .query_row(
+            "SELECT file_name, file_data FROM task_attachments WHERE id = ?1",
+            params![id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|_| format!("Attachment {} not found", id))?;
 
     let data = base64_decode(&file_data)?;
-    let out = if output_path.is_empty() { &file_name } else { output_path };
-    std::fs::write(out, &data)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
+    let out = if output_path.is_empty() {
+        &file_name
+    } else {
+        output_path
+    };
+    std::fs::write(out, &data).map_err(|e| format!("Failed to write file: {}", e))?;
     if json {
-        println!("{}", serde_json::to_string_pretty(&json!({
-            "success": true,
-            "action": "attachment_downloaded",
-            "attachment": { "id": id, "file_name": file_name, "saved_to": out }
-        })).map_err(|e| e.to_string())?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": true,
+                "action": "attachment_downloaded",
+                "attachment": { "id": id, "file_name": file_name, "saved_to": out }
+            }))
+            .map_err(|e| e.to_string())?
+        );
     } else {
         println!("Downloaded: {} -> {}", file_name, out);
     }

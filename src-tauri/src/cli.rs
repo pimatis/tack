@@ -50,7 +50,11 @@ fn ensure_cli_on_path(target: &std::path::Path) {
         if already {
             continue;
         }
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&shell_rc) {
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&shell_rc)
+        {
             use std::io::Write;
             let _ = writeln!(f, "export PATH=\"{dir_str}:$PATH\"");
         }

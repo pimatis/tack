@@ -3,6 +3,23 @@ use notify::{EventKind, RecursiveMode, Watcher};
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
 
+// read the notes folder from the app settings so browser clients get live
+// note updates too; returns None when no folder is configured
+fn read_notes_folder(data_dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    let conn = rusqlite::Connection::open_with_flags(
+        data_dir.join("tack.db"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .ok()?;
+    conn.query_row(
+        "SELECT value FROM settings WHERE key = 'notesFolder'",
+        [],
+        |r| r.get::<_, String>(0),
+    )
+    .ok()
+    .map(std::path::PathBuf::from)
+}
+
 // one reporter owns the db change signal: the file watcher feeds it events,
 // and a 5s timer backstops writes fsevents misses (the gui's sqlx pool
 // appends to the wal without firing events). the reporter waits for a quiet
@@ -28,9 +45,14 @@ pub(crate) fn start_db_reporter(app: tauri::AppHandle, hub: Arc<LiveHub>) {
     let mut watcher = notify::recommended_watcher(move |res: Result<notify::Event, _>| {
         if let Ok(event) = res {
             let is_db_change = event.paths.iter().any(|p| {
-                p.file_name().map(|n| n == "tack.db" || n == "tack.db-wal" || n == "tack.db-shm").unwrap_or(false)
+                p.file_name()
+                    .map(|n| n == "tack.db" || n == "tack.db-wal" || n == "tack.db-shm")
+                    .unwrap_or(false)
             });
-            let is_backup_change = event.paths.iter().any(|p| p.starts_with(&backups_for_event));
+            let is_backup_change = event
+                .paths
+                .iter()
+                .any(|p| p.starts_with(&backups_for_event));
             match event.kind {
                 EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {
                     if is_db_change {
@@ -43,11 +65,46 @@ pub(crate) fn start_db_reporter(app: tauri::AppHandle, hub: Arc<LiveHub>) {
                 _ => {}
             }
         }
-    }).expect("failed to create file watcher");
+    })
+    .expect("failed to create file watcher");
     let _ = watcher.watch(&watch_dir, RecursiveMode::NonRecursive);
     let _ = watcher.watch(&backups_dir, RecursiveMode::NonRecursive);
     // keep watcher alive for app lifetime
     std::mem::forget(watcher);
+
+    // notes folder watcher: pushes a hub notification so browser live
+    // clients pick up note changes made on desktop or by other clients
+    if let Some(notes_dir) = read_notes_folder(&data_dir) {
+        let hub_for_notes = hub.clone();
+        std::thread::spawn(move || {
+            let (ntx, nrx) = std::sync::mpsc::channel::<()>();
+            let mut notes_watcher =
+                notify::recommended_watcher(move |res: Result<notify::Event, _>| {
+                    if let Ok(event) = res {
+                        match event.kind {
+                            EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {
+                                let _ = ntx.send(());
+                            }
+                            _ => {}
+                        }
+                    }
+                })
+                .expect("failed to create notes watcher");
+            let _ = notes_watcher.watch(&notes_dir, RecursiveMode::Recursive);
+            std::mem::forget(notes_watcher);
+            // coalesce write bursts (save = several events) into one notify
+            loop {
+                if nrx.recv().is_err() {
+                    return;
+                }
+                while nrx
+                    .recv_timeout(std::time::Duration::from_millis(500))
+                    .is_ok()
+                {}
+                hub_for_notes.notify();
+            }
+        });
+    }
 
     std::thread::spawn(move || {
         // backstop tick: catches writes that never fired a file event

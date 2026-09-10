@@ -1,5 +1,5 @@
-use rusqlite::{params, Connection};
 use crate::db::*;
+use rusqlite::{params, Connection};
 use serde_json::json;
 
 // keys mirror the GUI settings page (src/lib/types/settings.ts)
@@ -57,13 +57,17 @@ fn validate_value(key: &str, value: &str) -> Result<()> {
             }
         }
         "defaultPriority" => {
-            let p: i32 = value.parse().map_err(|_| "defaultPriority must be 0-4".to_string())?;
+            let p: i32 = value
+                .parse()
+                .map_err(|_| "defaultPriority must be 0-4".to_string())?;
             if !(0..=4).contains(&p) {
                 return Err("defaultPriority must be 0-4".to_string());
             }
         }
         "dueSoonThreshold" | "prefixPadding" | "backupIntervalHours" | "backupKeepCount" => {
-            let n: i64 = value.parse().map_err(|_| format!("{} must be a number", key))?;
+            let n: i64 = value
+                .parse()
+                .map_err(|_| format!("{} must be a number", key))?;
             if n < 0 {
                 return Err(format!("{} must be 0 or greater", key));
             }
@@ -86,7 +90,11 @@ fn validate_value(key: &str, value: &str) -> Result<()> {
             }
         }
         _ => {
-            let valid = DEFAULTS.iter().map(|(k, _)| *k).collect::<Vec<_>>().join(", ");
+            let valid = DEFAULTS
+                .iter()
+                .map(|(k, _)| *k)
+                .collect::<Vec<_>>()
+                .join(", ");
             return Err(format!("Invalid key '{}'. Valid: {}", key, valid));
         }
     }
@@ -106,21 +114,32 @@ pub fn get(conn: &Connection, json: bool) -> Result<()> {
 
     let db_map: std::collections::HashMap<&str, &str> = db_rows
         .iter()
-        .filter_map(|(k, v)| DEFAULTS.iter().any(|(dk, _)| dk == k).then_some((k.as_str(), v.as_str())))
+        .filter_map(|(k, v)| {
+            DEFAULTS
+                .iter()
+                .any(|(dk, _)| dk == k)
+                .then_some((k.as_str(), v.as_str()))
+        })
         .collect();
 
     let mut rows: Vec<Vec<String>> = DEFAULTS
         .iter()
-        .map(|(key, default)| vec![key.to_string(), db_map.get(key).copied().unwrap_or(default).to_string()])
+        .map(|(key, default)| {
+            vec![
+                key.to_string(),
+                db_map.get(key).copied().unwrap_or(default).to_string(),
+            ]
+        })
         .collect();
     rows.sort_by(|a, b| a[0].cmp(&b[0]));
 
     if json {
-        let map: serde_json::Map<String, serde_json::Value> = rows.iter()
-            .map(|r| (r[0].clone(), json!(r[1])))
-            .collect();
-        println!("{}", serde_json::to_string_pretty(&json!({ "settings": map }))
-            .map_err(|e| e.to_string())?);
+        let map: serde_json::Map<String, serde_json::Value> =
+            rows.iter().map(|r| (r[0].clone(), json!(r[1]))).collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({ "settings": map })).map_err(|e| e.to_string())?
+        );
     } else {
         print_table(&["KEY", "VALUE"], &rows);
     }
@@ -134,15 +153,20 @@ pub fn set(conn: &Connection, json: bool, key: &str, value: &str) -> Result<()> 
         "INSERT INTO settings (key, value) VALUES (?1, ?2)
          ON CONFLICT(key) DO UPDATE SET value = ?2",
         params![key, value],
-    ).map_err(|e| format!("Failed to set setting: {}", e))?;
+    )
+    .map_err(|e| format!("Failed to set setting: {}", e))?;
 
     if json {
-        println!("{}", serde_json::to_string_pretty(&json!({
-            "success": true,
-            "action": "setting_set",
-            "key": key,
-            "value": value
-        })).map_err(|e| e.to_string())?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": true,
+                "action": "setting_set",
+                "key": key,
+                "value": value
+            }))
+            .map_err(|e| e.to_string())?
+        );
     } else {
         println!("Set {} = {}", key, value);
     }

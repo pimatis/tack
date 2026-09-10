@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { update, togglePin } from '$lib/repositories/task.repository';
+	import { update, togglePin, findById } from '$lib/repositories/task.repository';
 	import PriorityIcon from './PriorityIcon.svelte';
 	import PriorityMenu from './PriorityMenu.svelte';
 	import StatusMenu from './StatusMenu.svelte';
@@ -46,6 +46,8 @@
 	import MarkdownRenderer from './MarkdownRenderer.svelte';
 	import DueDatePicker from './DueDatePicker.svelte';
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
+	import { getLinkingNotes } from '$lib/notes/search';
+	import { notesState } from '$lib/notes/notesState.svelte';
 
 	type Props = {
 		open?: boolean;
@@ -101,6 +103,9 @@
 	// activity
 	let activities = $state<ActivityLog[]>([]);
 
+	// notes that mention this task; loaded with the panel content
+	let mentioningNotes = $state<{ path: string; name: string }[]>([]);
+
 	const statusLabels: Record<TaskStatus, string> = {
 		todo: 'Todo',
 		in_progress: 'In progress',
@@ -141,7 +146,35 @@
 		void loadTaskLabels(task.id);
 		void loadSubtasks(task.id);
 		void loadActivity(task.id);
+		void loadMentioningNotes(task.id);
+		// the list view omits the description column; fetch the full task so
+		// existing descriptions (e.g. from a note conversion) show up
+		void loadFullTask(task.id);
 	});
+
+	async function loadFullTask(id: string) {
+		const full = await findById(id).catch(() => null);
+		// the open effect already set the fields; only patch the heavy fields
+		// the list doesn't carry, and only while the same task is still open
+		if (!full || full.id !== task?.id) return;
+		if (!description) description = full.description ?? '';
+	}
+
+	// jump from a task to the note that mentions it: switch to the notes tab
+	// first so the notes view is mounted when the note opens
+	async function openMentioningNote(path: string) {
+		notesState.activeTab = 'notes';
+		await notesState.openNote(path);
+	}
+
+	async function loadMentioningNotes(taskId: string) {
+		mentioningNotes = [];
+		try {
+			mentioningNotes = await getLinkingNotes(`task:${taskId}`);
+		} catch {
+			// the links index may not exist yet
+		}
+	}
 
 	$effect(() => {
 		// keep focus inside the panel, also return it after the lightbox closes
@@ -1004,6 +1037,34 @@
 
 						{#if error}
 							<p class="pt-3 text-[12px] text-destructive" role="alert">{error}</p>
+						{/if}
+
+						<!-- notes that mention this task via @-links -->
+						{#if mentioningNotes.length > 0}
+							<div class="pt-5">
+								<div
+									class="flex items-center gap-1.5 pb-2 text-[11px] font-medium text-muted-foreground/60"
+								>
+									<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+										<path
+											fill="currentColor"
+											d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.17a2 2 0 0 0-.59-1.42l-4.58-4.58A2 2 0 0 0 13.41 2zm7.5 1.13L18.87 8H13.5zM8 12h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2m0 4h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2"
+										/>
+									</svg>
+									<span>Notes mentioning this task</span>
+								</div>
+								<div class="flex flex-wrap gap-1.5">
+									{#each mentioningNotes as note (note.path)}
+										<button
+											type="button"
+											class="max-w-52 truncate rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+											onclick={() => void openMentioningNote(note.path)}
+										>
+											{note.name.replace(/\.md$/, '')}
+										</button>
+									{/each}
+								</div>
+							</div>
 						{/if}
 
 						<!-- activity history -->

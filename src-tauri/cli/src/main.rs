@@ -1,6 +1,6 @@
 mod backup;
-mod db;
 mod commands;
+mod db;
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -78,6 +78,32 @@ enum Commands {
         #[command(subcommand)]
         action: FolderAction,
     },
+    /// Manage notes vaults (saved notes folders)
+    Vault {
+        #[command(subcommand)]
+        action: VaultAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum VaultAction {
+    /// List saved vaults and the active one
+    List,
+    /// Switch to a vault (adds it to the list)
+    Use {
+        #[arg(long)]
+        path: String,
+    },
+    /// Register an existing folder as a vault
+    Add {
+        #[arg(long)]
+        path: String,
+    },
+    /// Forget a vault (the active folder is kept)
+    Remove {
+        #[arg(long)]
+        path: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -104,9 +130,7 @@ enum ProjectAction {
         description: Option<String>,
     },
     /// Delete a project and its tasks
-    Delete {
-        id: String,
-    },
+    Delete { id: String },
 }
 
 #[derive(Subcommand)]
@@ -121,7 +145,10 @@ enum TaskAction {
         project_prefix: Option<String>,
         #[arg(long, help = "Status: todo, in_progress, done, canceled")]
         status: Option<String>,
-        #[arg(long, help = "Priority 0-4 (0=none, 1=urgent, 2=high, 3=medium, 4=low)")]
+        #[arg(
+            long,
+            help = "Priority 0-4 (0=none, 1=urgent, 2=high, 3=medium, 4=low)"
+        )]
         priority: Option<i32>,
         #[arg(long, help = "Due date (YYYY-MM-DD)")]
         due_date: Option<String>,
@@ -146,9 +173,7 @@ enum TaskAction {
         since: Option<String>,
     },
     /// Show task details
-    Show {
-        id: String,
-    },
+    Show { id: String },
     /// Update a task
     Update {
         id: String,
@@ -166,21 +191,13 @@ enum TaskAction {
         end_date: Option<String>,
     },
     /// Delete a task
-    Delete {
-        id: String,
-    },
+    Delete { id: String },
     /// Duplicate a task
-    Duplicate {
-        id: String,
-    },
+    Duplicate { id: String },
     /// Pin a task
-    Pin {
-        id: String,
-    },
+    Pin { id: String },
     /// Unpin a task
-    Unpin {
-        id: String,
-    },
+    Unpin { id: String },
     /// Move task to a different project
     Move {
         id: String,
@@ -220,13 +237,9 @@ enum TaskAction {
     /// List trashed tasks
     Trash,
     /// Restore a task from trash
-    Restore {
-        id: String,
-    },
+    Restore { id: String },
     /// Permanently delete a task from trash
-    PermanentDelete {
-        id: String,
-    },
+    PermanentDelete { id: String },
     /// Permanently delete all trashed tasks
     EmptyTrash,
 }
@@ -246,9 +259,7 @@ enum SubtaskAction {
         task: String,
     },
     /// Toggle subtask completion
-    Toggle {
-        id: String,
-    },
+    Toggle { id: String },
     /// Rename a subtask
     Rename {
         id: String,
@@ -256,9 +267,7 @@ enum SubtaskAction {
         title: String,
     },
     /// Delete a subtask
-    Delete {
-        id: String,
-    },
+    Delete { id: String },
 }
 
 #[derive(Subcommand)]
@@ -267,7 +276,10 @@ enum LabelAction {
     Create {
         #[arg(long)]
         name: String,
-        #[arg(long, help = "Color: gray, blue, green, amber, red, purple, pink, teal, orange, indigo")]
+        #[arg(
+            long,
+            help = "Color: gray, blue, green, amber, red, purple, pink, teal, orange, indigo"
+        )]
         color: String,
     },
     /// List all labels
@@ -281,9 +293,7 @@ enum LabelAction {
         color: Option<String>,
     },
     /// Delete a label
-    Delete {
-        id: String,
-    },
+    Delete { id: String },
     /// Assign labels to a task (replaces existing)
     Assign {
         #[arg(long)]
@@ -313,9 +323,7 @@ enum AttachmentAction {
         task: String,
     },
     /// Delete an attachment
-    Delete {
-        id: String,
-    },
+    Delete { id: String },
     /// Download an attachment to a file
     Download {
         id: String,
@@ -371,10 +379,7 @@ enum SettingsAction {
     /// Show all settings
     Get,
     /// Set a setting value
-    Set {
-        key: String,
-        value: String,
-    },
+    Set { key: String, value: String },
 }
 
 #[derive(Subcommand)]
@@ -398,6 +403,11 @@ enum NoteAction {
     List {
         #[arg(long, help = "Only direct children of this folder (empty for root)")]
         folder: Option<String>,
+        #[arg(
+            long,
+            help = "Only notes carrying this tag (frontmatter or inline #tag)"
+        )]
+        tag: Option<String>,
     },
     /// Create a note
     Create {
@@ -490,7 +500,108 @@ enum NoteAction {
         folder: Option<String>,
     },
     /// Open (create if missing) today's daily note (YYYY-MM-DD.md)
-    Today,
+    Today {
+        #[arg(long, help = "Day offset from today (yesterday = -1)")]
+        offset: Option<i64>,
+    },
+    /// Manage note tags (frontmatter + inline #tags)
+    Tag {
+        #[command(subcommand)]
+        action: TagAction,
+    },
+    /// Manage note templates (.tack/templates)
+    Template {
+        #[command(subcommand)]
+        action: TemplateAction,
+    },
+    /// List the saved versions of a note
+    History {
+        #[arg(long, help = "Note name or folder path")]
+        note: String,
+    },
+    /// Restore a saved version of a note
+    RestoreVersion {
+        #[arg(long, help = "Note name or folder path")]
+        note: String,
+        #[arg(long, help = "Version timestamp (see: tack note history)")]
+        at: String,
+    },
+    /// Export a note as markdown or html
+    Export {
+        #[arg(long, help = "Note name or folder path")]
+        note: String,
+        #[arg(long, help = "md or html", default_value = "md")]
+        format: String,
+        #[arg(long, help = "Output file (defaults next to the note)")]
+        out: Option<String>,
+    },
+    /// Attach a file to a note (copied into .tack/assets)
+    Attach {
+        #[arg(long, help = "Note name or folder path")]
+        note: String,
+        #[arg(long, help = "File to attach (image files get a preview reference)")]
+        file: String,
+    },
+    /// Create a note from a template
+    FromTemplate {
+        #[arg(long)]
+        title: String,
+        #[arg(long, help = "Template name (see: tack note template list)")]
+        template: String,
+        #[arg(long, help = "Folder to create the note in (defaults to root)")]
+        folder: Option<String>,
+    },
+    /// Notes that link to this note (mentions or wiki links)
+    Backlinks {
+        #[arg(long, help = "Note name or folder path")]
+        note: String,
+    },
+    /// Notes mentioning this note's title without linking to it
+    Unlinked {
+        #[arg(long, help = "Note name or folder path")]
+        note: String,
+    },
+    /// Convert a note into a task (title + description)
+    ToTask {
+        #[arg(long, help = "Note name or folder path")]
+        note: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum TagAction {
+    /// Add a tag to a note
+    Add {
+        #[arg(long, help = "Note name or folder path")]
+        note: String,
+        #[arg(long)]
+        tag: String,
+    },
+    /// Remove a tag from a note
+    Remove {
+        #[arg(long, help = "Note name or folder path")]
+        note: String,
+        #[arg(long)]
+        tag: String,
+    },
+    /// List all tags with note counts
+    List,
+}
+
+#[derive(Subcommand)]
+enum TemplateAction {
+    /// List templates
+    List,
+    /// Create a template
+    Create {
+        #[arg(long)]
+        title: String,
+        #[arg(
+            long,
+            help = "Template content; {{title}} {{date}} {{time}} {{yesterday}} {{tomorrow}} are filled in on use"
+        )]
+        content: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -519,7 +630,10 @@ enum FolderAction {
 }
 
 fn parse_ids(s: &str) -> Vec<String> {
-    s.split(',').map(|id| id.trim().to_string()).filter(|id| !id.is_empty()).collect()
+    s.split(',')
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .collect()
 }
 
 fn main() {
@@ -537,49 +651,100 @@ fn main() {
 
     let result = match cli.command {
         Commands::Project { action } => match action {
-            ProjectAction::Create { name, prefix, description } => {
-                commands::project::create(&conn, json, &name, &prefix, description.as_deref())
-            }
-            ProjectAction::List => {
-                commands::project::list(&conn, json)
-            }
-            ProjectAction::Update { id, name, prefix, description } => {
+            ProjectAction::Create {
+                name,
+                prefix,
+                description,
+            } => commands::project::create(&conn, json, &name, &prefix, description.as_deref()),
+            ProjectAction::List => commands::project::list(&conn, json),
+            ProjectAction::Update {
+                id,
+                name,
+                prefix,
+                description,
+            } => {
                 commands::project::update(&conn, json, &id, &name, &prefix, description.as_deref())
             }
-            ProjectAction::Delete { id } => {
-                commands::project::delete(&conn, json, &id)
-            }
+            ProjectAction::Delete { id } => commands::project::delete(&conn, json, &id),
         },
         Commands::Task { action } => match action {
-            TaskAction::Create { title, project, project_prefix, status, priority, due_date, end_date, description } => {
+            TaskAction::Create {
+                title,
+                project,
+                project_prefix,
+                status,
+                priority,
+                due_date,
+                end_date,
+                description,
+            } => {
                 let dd = due_date.as_deref().filter(|s| !s.is_empty());
                 let ed = end_date.as_deref().filter(|s| !s.is_empty());
-                commands::task::create(&conn, json, &title, project.as_deref(), project_prefix.as_deref(), status.as_deref(), priority, dd, ed, description.as_deref())
+                commands::task::create(
+                    &conn,
+                    json,
+                    &title,
+                    project.as_deref(),
+                    project_prefix.as_deref(),
+                    status.as_deref(),
+                    priority,
+                    dd,
+                    ed,
+                    description.as_deref(),
+                )
             }
-            TaskAction::List { project, project_prefix, status, priority, pinned, since } => {
-                commands::task::list(&conn, json, project.as_deref(), project_prefix.as_deref(), status.as_deref(), priority, pinned, since.as_deref())
-            }
-            TaskAction::Show { id } => {
-                commands::task::show(&conn, json, &id)
-            }
-            TaskAction::Update { id, title, description, status, priority, due_date, end_date } => {
-                commands::task::update(&conn, json, &id, title.as_deref(), description.as_deref(), status.as_deref(), priority, due_date.as_deref(), end_date.as_deref())
-            }
-            TaskAction::Delete { id } => {
-                commands::task::delete(&conn, json, &id)
-            }
-            TaskAction::Duplicate { id } => {
-                commands::task::duplicate(&conn, json, &id)
-            }
-            TaskAction::Pin { id } => {
-                commands::task::toggle_pin(&conn, json, &id, true)
-            }
-            TaskAction::Unpin { id } => {
-                commands::task::toggle_pin(&conn, json, &id, false)
-            }
-            TaskAction::Move { id, project, project_prefix } => {
-                commands::task::move_to_project(&conn, json, &id, project.as_deref(), project_prefix.as_deref())
-            }
+            TaskAction::List {
+                project,
+                project_prefix,
+                status,
+                priority,
+                pinned,
+                since,
+            } => commands::task::list(
+                &conn,
+                json,
+                project.as_deref(),
+                project_prefix.as_deref(),
+                status.as_deref(),
+                priority,
+                pinned,
+                since.as_deref(),
+            ),
+            TaskAction::Show { id } => commands::task::show(&conn, json, &id),
+            TaskAction::Update {
+                id,
+                title,
+                description,
+                status,
+                priority,
+                due_date,
+                end_date,
+            } => commands::task::update(
+                &conn,
+                json,
+                &id,
+                title.as_deref(),
+                description.as_deref(),
+                status.as_deref(),
+                priority,
+                due_date.as_deref(),
+                end_date.as_deref(),
+            ),
+            TaskAction::Delete { id } => commands::task::delete(&conn, json, &id),
+            TaskAction::Duplicate { id } => commands::task::duplicate(&conn, json, &id),
+            TaskAction::Pin { id } => commands::task::toggle_pin(&conn, json, &id, true),
+            TaskAction::Unpin { id } => commands::task::toggle_pin(&conn, json, &id, false),
+            TaskAction::Move {
+                id,
+                project,
+                project_prefix,
+            } => commands::task::move_to_project(
+                &conn,
+                json,
+                &id,
+                project.as_deref(),
+                project_prefix.as_deref(),
+            ),
             TaskAction::BulkDelete { ids } => {
                 commands::task::bulk_delete(&conn, json, &parse_ids(&ids))
             }
@@ -589,122 +754,88 @@ fn main() {
             TaskAction::BulkPriority { ids, priority } => {
                 commands::task::bulk_priority(&conn, json, &parse_ids(&ids), priority)
             }
-            TaskAction::BulkMove { ids, project, project_prefix } => {
-                commands::task::bulk_move(&conn, json, &parse_ids(&ids), project.as_deref(), project_prefix.as_deref())
-            }
-            TaskAction::Trash => {
-                commands::task::trash_list(&conn, json)
-            }
-            TaskAction::Restore { id } => {
-                commands::task::restore(&conn, json, &id)
-            }
+            TaskAction::BulkMove {
+                ids,
+                project,
+                project_prefix,
+            } => commands::task::bulk_move(
+                &conn,
+                json,
+                &parse_ids(&ids),
+                project.as_deref(),
+                project_prefix.as_deref(),
+            ),
+            TaskAction::Trash => commands::task::trash_list(&conn, json),
+            TaskAction::Restore { id } => commands::task::restore(&conn, json, &id),
             TaskAction::PermanentDelete { id } => {
                 commands::task::permanent_delete(&conn, json, &id)
             }
-            TaskAction::EmptyTrash => {
-                commands::task::empty_trash(&conn, json)
-            }
+            TaskAction::EmptyTrash => commands::task::empty_trash(&conn, json),
         },
         Commands::Subtask { action } => match action {
             SubtaskAction::Add { task, title } => {
                 commands::subtask::add(&conn, json, &task, &title)
             }
-            SubtaskAction::List { task } => {
-                commands::subtask::list(&conn, json, &task)
-            }
-            SubtaskAction::Toggle { id } => {
-                commands::subtask::toggle(&conn, json, &id)
-            }
+            SubtaskAction::List { task } => commands::subtask::list(&conn, json, &task),
+            SubtaskAction::Toggle { id } => commands::subtask::toggle(&conn, json, &id),
             SubtaskAction::Rename { id, title } => {
                 commands::subtask::rename(&conn, json, &id, &title)
             }
-            SubtaskAction::Delete { id } => {
-                commands::subtask::delete(&conn, json, &id)
-            }
+            SubtaskAction::Delete { id } => commands::subtask::delete(&conn, json, &id),
         },
         Commands::Label { action } => match action {
             LabelAction::Create { name, color } => {
                 commands::label::create(&conn, json, &name, &color)
             }
-            LabelAction::List => {
-                commands::label::list(&conn, json)
-            }
+            LabelAction::List => commands::label::list(&conn, json),
             LabelAction::Update { id, name, color } => {
                 commands::label::update(&conn, json, &id, name.as_deref(), color.as_deref())
             }
-            LabelAction::Delete { id } => {
-                commands::label::delete(&conn, json, &id)
-            }
+            LabelAction::Delete { id } => commands::label::delete(&conn, json, &id),
             LabelAction::Assign { task, labels } => {
                 commands::label::assign(&conn, json, &task, &parse_ids(&labels))
             }
-            LabelAction::Show { task } => {
-                commands::label::show(&conn, json, &task)
-            }
+            LabelAction::Show { task } => commands::label::show(&conn, json, &task),
         },
         Commands::Attachment { action } => match action {
             AttachmentAction::Add { task, file } => {
                 commands::attachment::add(&conn, json, &task, &file)
             }
-            AttachmentAction::List { task } => {
-                commands::attachment::list(&conn, json, &task)
-            }
-            AttachmentAction::Delete { id } => {
-                commands::attachment::delete(&conn, json, &id)
-            }
+            AttachmentAction::List { task } => commands::attachment::list(&conn, json, &task),
+            AttachmentAction::Delete { id } => commands::attachment::delete(&conn, json, &id),
             AttachmentAction::Download { id, output } => {
                 commands::attachment::download(&conn, json, &id, output.as_deref().unwrap_or(""))
             }
         },
         Commands::Activity { action } => match action {
-            ActivityAction::List { task } => {
-                commands::activity::list(&conn, json, &task)
-            }
+            ActivityAction::List { task } => commands::activity::list(&conn, json, &task),
         },
         Commands::Data { action } => match action {
             DataAction::Export { output } => {
                 commands::data::export(&conn, json, output.as_deref().unwrap_or(""))
             }
-            DataAction::Import { file } => {
-                commands::data::import(&conn, json, &file)
-            }
+            DataAction::Import { file } => commands::data::import(&conn, json, &file),
             DataAction::Backup { keep } => {
                 commands::data::backup(json, &db_path, keep.unwrap_or(7))
             }
-            DataAction::Restore { name } => {
-                commands::data::restore(json, &db_path, &name)
-            }
-            DataAction::BackupList => {
-                commands::data::backup_list(json, &db_path)
-            }
+            DataAction::Restore { name } => commands::data::restore(json, &db_path, &name),
+            DataAction::BackupList => commands::data::backup_list(json, &db_path),
             DataAction::BackupDelete { name } => {
                 commands::data::backup_delete(json, &db_path, &name)
             }
-            DataAction::Reset => {
-                commands::data::reset(&conn, json)
-            }
+            DataAction::Reset => commands::data::reset(&conn, json),
         },
         Commands::Settings { action } => match action {
-            SettingsAction::Get => {
-                commands::settings::get(&conn, json)
-            }
+            SettingsAction::Get => commands::settings::get(&conn, json),
             SettingsAction::Set { key, value } => {
                 commands::settings::set(&conn, json, &key, &value)
             }
         },
         Commands::Live { action } => match action {
-            LiveAction::On { port } => {
-                commands::live::on(&conn, json, port)
-            }
-            LiveAction::Off => {
-                commands::live::off(&conn, json)
-            }
-            LiveAction::Status => {
-                commands::live::status(&conn, json)
-            }
-            LiveAction::Watch => {
-                commands::live::watch(&conn, json)
-            }
+            LiveAction::On { port } => commands::live::on(&conn, json, port),
+            LiveAction::Off => commands::live::off(&conn, json),
+            LiveAction::Status => commands::live::status(&conn, json),
+            LiveAction::Watch => commands::live::watch(&conn, json),
         },
         Commands::Note { action } => {
             let root = match commands::note::resolve_dir(cli.notes_dir.as_ref(), &conn) {
@@ -715,60 +846,87 @@ fn main() {
                 }
             };
             match action {
-                NoteAction::List { folder } => {
-                    commands::note::list(&root, json, folder.as_deref())
+                NoteAction::List { folder, tag } => {
+                    commands::note::list(&root, json, folder.as_deref(), tag.as_deref())
                 }
-                NoteAction::Create { title, folder, content } => {
-                    commands::note::create(&root, json, &title, folder.as_deref(), content.as_deref())
-                }
-                NoteAction::Show { note } => {
-                    commands::note::show(&root, json, &note)
-                }
-                NoteAction::Update { note, content, stdin } => {
-                    commands::note::update(&root, json, &note, content.as_deref(), stdin)
-                }
+                NoteAction::Create {
+                    title,
+                    folder,
+                    content,
+                } => commands::note::create(
+                    &root,
+                    json,
+                    &title,
+                    folder.as_deref(),
+                    content.as_deref(),
+                ),
+                NoteAction::Show { note } => commands::note::show(&root, json, &note),
+                NoteAction::Update {
+                    note,
+                    content,
+                    stdin,
+                } => commands::note::update(&root, json, &note, content.as_deref(), stdin),
                 NoteAction::Rename { note, title } => {
                     commands::note::rename(&root, json, &note, &title)
                 }
                 NoteAction::Move { note, folder } => {
                     commands::note::move_note(&root, json, &note, folder.as_deref())
                 }
-                NoteAction::Archive { note } => {
-                    commands::note::archive(&root, json, &note)
-                }
-                NoteAction::Archived => {
-                    commands::note::archived_list(&root, json)
-                }
-                NoteAction::Unarchive { note } => {
-                    commands::note::unarchive(&root, json, &note)
-                }
-                NoteAction::Delete { note } => {
-                    commands::note::delete(&root, json, &note)
-                }
-                NoteAction::Trash => {
-                    commands::note::trash_list(&root, json)
-                }
-                NoteAction::Restore { note } => {
-                    commands::note::restore(&root, json, &note)
-                }
+                NoteAction::Archive { note } => commands::note::archive(&root, json, &note),
+                NoteAction::Archived => commands::note::archived_list(&root, json),
+                NoteAction::Unarchive { note } => commands::note::unarchive(&root, json, &note),
+                NoteAction::Delete { note } => commands::note::delete(&root, json, &note),
+                NoteAction::Trash => commands::note::trash_list(&root, json),
+                NoteAction::Restore { note } => commands::note::restore(&root, json, &note),
                 NoteAction::Purge { note, all } => {
                     commands::note::purge(&root, json, note.as_deref(), all)
                 }
-                NoteAction::Pin { note } => {
-                    commands::note::pin(&conn, json, &root, &note, false)
-                }
-                NoteAction::Unpin { note } => {
-                    commands::note::pin(&conn, json, &root, &note, true)
-                }
-                NoteAction::Info { note } => {
-                    commands::note::info(&root, json, &note)
-                }
+                NoteAction::Pin { note } => commands::note::pin(&conn, json, &root, &note, false),
+                NoteAction::Unpin { note } => commands::note::pin(&conn, json, &root, &note, true),
+                NoteAction::Info { note } => commands::note::info(&root, json, &note),
                 NoteAction::Search { query, folder } => {
                     commands::note::search(&root, json, &query, folder.as_deref())
                 }
-                NoteAction::Today => {
-                    commands::note::today(&root, json)
+                NoteAction::Today { offset } => commands::note::today(&root, json, offset),
+                NoteAction::Tag { action } => match action {
+                    TagAction::Add { note, tag } => {
+                        commands::note::tag_add(&root, json, &note, &tag)
+                    }
+                    TagAction::Remove { note, tag } => {
+                        commands::note::tag_remove(&root, json, &note, &tag)
+                    }
+                    TagAction::List => commands::note::tag_list(&root, json),
+                },
+                NoteAction::Template { action } => match action {
+                    TemplateAction::List => commands::note::template_list(&root, json),
+                    TemplateAction::Create { title, content } => {
+                        commands::note::template_create(&root, json, &title, content.as_deref())
+                    }
+                },
+                NoteAction::History { note } => commands::note::history(&root, json, &note),
+                NoteAction::RestoreVersion { note, at } => {
+                    commands::note::restore_version(&root, json, &note, &at)
                 }
+                NoteAction::Export { note, format, out } => {
+                    commands::note::export(&root, json, &note, &format, out.as_deref())
+                }
+                NoteAction::Attach { note, file } => {
+                    commands::note::attach(&root, json, &note, &file)
+                }
+                NoteAction::FromTemplate {
+                    title,
+                    template,
+                    folder,
+                } => commands::note::create_from_template(
+                    &root,
+                    json,
+                    &title,
+                    &template,
+                    folder.as_deref(),
+                ),
+                NoteAction::Backlinks { note } => commands::note::backlinks(&root, json, &note),
+                NoteAction::Unlinked { note } => commands::note::unlinked(&root, json, &note),
+                NoteAction::ToTask { note } => commands::note::to_task(&conn, &root, json, &note),
             }
         }
         Commands::Folder { action } => {
@@ -780,9 +938,7 @@ fn main() {
                 }
             };
             match action {
-                FolderAction::List => {
-                    commands::note::folder_list(&root, json)
-                }
+                FolderAction::List => commands::note::folder_list(&root, json),
                 FolderAction::Create { name, parent } => {
                     commands::note::folder_create(&root, json, &name, parent.as_deref())
                 }
@@ -794,6 +950,12 @@ fn main() {
                 }
             }
         }
+        Commands::Vault { action } => match action {
+            VaultAction::List => commands::vault::list(&conn, json),
+            VaultAction::Use { path } => commands::vault::use_vault(&conn, json, &path),
+            VaultAction::Add { path } => commands::vault::add(&conn, json, &path),
+            VaultAction::Remove { path } => commands::vault::remove(&conn, json, &path),
+        },
     };
 
     if let Err(e) = result {

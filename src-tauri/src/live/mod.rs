@@ -2,12 +2,13 @@ mod attachments;
 mod auth;
 mod backups;
 mod events;
-mod hub;
 mod http;
+mod hub;
 mod query;
 mod server;
 
 pub use hub::LiveHub;
+mod notes;
 pub use server::{LiveState, LiveStatus};
 
 use std::path::PathBuf;

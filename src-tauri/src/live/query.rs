@@ -27,7 +27,11 @@ pub(super) fn run_query(
     }
 }
 
-pub(super) fn execute_query(request: &mut Request, ctx: &Ctx, is_select: bool) -> super::Result<Value> {
+pub(super) fn execute_query(
+    request: &mut Request,
+    ctx: &Ctx,
+    is_select: bool,
+) -> super::Result<Value> {
     let mut body = String::new();
     request
         .as_reader()

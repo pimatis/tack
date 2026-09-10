@@ -10,7 +10,11 @@ fn attachment_id(path: &str) -> Option<&str> {
     valid.then_some(id)
 }
 
-pub(super) fn serve_attachment(path: &str, query: &str, ctx: &Ctx) -> Response<std::io::Cursor<Vec<u8>>> {
+pub(super) fn serve_attachment(
+    path: &str,
+    query: &str,
+    ctx: &Ctx,
+) -> Response<std::io::Cursor<Vec<u8>>> {
     let Some(id) = attachment_id(path) else {
         return json_response(StatusCode(400), json!({ "error": "Invalid attachment id" }));
     };

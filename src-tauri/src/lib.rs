@@ -1,5 +1,5 @@
-pub mod backup;
 mod attachments;
+pub mod backup;
 mod cli;
 mod db;
 mod db_reporter;
@@ -82,7 +82,39 @@ pub fn run() {
                 reveal_main_window(webview.app_handle());
             }
         })
-        .invoke_handler(tauri::generate_handler![get_app_version, show_window, write_file, read_file, notes::list_notes, notes::read_notes, notes::rename_note, notes::delete_note, notes::list_note_folders, notes::list_notes_deep, notes::read_notes_deep, notes::create_folder, notes::delete_folder, notes::note_info, notes::watch::watch_notes_dir, attachments::save_attachment, attachments::read_attachment, attachments::delete_attachment, attachments::download_attachment, create_backup, list_backups, restore_backup, delete_backup, cli::install_cli, cli::cli_installed, live::live_start, live::live_stop, live::live_status, live::hash_live_password])
+        .invoke_handler(tauri::generate_handler![
+            get_app_version,
+            show_window,
+            write_file,
+            read_file,
+            notes::list_notes,
+            notes::read_notes,
+            notes::rename_note,
+            notes::delete_note,
+            notes::list_note_folders,
+            notes::list_notes_deep,
+            notes::read_notes_deep,
+            notes::create_folder,
+            notes::delete_folder,
+            notes::note_info,
+            notes::save_note_with_history,
+            notes::write_binary_file,
+            notes::watch::watch_notes_dir,
+            attachments::save_attachment,
+            attachments::read_attachment,
+            attachments::delete_attachment,
+            attachments::download_attachment,
+            create_backup,
+            list_backups,
+            restore_backup,
+            delete_backup,
+            cli::install_cli,
+            cli::cli_installed,
+            live::live_start,
+            live::live_stop,
+            live::live_status,
+            live::hash_live_password
+        ])
         .setup(|app| {
             let handle = app.handle().clone();
             // fs + shellrc work: keep it off the critical path so the webview
@@ -97,7 +129,10 @@ pub fn run() {
             migrations::run_migrations(&conn)?;
             // live is session-scoped: clear the persisted flag at launch so
             // the webview never reads a stale true and auto-starts the server
-            let _ = conn.execute("UPDATE settings SET value = 'false' WHERE key = 'liveEnabled'", []);
+            let _ = conn.execute(
+                "UPDATE settings SET value = 'false' WHERE key = 'liveEnabled'",
+                [],
+            );
             let hub = Arc::new(live::LiveHub::default());
             app.manage(live::LiveState {
                 server: Mutex::new(None),

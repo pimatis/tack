@@ -115,7 +115,10 @@ pub fn watch(conn: &Connection, json: bool) -> Result<()> {
     let port = current_port(conn);
     // the app's server binds 0.0.0.0, so loopback always reaches it
     let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).map_err(|_| {
-        format!("live server is not running on port {} - start the tack app", port)
+        format!(
+            "live server is not running on port {} - start the tack app",
+            port
+        )
     })?;
     use std::io::{BufRead, BufReader, Write};
     write!(
@@ -148,8 +151,7 @@ pub fn watch(conn: &Connection, json: bool) -> Result<()> {
     if json {
         println!(
             "{}",
-            serde_json::to_string(&json!({ "stream": "closed" }))
-                .map_err(|e| e.to_string())?
+            serde_json::to_string(&json!({ "stream": "closed" })).map_err(|e| e.to_string())?
         );
     } else {
         println!("live stream closed (server stopped or connection lost)");
@@ -161,10 +163,7 @@ fn print_event(json: bool, kind: &str, data: &str) -> Result<()> {
     let payload: serde_json::Value =
         serde_json::from_str(data).map_err(|e| format!("bad event payload: {}", e))?;
     if json {
-        let mut out = payload
-            .as_object()
-            .cloned()
-            .unwrap_or_default();
+        let mut out = payload.as_object().cloned().unwrap_or_default();
         if kind == "connected" {
             out.insert("connected".to_string(), json!(true));
         }

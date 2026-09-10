@@ -1,14 +1,16 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
-	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import * as ContextMenu from '$lib/components/ui/context-menu/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { sortableItem, dropZone, reorderArray, type DragDropState } from '$lib/dnd';
 	import { notesState, type NoteInfo } from '$lib/notes/notesState.svelte';
+	import { exportNote } from '$lib/notes/export';
 	import NoteContextMenu from './NoteContextMenu.svelte';
 	import NoteInfoDialog from './NoteInfoDialog.svelte';
+	import NoteHistoryDialog from './NoteHistoryDialog.svelte';
+	import NoteTagsDialog from './NoteTagsDialog.svelte';
 	import NameWarningDialog from './NameWarningDialog.svelte';
 	import { isTauri } from '$lib/db/client';
 
@@ -127,6 +129,35 @@
 	function openCreateDialog(type: 'note' | 'folder', parent: string | null) {
 		window.dispatchEvent(new CustomEvent('open-note-create-dialog', { detail: { type, parent } }));
 	}
+
+	// export failures surface in the error banner; cancel is silent
+	async function handleExport(note: NoteInfo, format: 'md' | 'html') {
+		if (!notesState.folder) return;
+		try {
+			await exportNote(note.path, notesState.folder, format);
+		} catch (e) {
+			notesState.error = String(e);
+		}
+	}
+
+	// tag panel collapse, remembered across sessions
+	let tagsOpen = $state(false);
+	function initTagsPanel() {
+		try {
+			tagsOpen = localStorage.getItem('tack-notes-tags-open') === 'on';
+		} catch {
+			tagsOpen = false;
+		}
+	}
+	initTagsPanel();
+	function toggleTagsPanel() {
+		tagsOpen = !tagsOpen;
+		try {
+			localStorage.setItem('tack-notes-tags-open', tagsOpen ? 'on' : 'off');
+		} catch {
+			// storage unavailable - the toggle still works for the session
+		}
+	}
 </script>
 
 {#snippet noteRow(note: NoteInfo, rel: string | null)}
@@ -195,6 +226,17 @@
 			onArchive={(n) => void notesState.archiveNote(n.path)}
 			onRestore={(n) => void notesState.restoreNote(n.path)}
 			onDelete={(n) => void notesState.deleteNote(n.path)}
+			onTags={(n) =>
+				window.dispatchEvent(
+					new CustomEvent('open-note-tags-dialog', { detail: { path: n.path } })
+				)}
+			onHistory={(n) =>
+				window.dispatchEvent(
+					new CustomEvent('open-note-history-dialog', { detail: { path: n.path } })
+				)}
+			onExport={(n, format) => void handleExport(n, format)}
+			onConvertToTask={(n) =>
+				window.dispatchEvent(new CustomEvent('convert-note-to-task', { detail: { path: n.path } }))}
 		/>
 	</ContextMenu.Root>
 {/snippet}
@@ -363,16 +405,16 @@
 		</Button>
 	</div>
 {:else}
-	<!-- open folder + sort -->
+	<!-- open folder + vault switcher + sort -->
 	<div class="flex items-center gap-1 px-3 pt-1 pb-1">
-		<Tooltip.Root>
-			<Tooltip.Trigger>
+		<DropdownMenu.Root>
+			<DropdownMenu.Trigger>
 				{#snippet child({ props })}
 					<button
 						{...props}
 						type="button"
 						class="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-1 text-left text-[12px] font-medium text-muted-foreground transition-colors hover:text-sidebar-foreground"
-						onclick={() => void notesState.pickFolder()}
+						aria-label="Switch vault"
 					>
 						<svg class="shrink-0" width="13" height="13" viewBox="0 0 24 24" fill="none"
 							><path
@@ -383,9 +425,40 @@
 						<span class="truncate">{folderName}</span>
 					</button>
 				{/snippet}
-			</Tooltip.Trigger>
-			<Tooltip.Content side="right">Change folder</Tooltip.Content>
-		</Tooltip.Root>
+			</DropdownMenu.Trigger>
+			<DropdownMenu.Content align="start" class="w-56">
+				<DropdownMenu.Label>Vaults</DropdownMenu.Label>
+				{#each notesState.vaults as vault (vault)}
+					<DropdownMenu.Item
+						class="gap-2"
+						onclick={() => {
+							if (vault !== notesState.folder) void notesState.setFolder(vault);
+						}}
+					>
+						<span class="min-w-0 flex-1 truncate">
+							{vault.split('/').filter(Boolean).pop()}
+						</span>
+						{#if vault === notesState.folder}
+							<svg
+								class="shrink-0 text-foreground"
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								><path
+									fill="currentColor"
+									d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2m3.535 6.304-4.95 4.95-2.12-2.122a1 1 0 1 0-1.415 1.414l2.758 2.758a1.1 1.1 0 0 0 1.556 0l5.586-5.586a1 1 0 0 0-1.415-1.414"
+								/></svg
+							>
+						{/if}
+					</DropdownMenu.Item>
+				{/each}
+				<DropdownMenu.Separator />
+				<DropdownMenu.Item onclick={() => void notesState.pickFolder()}>
+					Choose folder…
+				</DropdownMenu.Item>
+			</DropdownMenu.Content>
+		</DropdownMenu.Root>
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
 				{#snippet child({ props })}
@@ -417,6 +490,58 @@
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
 	</div>
+
+	{#if notesState.allTags.length > 0}
+		<!-- tag panel: collapsible chip list, active tag filters every note list -->
+		<div class="px-3 pb-1">
+			<button
+				type="button"
+				class="flex w-full items-center gap-1.5 rounded-md px-1 py-1 text-left text-[11px] font-medium text-muted-foreground/70 transition-colors hover:text-sidebar-foreground"
+				onclick={toggleTagsPanel}
+			>
+				<svg
+					class="shrink-0 transition-transform duration-150 {tagsOpen ? 'rotate-90' : ''}"
+					width="11"
+					height="11"
+					viewBox="0 0 24 24"
+					fill="none"
+					><path
+						fill="currentColor"
+						d="M16.06 10.94a1.5 1.5 0 0 1 0 2.12l-5.656 5.658a1.5 1.5 0 1 1-2.121-2.122L12.879 12 8.283 7.404a1.5 1.5 0 0 1 2.12-2.122l5.658 5.657Z"
+					/></svg
+				>
+				Tags
+				{#if notesState.activeTag}
+					<button
+						type="button"
+						class="ml-auto rounded-full bg-primary/15 px-2 py-0.5 text-[10px] text-primary transition-colors hover:bg-primary/25"
+						onclick={(e) => {
+							e.stopPropagation();
+							notesState.setActiveTag(notesState.activeTag);
+						}}
+					>
+						clear
+					</button>
+				{/if}
+			</button>
+			{#if tagsOpen}
+				<div class="mt-1 ml-[13px] flex flex-wrap gap-1 border-l border-sidebar-border/50 pl-1.5">
+					{#each notesState.allTags as tag (tag)}
+						<button
+							type="button"
+							class="rounded-full px-2 py-0.5 text-[11px] transition-colors {notesState.activeTag ===
+							tag
+								? 'bg-primary/20 text-primary'
+								: 'bg-muted/40 text-muted-foreground hover:bg-muted/70 hover:text-foreground'}"
+							onclick={() => notesState.setActiveTag(tag)}
+						>
+							#{tag}
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	{/if}
 
 	{#if notesState.error}
 		<div class="px-3 py-2 text-[12px] text-red-400/90">{notesState.error}</div>
@@ -490,4 +615,6 @@
 	</Dialog.Content>
 </Dialog.Root>
 <NoteInfoDialog />
+<NoteHistoryDialog />
+<NoteTagsDialog />
 <NameWarningDialog />

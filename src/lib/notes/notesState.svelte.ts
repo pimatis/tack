@@ -2,7 +2,9 @@ import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { isTauri, getDb } from '$lib/db/client';
 import { reorderArray } from '$lib/dnd';
-import { reindexNotes, indexNote } from './search';
+import { notesInvoke, notesRoot } from './liveNotes';
+import { reindexNotes, indexNote, type IndexedNote } from './search';
+import { splitFrontmatter, tagsOf, addTag, removeTag } from './frontmatter';
 
 export type NoteInfo = { name: string; path: string; modified: number };
 
@@ -11,6 +13,8 @@ const TAB_KEY = 'tack-notes-tab';
 const SORT_KEY = 'tack-notes-sort';
 const EXPANDED_KEY = 'tack-notes-expanded';
 const ORDER_KEY = 'tack-notes-order';
+const SPELLCHECK_KEY = 'tack-notes-spellcheck';
+const HISTORY_KEEP = 30;
 
 function loadInitialTab(): 'tasks' | 'notes' {
 	try {
@@ -44,39 +48,22 @@ class NotesPageState {
 	error = $state<string | null>(null);
 	// name-too-long is a user input problem: shown as a dialog, not the error banner
 	nameWarning = $state<string | null>(null);
-
+	// tags per note path (frontmatter + inline), aggregated for the tag panel
+	noteTags = $state<Record<string, string[]>>({});
+	activeTag = $state<string | null>(null);
+	// saved notes folders (multi-vault); the active one is this.folder
+	vaults = $state<string[]>([]);
+	// focus mode hides everything but the editor; spellcheck toggles the textarea
+	focusMode = $state(false);
+	spellcheck = $state(false);
 	// manual drag order per container ('root' or a relative folder path)
 	#manualOrders: Record<string, string[]> = {};
-
 	// per-tab content cache: tab switches skip the disk read; cleared on
 	// refresh so external edits never show stale text
 	#contentCache = new Map<string, string>();
-
 	#initialized = false;
 	#saveTimer: ReturnType<typeof setTimeout> | undefined;
-
-	static #instance: NotesPageState | undefined;
-
-	constructor() {
-		// remember the active tab across page reloads
-		$effect.root(() => {
-			$effect(() => {
-				try {
-					localStorage.setItem(TAB_KEY, this.activeTab);
-				} catch {
-					// storage unavailable (ssr) - not worth reporting
-				}
-			});
-			// remember which folders are collapsed
-			$effect(() => {
-				try {
-					localStorage.setItem(EXPANDED_KEY, JSON.stringify(this.expandedFolders));
-				} catch {
-					// storage unavailable (ssr) - not worth reporting
-				}
-			});
-		});
-	}
+	static #instance: NotesPageState;
 
 	static get(): NotesPageState {
 		this.#instance ??= new NotesPageState();
@@ -84,7 +71,7 @@ class NotesPageState {
 	}
 
 	async init() {
-		if (this.#initialized || !isTauri()) return;
+		if (this.#initialized) return;
 		this.#initialized = true;
 		this.folder = localStorage.getItem(FOLDER_KEY);
 		const storedSort = localStorage.getItem(SORT_KEY);
@@ -94,9 +81,84 @@ class NotesPageState {
 		} catch {
 			this.expandedFolders = {};
 		}
-		if (this.folder) await this.refresh();
-		await this.#loadTabs();
-		await this.#activateFolderWatch();
+		if (isTauri()) {
+			if (this.folder) await this.refresh();
+			await this.#loadTabs();
+			await this.#activateFolderWatch();
+		} else {
+			// live mode: the desktop app owns the notes folder, so use its root
+			try {
+				this.folder = await notesRoot();
+				await this.refresh();
+				await this.#loadTabs();
+			} catch (e) {
+				this.error = String(e);
+			}
+		}
+		try {
+			this.spellcheck = localStorage.getItem(SPELLCHECK_KEY) === 'on';
+		} catch {
+			this.spellcheck = false;
+		}
+		await this.#loadVaults();
+	}
+
+	toggleSpellcheck() {
+		this.spellcheck = !this.spellcheck;
+		try {
+			localStorage.setItem(SPELLCHECK_KEY, this.spellcheck ? 'on' : 'off');
+		} catch {
+			// ignore private-mode storage failures
+		}
+	}
+
+	// ---- multi-vault ----
+
+	async #loadVaults() {
+		let stored: unknown = null;
+		try {
+			if (isTauri()) {
+				const db = await getDb();
+				const rows = await db.select<{ value: string }[]>(
+					'SELECT value FROM settings WHERE key = ?1',
+					['notesVaults']
+				);
+				stored = JSON.parse(rows[0]?.value ?? 'null');
+			}
+		} catch {
+			// fall back to localStorage below
+		}
+		try {
+			stored ??= JSON.parse(localStorage.getItem('tack-notes-vaults') ?? 'null');
+		} catch {
+			stored = null;
+		}
+		this.vaults = Array.isArray(stored)
+			? stored.filter((v): v is string => typeof v === 'string')
+			: [];
+	}
+
+	#persistVaults() {
+		try {
+			localStorage.setItem('tack-notes-vaults', JSON.stringify(this.vaults));
+		} catch {
+			// ignore private-mode storage failures
+		}
+		if (!isTauri()) return;
+		void getDb()
+			.then((db) =>
+				db.execute(
+					'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $2',
+					['notesVaults', JSON.stringify(this.vaults)]
+				)
+			)
+			.catch(() => {});
+	}
+
+	removeVault(dir: string) {
+		if (dir === this.folder) return;
+		this.vaults = this.vaults.filter((v) => v !== dir);
+		this.#persistVaults();
 	}
 
 	// mirror the notes folder + watch it so cli/external edits show up live
@@ -121,7 +183,7 @@ class NotesPageState {
 		const hadPendingSave = this.#saveTimer !== undefined;
 		await this.refresh();
 		if (!wasSelected || wasSelected !== this.selectedPath || hadPendingSave) return;
-		const disk = await invoke<string>('read_file', { path: wasSelected }).catch(() => null);
+		const disk = await notesInvoke<string>('read_file', { path: wasSelected }).catch(() => null);
 		if (disk === null) return;
 		if (disk !== this.#contentCache.get(wasSelected)) {
 			this.#contentCache.set(wasSelected, disk);
@@ -137,7 +199,7 @@ class NotesPageState {
 		this.#contentCache.clear();
 		try {
 			// one recursive listing; notes are grouped by their parent folder
-			const deep = await invoke<NoteInfo[]>('list_notes_deep', { dir: this.folder });
+			const deep = await notesInvoke<NoteInfo[]>('list_notes_deep', { dir: this.folder });
 			const rootAbs = this.folder.replace(/\/+$/, '');
 			const root: NoteInfo[] = [];
 			const byFolder: Record<string, NoteInfo[]> = {};
@@ -149,9 +211,9 @@ class NotesPageState {
 			}
 			this.notes = root;
 			this.folderNotes = byFolder;
-			this.folders = await invoke<string[]>('list_note_folders', { dir: this.folder });
+			this.folders = await notesInvoke<string[]>('list_note_folders', { dir: this.folder });
 			// missing archive folder just means nothing is archived yet
-			this.archived = await invoke<NoteInfo[]>('list_notes', { dir: this.archiveDir }).catch(
+			this.archived = await notesInvoke<NoteInfo[]>('list_notes', { dir: this.archiveDir }).catch(
 				() => []
 			);
 			void this.#loadPins();
@@ -165,11 +227,15 @@ class NotesPageState {
 			}
 			// rebuild the search index so external edits stay searchable; best effort
 			try {
-				const full = await invoke<{ path: string; name: string; content: string }[]>(
-					'read_notes_deep',
-					{ dir: this.folder }
-				);
+				const full = await notesInvoke<IndexedNote[]>('read_notes_deep', { dir: this.folder });
 				await reindexNotes(full);
+				const tags: Record<string, string[]> = {};
+				for (const note of full) {
+					const { data, body } = splitFrontmatter(note.content);
+					const inline = [...body.matchAll(/(?<![\w#&])#([\p{L}\p{N}/_-]+)/gu)].map((m) => m[1]);
+					tags[note.path] = [...new Set([...tagsOf(data), ...inline])];
+				}
+				this.noteTags = tags;
 			} catch {
 				// search stays stale rather than breaking the notes list
 			}
@@ -216,7 +282,7 @@ class NotesPageState {
 		try {
 			localStorage.setItem(`tack-notes-pinned:${this.folder}`, JSON.stringify(this.pinned));
 		} catch {
-			// storage unavailable - not worth reporting
+			// ignore private-mode storage failures
 		}
 		if (!isTauri()) return;
 		void getDb()
@@ -274,6 +340,32 @@ class NotesPageState {
 		return [...this.notes, ...Object.values(this.folderNotes).flat()];
 	}
 
+	// ---- tags ----
+
+	// distinct tags sorted by how many notes use them
+	get allTags(): string[] {
+		const counts = new Map<string, number>();
+		for (const tags of Object.values(this.noteTags)) {
+			for (const tag of tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+		}
+		return [...counts.entries()]
+			.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+			.map(([t]) => t);
+	}
+
+	tagsOfNote(path: string): string[] {
+		return this.noteTags[path] ?? [];
+	}
+
+	setActiveTag(tag: string | null) {
+		this.activeTag = this.activeTag === tag ? null : tag;
+	}
+
+	tagFilter(n: NoteInfo): boolean {
+		if (!this.activeTag) return true;
+		return (this.noteTags[n.path] ?? []).includes(this.activeTag);
+	}
+
 	setSort(sort: 'modified' | 'name' | 'manual') {
 		this.sortBy = sort;
 		localStorage.setItem(SORT_KEY, sort);
@@ -281,9 +373,10 @@ class NotesPageState {
 
 	// notes of one container in display order: pinned first, then the chosen sort
 	sortedNotesIn(notes: NoteInfo[], container: string): NoteInfo[] {
+		const visible = notes.filter((n) => this.tagFilter(n));
 		const isPinned = (n: NoteInfo) => this.pinned.includes(n.name);
-		const pinned = notes.filter(isPinned);
-		const rest = notes.filter((n) => !isPinned(n));
+		const pinned = visible.filter(isPinned);
+		const rest = visible.filter((n) => !isPinned(n));
 		if (this.sortBy === 'manual') {
 			const order = this.#manualOrders[container] ?? [];
 			const rank = (n: NoteInfo) => {
@@ -315,7 +408,7 @@ class NotesPageState {
 		try {
 			localStorage.setItem(`${ORDER_KEY}:${this.folder}`, JSON.stringify(this.#manualOrders));
 		} catch {
-			// storage unavailable - order is lost on reload, not critical
+			// ignore private-mode storage failures
 		}
 		if (this.sortBy !== 'manual') this.setSort('manual');
 	}
@@ -348,6 +441,8 @@ class NotesPageState {
 	}
 
 	async pickFolder() {
+		// live mode: the desktop app owns the notes folder
+		if (!isTauri()) return;
 		const selection = await openDialog({
 			directory: true,
 			multiple: false,
@@ -361,9 +456,14 @@ class NotesPageState {
 		this.flushPendingSave();
 		this.folder = dir;
 		localStorage.setItem(FOLDER_KEY, dir);
+		if (!this.vaults.includes(dir)) {
+			this.vaults = [...this.vaults, dir];
+			this.#persistVaults();
+		}
 		this.selectedPath = null;
 		this.content = '';
 		this.noteTabs = [];
+		this.activeTag = null;
 		await this.refresh();
 		await this.#loadTabs();
 		await this.#activateFolderWatch();
@@ -377,7 +477,6 @@ class NotesPageState {
 		this.content = '';
 		const name = path.split('/').pop();
 		if (name && countVisit) this.noteOpened(name);
-		// cached content makes switching back to a tab instant
 		const cached = this.#contentCache.get(path);
 		if (cached !== undefined) {
 			this.content = cached;
@@ -386,19 +485,16 @@ class NotesPageState {
 			return;
 		}
 		try {
-			this.content = await invoke<string>('read_file', { path });
+			this.content = await notesInvoke<string>('read_file', { path });
 			this.#contentCache.set(path, this.content);
-			// the tab is only kept once the read succeeds, so dead links never
-			// leave an empty tab behind
 			if (!this.noteTabs.includes(path)) this.noteTabs = [...this.noteTabs, path];
 			this.#persistTabs();
 		} catch {
 			this.noteTabs = this.noteTabs.filter((t) => t !== path);
 			this.#persistTabs();
-			// drop the selection first so a pending save can't recreate the file as an empty shell
 			this.selectedPath = null;
 			this.content = '';
-			// stale mention link: heal it by finding the note with the same file name
+			// a moved note still resolves by name: follow the first namesake
 			const match = name
 				? [...this.allNotes, ...this.archived].find((n) => n.name === name && n.path !== path)
 				: undefined;
@@ -419,12 +515,11 @@ class NotesPageState {
 		if (path !== this.selectedPath) return;
 		this.selectedPath = null;
 		this.content = '';
-		// activate the right neighbor, else the left one (vs code behaviour)
 		const next = this.noteTabs[idx] ?? this.noteTabs[idx - 1] ?? null;
 		if (next) void this.openNote(next);
 	}
 
-	cycleTab(delta: 1 | -1) {
+	cycleTab(delta: number) {
 		if (this.noteTabs.length < 2 || !this.selectedPath) return;
 		const idx = this.noteTabs.indexOf(this.selectedPath);
 		const next = this.noteTabs[(idx + delta + this.noteTabs.length) % this.noteTabs.length];
@@ -461,7 +556,7 @@ class NotesPageState {
 				JSON.stringify({ paths: this.noteTabs, active: this.selectedPath })
 			);
 		} catch {
-			// storage unavailable (ssr) - not worth reporting
+			// ignore private-mode storage failures
 		}
 	}
 
@@ -472,11 +567,11 @@ class NotesPageState {
 		try {
 			const stored = JSON.parse(localStorage.getItem(`tack-notes-tabs:${this.folder}`) ?? '{}');
 			if (Array.isArray(stored?.paths)) {
-				paths = stored.paths.filter((p: unknown) => typeof p === 'string');
+				paths = stored.paths.filter((p: unknown): p is string => typeof p === 'string');
 			}
 			if (typeof stored?.active === 'string') active = stored.active;
 		} catch {
-			// no stored tabs is fine
+			// no stored tabs
 		}
 		const known = new Set(this.allNotes.map((n) => n.path));
 		this.noteTabs = paths.filter((p) => known.has(p));
@@ -487,12 +582,60 @@ class NotesPageState {
 
 	// open (or create) the daily note named YYYY-MM-DD.md in the notes root
 	async openTodayNote() {
+		await this.openDailyNote(new Date().toLocaleDateString('en-CA'));
+	}
+
+	// open (or create) the daily note for a YYYY-MM-DD date; powers the
+	// daily-notes navigation (today / yesterday / tomorrow / calendar)
+	async openDailyNote(date: string) {
 		if (!this.folder) return;
-		const today = new Date().toLocaleDateString('en-CA');
-		const name = `${today}.md`;
+		const name = `${date}.md`;
 		const existing = this.allNotes.find((n) => n.name.toLowerCase() === name.toLowerCase());
 		if (existing) await this.openNote(existing.path);
-		else await this.createNoteIn(null, today);
+		else await this.createNoteIn(null, date);
+	}
+
+	// shift a YYYY-MM-DD string by days without pulling a date library
+	shiftDate(date: string, days: number): string | null {
+		const m = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+		if (!m) return null;
+		const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+		d.setDate(d.getDate() + days);
+		return d.toLocaleDateString('en-CA');
+	}
+
+	// ---- templates ----
+
+	// templates are plain .md files in <notes>/.tack/templates
+	get templatesDir(): string {
+		return this.folder ? `${this.folder.replace(/\/+$/, '')}/.tack/templates` : '';
+	}
+
+	async loadTemplates(): Promise<NoteInfo[]> {
+		if (!this.folder) return [];
+		return notesInvoke<NoteInfo[]>('list_notes', { dir: this.templatesDir }).catch(() => []);
+	}
+
+	async readTemplate(name: string): Promise<string | null> {
+		try {
+			return await notesInvoke<string>('read_file', { path: `${this.templatesDir}/${name}` });
+		} catch {
+			return null;
+		}
+	}
+
+	// fill {{title}}, {{date}}, {{time}}, {{yesterday}}, {{tomorrow}}
+	applyTemplate(template: string, title: string): string {
+		const day = new Date().toLocaleDateString('en-CA');
+		return template
+			.replaceAll('{{title}}', title)
+			.replaceAll('{{date}}', day)
+			.replaceAll(
+				'{{time}}',
+				new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+			)
+			.replaceAll('{{yesterday}}', this.shiftDate(day, -1) ?? day)
+			.replaceAll('{{tomorrow}}', this.shiftDate(day, 1) ?? day);
 	}
 
 	scheduleSave() {
@@ -512,7 +655,14 @@ class NotesPageState {
 		if (!this.selectedPath) return;
 		this.saving = true;
 		try {
-			await invoke('write_file', { path: this.selectedPath, content: this.content });
+			// history snapshots the previous version on disk before the overwrite
+			await notesInvoke('save_note_with_history', {
+				path: this.selectedPath,
+				content: this.content,
+				historyRoot: this.historyRoot,
+				key: this.historyKey(this.selectedPath),
+				keep: HISTORY_KEEP
+			});
 			this.#contentCache.set(this.selectedPath, this.content);
 			const name = this.selectedPath.split('/').pop() ?? '';
 			await indexNote(this.selectedPath, name, this.content).catch(() => {});
@@ -523,12 +673,83 @@ class NotesPageState {
 		}
 	}
 
+	// ---- version history ----
+
+	get historyRoot(): string {
+		return this.folder ? `${this.folder.replace(/\/+$/, '')}/.tack/history` : '';
+	}
+
+	// filesystem-safe per-note history key: the relative path with / encoded
+	historyKey(path: string): string {
+		if (!this.folder) return '';
+		const rootAbs = this.folder.replace(/\/+$/, '');
+		return path.slice(rootAbs.length + 1).replace(/[\\/]/g, '%');
+	}
+
+	async listHistory(path: string): Promise<NoteInfo[]> {
+		const dir = `${this.historyRoot}/${this.historyKey(path)}`;
+		return notesInvoke<NoteInfo[]>('list_notes', { dir }).catch(() => []);
+	}
+
+	async readHistory(snapshotPath: string): Promise<string> {
+		return notesInvoke<string>('read_file', { path: snapshotPath });
+	}
+
+	// restore a snapshot by making it the new current version; the version
+	// on disk first becomes a history entry itself, so nothing is lost
+	async restoreHistorySnapshot(notePath: string, snapshotPath: string) {
+		const snapshot = await this.readHistory(snapshotPath).catch(() => null);
+		if (snapshot === null) {
+			this.error = 'Snapshot could not be read';
+			return;
+		}
+		this.flushPendingSave();
+		const current = await notesInvoke<string>('read_file', { path: notePath }).catch(() => null);
+		if (current !== null && current !== snapshot) {
+			await notesInvoke('save_note_with_history', {
+				path: notePath,
+				content: snapshot,
+				historyRoot: this.historyRoot,
+				key: this.historyKey(notePath),
+				keep: HISTORY_KEEP
+			});
+		}
+		this.#contentCache.set(notePath, snapshot);
+		if (this.selectedPath === notePath) this.content = snapshot;
+		await indexNote(notePath, notePath.split('/').pop() ?? '', snapshot).catch(() => {});
+	}
+
+	// ---- attachments ----
+
+	// store pasted/dropped binary data under .tack/assets and return the
+	// markdown link (relative) to embed in the note
+	async saveAttachment(fileName: string, bytes: Uint8Array): Promise<string | null> {
+		if (!this.folder) return null;
+		const rootAbs = this.folder.replace(/\/+$/, '');
+		const dot = fileName.lastIndexOf('.');
+		const stem = dot > 0 ? fileName.slice(0, dot) : fileName;
+		const ext = dot > 0 ? fileName.slice(dot) : '';
+		let rel = `.tack/assets/${stem}${ext}`;
+		for (let i = 2; i < 1000; i++) {
+			try {
+				await notesInvoke('write_binary_file', {
+					path: `${rootAbs}/${rel}`,
+					bytes: [...bytes]
+				});
+				return rel;
+			} catch {
+				rel = `.tack/assets/${stem}-${i}${ext}`;
+			}
+		}
+		return null;
+	}
+
 	// mention links embed absolute file paths; after a rename/move every
 	// @[label](note:OLD) reference must be rewritten to the new path
 	async #rewriteMentionLinks(remap: Map<string, string>) {
 		if (!this.folder || remap.size === 0) return;
 		this.flushPendingSave();
-		const all = await invoke<{ path: string; content: string }[]>('read_notes_deep', {
+		const all = await notesInvoke<{ path: string; content: string }[]>('read_notes_deep', {
 			dir: this.folder
 		}).catch(() => []);
 		for (const note of all) {
@@ -542,17 +763,14 @@ class NotesPageState {
 				}
 			}
 			if (!changed) continue;
-			await invoke('write_file', { path: note.path, content });
-			// keep the open editor in sync if its content was just rewritten
+			await notesInvoke('write_file', { path: note.path, content });
 			if (note.path === this.selectedPath) this.content = content;
 		}
-		// keep editor tabs pointing at the renamed/moved paths
 		if (this.noteTabs.some((t) => remap.has(t))) {
 			this.noteTabs = this.noteTabs.map((t) => remap.get(t) ?? t);
 			if (this.selectedPath && remap.has(this.selectedPath)) {
 				this.selectedPath = remap.get(this.selectedPath) ?? this.selectedPath;
 			}
-			// keep the content cache consistent with the new paths
 			for (const [oldPath, newPath] of remap) {
 				const content = this.#contentCache.get(oldPath);
 				if (content !== undefined) {
@@ -605,25 +823,60 @@ class NotesPageState {
 	}
 
 	// create a note in the given folder (null = notes root); empty name becomes Untitled
-	async createNoteIn(parentRel: string | null, rawName?: string) {
+	// templateName picks a file from .tack/templates; its {{vars}} are filled in
+	async createNoteIn(parentRel: string | null, rawName?: string, templateName?: string) {
 		if (!this.folder) return;
 		this.flushPendingSave();
 		const rootAbs = this.folder.replace(/\/+$/, '');
 		const base = this.#sanitizeName(rawName ?? '') ?? 'Untitled';
 		const siblings = parentRel ? (this.folderNotes[parentRel] ?? []) : this.notes;
-		// first name that does not exist yet: Untitled.md, Untitled 2.md, ...
 		let name = `${base}.md`;
 		for (let i = 2; siblings.some((n) => n.name === name); i++) name = `${base} ${i}.md`;
 		const path = parentRel ? `${rootAbs}/${parentRel}/${name}` : `${rootAbs}/${name}`;
+		let content = '';
+		if (templateName) {
+			const template = await this.readTemplate(templateName);
+			if (template !== null) content = this.applyTemplate(template, base);
+		}
 		try {
-			await invoke('write_file', { path, content: '' });
+			await notesInvoke('write_file', { path, content });
 		} catch (e) {
 			this.#fail(e);
 			return;
 		}
 		await this.refresh();
-		// creating a note is not a visit: "Jump back in" counts only real opens
 		await this.openNote(path, false);
+	}
+
+	// add an inline/frontmatter tag to a note and keep the index in sync
+	async addTagToNote(path: string, tag: string) {
+		const content = await notesInvoke<string>('read_file', { path }).catch(() => null);
+		if (content === null) return;
+		const next = addTag(content, tag);
+		if (next === content) return;
+		await notesInvoke('write_file', { path, content: next });
+		this.noteTags = {
+			...this.noteTags,
+			[path]: [...new Set([...(this.noteTags[path] ?? []), tag])]
+		};
+		if (this.selectedPath === path) this.content = next;
+		this.#contentCache.set(path, next);
+		await indexNote(path, path.split('/').pop() ?? '', next).catch(() => {});
+	}
+
+	async removeTagFromNote(path: string, tag: string) {
+		const content = await notesInvoke<string>('read_file', { path }).catch(() => null);
+		if (content === null) return;
+		const next = removeTag(content, tag);
+		if (next === content) return;
+		await notesInvoke('write_file', { path, content: next });
+		this.noteTags = {
+			...this.noteTags,
+			[path]: (this.noteTags[path] ?? []).filter((t) => t !== tag)
+		};
+		if (this.selectedPath === path) this.content = next;
+		this.#contentCache.set(path, next);
+		await indexNote(path, path.split('/').pop() ?? '', next).catch(() => {});
 	}
 
 	// create a folder under the given parent (null = notes root)
@@ -631,10 +884,9 @@ class NotesPageState {
 		if (!this.folder) return;
 		const name = this.#sanitizeName(rawName);
 		if (!name) return;
-		// relative target so nesting works: parent/name
 		const target = parentRel ? `${parentRel}/${name}` : name;
 		try {
-			await invoke('create_folder', { dir: this.folder, name: target });
+			await notesInvoke('create_folder', { dir: this.folder, name: target });
 		} catch (e) {
 			this.#fail(e);
 			return;
@@ -655,12 +907,11 @@ class NotesPageState {
 			return;
 		}
 		try {
-			await invoke('rename_note', { oldPath: path, newPath });
+			await notesInvoke('rename_note', { oldPath: path, newPath });
 		} catch (e) {
 			this.#fail(e);
 			return;
 		}
-		// the note left its container; drop it from every manual order list
 		for (const key of Object.keys(this.#manualOrders)) {
 			this.#manualOrders[key] = this.#manualOrders[key].filter((n) => n !== name);
 		}
@@ -683,7 +934,7 @@ class NotesPageState {
 			return;
 		}
 		try {
-			await invoke('rename_note', {
+			await notesInvoke('rename_note', {
 				oldPath: `${rootAbs}/${rel}`,
 				newPath: `${rootAbs}/${nextRel}`
 			});
@@ -709,7 +960,7 @@ class NotesPageState {
 		}
 		const rootAbs = this.folder.replace(/\/+$/, '');
 		try {
-			await invoke('rename_note', {
+			await notesInvoke('rename_note', {
 				oldPath: `${rootAbs}/${rel}`,
 				newPath: `${rootAbs}/${nextRel}`
 			});
@@ -727,7 +978,7 @@ class NotesPageState {
 		if (!this.folder) return;
 		const rootAbs = this.folder.replace(/\/+$/, '');
 		try {
-			await invoke('delete_folder', { path: `${rootAbs}/${rel}` });
+			await notesInvoke('delete_folder', { path: `${rootAbs}/${rel}` });
 		} catch {
 			this.error = 'Folder is not empty — move the notes out first';
 			return;
@@ -767,7 +1018,7 @@ class NotesPageState {
 			return;
 		}
 		try {
-			await invoke('rename_note', { oldPath: path, newPath });
+			await notesInvoke('rename_note', { oldPath: path, newPath });
 		} catch (e) {
 			this.#fail(e);
 			return;
@@ -781,7 +1032,7 @@ class NotesPageState {
 		const name = path.split('/').pop();
 		if (!name) return;
 		try {
-			await invoke('rename_note', { oldPath: path, newPath: `${this.archiveDir}/${name}` });
+			await notesInvoke('rename_note', { oldPath: path, newPath: `${this.archiveDir}/${name}` });
 		} catch (e) {
 			this.#fail(e);
 			return;
@@ -798,7 +1049,7 @@ class NotesPageState {
 		const name = path.split('/').pop();
 		if (!name || !this.folder) return;
 		try {
-			await invoke('rename_note', {
+			await notesInvoke('rename_note', {
 				oldPath: path,
 				newPath: `${this.folder.replace(/\/+$/, '')}/${name}`
 			});
@@ -817,11 +1068,10 @@ class NotesPageState {
 	}
 
 	async deleteNote(path: string) {
-		// deleting moves the note to the notes trash so it can be restored
 		const name = path.split('/').pop();
 		if (!name) return;
 		try {
-			await invoke('rename_note', { oldPath: path, newPath: `${this.trashDir}/${name}` });
+			await notesInvoke('rename_note', { oldPath: path, newPath: `${this.trashDir}/${name}` });
 		} catch (e) {
 			this.#fail(e);
 			return;

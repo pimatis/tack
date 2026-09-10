@@ -34,7 +34,10 @@ fn default_keep() -> usize {
     7
 }
 
-pub(super) fn create_backup_http(request: &mut Request, ctx: &Ctx) -> Response<std::io::Cursor<Vec<u8>>> {
+pub(super) fn create_backup_http(
+    request: &mut Request,
+    ctx: &Ctx,
+) -> Response<std::io::Cursor<Vec<u8>>> {
     let mut body = String::new();
     let _ = request.as_reader().take(1024).read_to_string(&mut body);
     let keep = serde_json::from_str::<CreateBackupPayload>(&body)

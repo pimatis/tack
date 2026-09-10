@@ -119,7 +119,7 @@ export async function findAll(): Promise<Task[]> {
 	}
 }
 
-async function findById(id: string): Promise<Task | null> {
+export async function findById(id: string): Promise<Task | null> {
 	try {
 		const db = await getDb();
 		const tasks = await db.select<Task[]>(`SELECT ${TASK_COLUMNS} FROM tasks WHERE id = $1`, [id]);

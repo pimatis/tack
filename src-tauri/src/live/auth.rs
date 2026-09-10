@@ -57,7 +57,10 @@ pub(super) fn pbkdf2_sha256(password: &[u8], salt: &[u8], iterations: u32) -> [u
     let opad: [u8; 64] = key.map(|b| b ^ 0x5c);
 
     let hmac = |msg: &[u8]| -> [u8; 32] {
-        let inner = Sha256::new().chain_update(ipad).chain_update(msg).finalize();
+        let inner = Sha256::new()
+            .chain_update(ipad)
+            .chain_update(msg)
+            .finalize();
         Sha256::new()
             .chain_update(opad)
             .chain_update(inner)
@@ -96,7 +99,9 @@ pub(super) fn load_auth(db_path: &Path) -> Option<LiveAuth> {
         Err(_) => return closed(),
     };
     let read = |key: &str| -> std::result::Result<Option<String>, ()> {
-        match conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0)) {
+        match conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
+            r.get(0)
+        }) {
             Ok(v) => Ok(Some(v)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(_) => Err(()),
@@ -134,7 +139,11 @@ pub(super) fn load_auth(db_path: &Path) -> Option<LiveAuth> {
             .chain_update(&salt)
             .finalize(),
     );
-    Some(LiveAuth { salt, hash: hash_arr, token })
+    Some(LiveAuth {
+        salt,
+        hash: hash_arr,
+        token,
+    })
 }
 
 fn base64_decode(input: &str) -> Option<Vec<u8>> {
@@ -174,7 +183,11 @@ pub(super) fn authorized(request: &Request, query: &str, auth: &LiveAuth) -> boo
             }
         }
     }
-    if let Some(v) = query.split("token=").nth(1).and_then(|v| v.split('&').next()) {
+    if let Some(v) = query
+        .split("token=")
+        .nth(1)
+        .and_then(|v| v.split('&').next())
+    {
         if !v.is_empty() && ct_eq(v.as_bytes(), token) {
             return true;
         }
@@ -221,5 +234,11 @@ pub(super) fn handle_auth(request: &mut Request, ctx: &Ctx) -> Response<std::io:
         Header::from_bytes(b"Connection", b"close").unwrap(),
     ];
     let len = data.len();
-    Response::new(StatusCode(200), headers, std::io::Cursor::new(data), Some(len), None)
+    Response::new(
+        StatusCode(200),
+        headers,
+        std::io::Cursor::new(data),
+        Some(len),
+        None,
+    )
 }

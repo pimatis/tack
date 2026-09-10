@@ -1,7 +1,7 @@
 use super::http::handle_request;
 use super::{Ctx, LiveHub, Result};
-use crate::db::app_db_path;
 use crate::attachments::attachments_dir;
+use crate::db::app_db_path;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};

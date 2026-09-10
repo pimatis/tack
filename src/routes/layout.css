@@ -455,3 +455,74 @@ body {
 	-webkit-user-select: none !important;
 	cursor: grabbing !important;
 }
+
+/* markdown preview: syntax highlight tokens */
+.tok-c {
+	color: color-mix(in oklch, var(--muted-foreground) 70%, transparent);
+	font-style: italic;
+}
+.tok-s {
+	color: oklch(0.72 0.15 155);
+}
+.tok-n {
+	color: oklch(0.78 0.14 75);
+}
+.tok-k {
+	color: oklch(0.72 0.14 245);
+}
+.tok-f {
+	color: oklch(0.72 0.16 300);
+}
+
+/* markdown preview: callout blocks (type sets the accent) */
+.callout {
+	border-left: 3px solid var(--border);
+	border-radius: var(--radius-sm);
+	background: color-mix(in oklch, var(--muted) 45%, transparent);
+	padding: 0.65rem 0.9rem;
+	margin: 0.75rem 0;
+}
+.callout-title {
+	font-weight: 600;
+	font-size: 0.85rem;
+	margin-bottom: 0.25rem;
+}
+.callout p {
+	margin: 0;
+}
+.callout-note {
+	border-left-color: oklch(0.7 0.12 245);
+}
+.callout-info {
+	border-left-color: oklch(0.7 0.14 230);
+}
+.callout-tip {
+	border-left-color: oklch(0.75 0.13 160);
+}
+.callout-success {
+	border-left-color: oklch(0.75 0.15 150);
+}
+.callout-warning {
+	border-left-color: oklch(0.78 0.14 75);
+}
+.callout-danger,
+.callout-error {
+	border-left-color: oklch(0.68 0.19 25);
+}
+
+/* wiki links and inline tags in the preview are clickable */
+.wiki-link {
+	cursor: pointer;
+	text-decoration: underline;
+	text-decoration-color: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
+	text-underline-offset: 3px;
+}
+.wiki-link:hover {
+	color: var(--foreground);
+}
+.note-tag {
+	cursor: pointer;
+}
+.note-tag:hover {
+	color: var(--foreground);
+}

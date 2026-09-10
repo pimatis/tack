@@ -7,25 +7,94 @@ use sha2::{Digest, Sha384};
 // leftover schema is harmless to them)
 pub(crate) fn run_migrations(conn: &Connection) -> Result<(), String> {
     let migrations: &[(i32, &str, &str)] = &[
-        (1, "create_tasks_table", include_str!("../migrations/001_initial.sql")),
-        (2, "create_projects_table", include_str!("../migrations/002_projects.sql")),
-        (3, "create_attachments_table", include_str!("../migrations/003_attachments.sql")),
-        (4, "create_labels_table", include_str!("../migrations/004_labels.sql")),
-        (5, "add_due_date_to_tasks", include_str!("../migrations/005_due_date.sql")),
-        (6, "add_task_number", include_str!("../migrations/006_task_number.sql")),
-        (7, "add_project_description", include_str!("../migrations/007_project_description.sql")),
-        (8, "add_subtasks_activity_log_sort_order", include_str!("../migrations/008_subtasks_activity_sort.sql")),
-        (9, "add_pinned_to_tasks", include_str!("../migrations/009_pinned.sql")),
-        (10, "create_settings_table", include_str!("../migrations/010_settings.sql")),
-        (11, "add_source_to_activity_log", include_str!("../migrations/011_activity_source.sql")),
-        (12, "add_deleted_at_to_tasks", include_str!("../migrations/012_trash.sql")),
-        (13, "migrate_attachment_file_path", include_str!("../migrations/013_attachment_file_path.sql")),
-        (14, "create_fts_search_index", include_str!("../migrations/014_fts_search.sql")),
-        (15, "fix_fts_triggers", include_str!("../migrations/015_fix_fts_triggers.sql")),
-        (16, "add_end_date_to_tasks", include_str!("../migrations/016_end_date.sql")),
-        (17, "create_notes_fts_index", include_str!("../migrations/017_notes_fts.sql")),
+        (
+            1,
+            "create_tasks_table",
+            include_str!("../migrations/001_initial.sql"),
+        ),
+        (
+            2,
+            "create_projects_table",
+            include_str!("../migrations/002_projects.sql"),
+        ),
+        (
+            3,
+            "create_attachments_table",
+            include_str!("../migrations/003_attachments.sql"),
+        ),
+        (
+            4,
+            "create_labels_table",
+            include_str!("../migrations/004_labels.sql"),
+        ),
+        (
+            5,
+            "add_due_date_to_tasks",
+            include_str!("../migrations/005_due_date.sql"),
+        ),
+        (
+            6,
+            "add_task_number",
+            include_str!("../migrations/006_task_number.sql"),
+        ),
+        (
+            7,
+            "add_project_description",
+            include_str!("../migrations/007_project_description.sql"),
+        ),
+        (
+            8,
+            "add_subtasks_activity_log_sort_order",
+            include_str!("../migrations/008_subtasks_activity_sort.sql"),
+        ),
+        (
+            9,
+            "add_pinned_to_tasks",
+            include_str!("../migrations/009_pinned.sql"),
+        ),
+        (
+            10,
+            "create_settings_table",
+            include_str!("../migrations/010_settings.sql"),
+        ),
+        (
+            11,
+            "add_source_to_activity_log",
+            include_str!("../migrations/011_activity_source.sql"),
+        ),
+        (
+            12,
+            "add_deleted_at_to_tasks",
+            include_str!("../migrations/012_trash.sql"),
+        ),
+        (
+            13,
+            "migrate_attachment_file_path",
+            include_str!("../migrations/013_attachment_file_path.sql"),
+        ),
+        (
+            14,
+            "create_fts_search_index",
+            include_str!("../migrations/014_fts_search.sql"),
+        ),
+        (
+            15,
+            "fix_fts_triggers",
+            include_str!("../migrations/015_fix_fts_triggers.sql"),
+        ),
+        (
+            16,
+            "add_end_date_to_tasks",
+            include_str!("../migrations/016_end_date.sql"),
+        ),
+        (
+            17,
+            "create_notes_fts_index",
+            include_str!("../migrations/017_notes_fts.sql"),
+        ),
     ];
-    let known: std::collections::HashSet<i64> = migrations.iter().map(|(v, _, _)| *v as i64).collect();
+    let known: std::collections::HashSet<i64> =
+        migrations.iter().map(|(v, _, _)| *v as i64).collect();
 
     // track applied versions via the same table the sqlx-based runner
     // (tauri-plugin-sql) used, so older binaries and the cli stay compatible

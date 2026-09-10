@@ -1,6 +1,6 @@
-use rusqlite::{params, Connection};
-use crate::db::*;
 use crate::backup;
+use crate::db::*;
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
@@ -19,7 +19,11 @@ struct ExportData {
     exportedAt: String,
 }
 
-fn query_all(conn: &Connection, table: &str, columns: &str) -> Result<Vec<HashMap<String, serde_json::Value>>> {
+fn query_all(
+    conn: &Connection,
+    table: &str,
+    columns: &str,
+) -> Result<Vec<HashMap<String, serde_json::Value>>> {
     let sql = format!("SELECT {} FROM {}", columns, table);
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
     let col_count = stmt.column_count();
@@ -39,7 +43,9 @@ fn query_all(conn: &Connection, table: &str, columns: &str) -> Result<Vec<HashMa
                     rusqlite::types::Value::Integer(n) => serde_json::Value::Number(n.into()),
                     rusqlite::types::Value::Real(f) => serde_json::json!(f),
                     rusqlite::types::Value::Text(s) => serde_json::Value::String(s),
-                    rusqlite::types::Value::Blob(b) => serde_json::Value::String(String::from_utf8_lossy(&b).to_string()),
+                    rusqlite::types::Value::Blob(b) => {
+                        serde_json::Value::String(String::from_utf8_lossy(&b).to_string())
+                    }
                 };
                 map.insert(col_name.clone(), json_val);
             }
@@ -59,31 +65,43 @@ pub fn export(conn: &Connection, json: bool, output_path: &str) -> Result<()> {
         labels: query_all(conn, "labels", "*")?,
         taskLabels: query_all(conn, "task_labels", "*")?,
         subtasks: query_all(conn, "subtasks", "*")?,
-        attachments: query_all(conn, "task_attachments", "id, task_id, file_name, mime_type, file_size, created_at")?,
+        attachments: query_all(
+            conn,
+            "task_attachments",
+            "id, task_id, file_name, mime_type, file_size, created_at",
+        )?,
         activityLog: query_all(conn, "activity_log", "*")?,
         exportedAt: now_iso(),
     };
 
-    let json_str = serde_json::to_string_pretty(&data)
-        .map_err(|e| format!("Failed to serialize: {}", e))?;
+    let json_str =
+        serde_json::to_string_pretty(&data).map_err(|e| format!("Failed to serialize: {}", e))?;
 
     if json {
         println!("{}", json_str);
     } else {
-        let path = if output_path.is_empty() { "tack-export.json" } else { output_path };
-        std::fs::write(path, json_str)
-            .map_err(|e| format!("Failed to write file: {}", e))?;
-        let total = data.projects.len() + data.tasks.len() + data.labels.len() + data.subtasks.len() + data.attachments.len() + data.activityLog.len();
+        let path = if output_path.is_empty() {
+            "tack-export.json"
+        } else {
+            output_path
+        };
+        std::fs::write(path, json_str).map_err(|e| format!("Failed to write file: {}", e))?;
+        let total = data.projects.len()
+            + data.tasks.len()
+            + data.labels.len()
+            + data.subtasks.len()
+            + data.attachments.len()
+            + data.activityLog.len();
         println!("Exported {} records to {}", total, path);
     }
     Ok(())
 }
 
 pub fn import(conn: &Connection, json: bool, file_path: &str) -> Result<()> {
-    let content = std::fs::read_to_string(file_path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
-    let data: ExportData = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+    let content =
+        std::fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let data: ExportData =
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse JSON: {}", e))?;
 
     reset(conn, json)?;
 
@@ -115,15 +133,22 @@ pub fn import(conn: &Connection, json: bool, file_path: &str) -> Result<()> {
     for l in &data.labels {
         conn.execute(
             "INSERT INTO labels (id, name, color, created_at) VALUES (?1, ?2, ?3, ?4)",
-            params![get_str(l, "id"), get_str(l, "name"), get_str(l, "color"), get_str(l, "created_at")],
-        ).map_err(|e| format!("Failed to import label: {}", e))?;
+            params![
+                get_str(l, "id"),
+                get_str(l, "name"),
+                get_str(l, "color"),
+                get_str(l, "created_at")
+            ],
+        )
+        .map_err(|e| format!("Failed to import label: {}", e))?;
     }
 
     for tl in &data.taskLabels {
         conn.execute(
             "INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?1, ?2)",
             params![get_str(tl, "task_id"), get_str(tl, "label_id")],
-        ).map_err(|e| format!("Failed to import task label: {}", e))?;
+        )
+        .map_err(|e| format!("Failed to import task label: {}", e))?;
     }
 
     for s in &data.subtasks {
@@ -158,14 +183,23 @@ pub fn import(conn: &Connection, json: bool, file_path: &str) -> Result<()> {
         ).map_err(|e| format!("Failed to import activity log: {}", e))?;
     }
 
-    let total = data.projects.len() + data.tasks.len() + data.labels.len() + data.subtasks.len() + data.attachments.len() + data.activityLog.len();
+    let total = data.projects.len()
+        + data.tasks.len()
+        + data.labels.len()
+        + data.subtasks.len()
+        + data.attachments.len()
+        + data.activityLog.len();
     if json {
-        println!("{}", serde_json::to_string_pretty(&json!({
-            "success": true,
-            "action": "data_imported",
-            "total": total,
-            "file": file_path
-        })).map_err(|e| e.to_string())?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": true,
+                "action": "data_imported",
+                "total": total,
+                "file": file_path
+            }))
+            .map_err(|e| e.to_string())?
+        );
     } else {
         println!("Imported {} records from {}", total, file_path);
     }
@@ -173,15 +207,27 @@ pub fn import(conn: &Connection, json: bool, file_path: &str) -> Result<()> {
 }
 
 pub fn reset(conn: &Connection, json: bool) -> Result<()> {
-    for table in ["activity_log", "task_labels", "task_attachments", "subtasks", "tasks", "labels", "projects"] {
+    for table in [
+        "activity_log",
+        "task_labels",
+        "task_attachments",
+        "subtasks",
+        "tasks",
+        "labels",
+        "projects",
+    ] {
         conn.execute(&format!("DELETE FROM {}", table), [])
             .map_err(|e| format!("Failed to reset {}: {}", table, e))?;
     }
     if json {
-        println!("{}", serde_json::to_string_pretty(&json!({
-            "success": true,
-            "action": "data_reset"
-        })).map_err(|e| e.to_string())?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": true,
+                "action": "data_reset"
+            }))
+            .map_err(|e| e.to_string())?
+        );
     } else {
         println!("Database reset complete");
     }
@@ -196,15 +242,11 @@ fn get_str(map: &HashMap<String, serde_json::Value>, key: &str) -> String {
 }
 
 fn get_opt_str(map: &HashMap<String, serde_json::Value>, key: &str) -> Option<String> {
-    map.get(key)
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
+    map.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
 }
 
 fn get_int(map: &HashMap<String, serde_json::Value>, key: &str) -> i32 {
-    map.get(key)
-        .and_then(|v| v.as_i64())
-        .unwrap_or(0) as i32
+    map.get(key).and_then(|v| v.as_i64()).unwrap_or(0) as i32
 }
 
 pub fn backup(json: bool, db_path: &Path, keep: usize) -> Result<()> {
@@ -237,7 +279,13 @@ pub fn backup_list(json: bool, db_path: &Path) -> Result<()> {
     } else {
         let rows: Vec<Vec<String>> = backups
             .iter()
-            .map(|b| vec![b.name.clone(), b.created_at.clone(), format!("{} bytes", b.size_bytes)])
+            .map(|b| {
+                vec![
+                    b.name.clone(),
+                    b.created_at.clone(),
+                    format!("{} bytes", b.size_bytes),
+                ]
+            })
             .collect();
         print_table(&["name", "created_at", "size"], &rows);
     }
