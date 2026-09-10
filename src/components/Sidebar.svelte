@@ -23,6 +23,9 @@
 	import { notesState } from '$lib/notes/notesState.svelte';
 	import NotesSidebar from './notes/Sidebar.svelte';
 	import { Tabs, TabsList, TabsTrigger } from '$lib/components/ui/tabs/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
 
 	let {
 		settings = null,
@@ -235,6 +238,39 @@
 		});
 	}
 
+	// notes create dialog: opened from the + button or folder context menus
+	let noteCreateOpen = $state(false);
+	let noteCreateType = $state<'note' | 'folder'>('note');
+	let noteCreateName = $state('');
+	let noteCreateParent = $state<string>('root');
+
+	async function openNoteCreateDialog(type: 'note' | 'folder', parent: string | null = null) {
+		if (isMobile) mobileOpen = false;
+		if (notesState.activeTab !== 'notes') notesState.activeTab = 'notes';
+		if (window.location.pathname !== '/') {
+			await goto('/');
+			await tick();
+		}
+		noteCreateType = type;
+		noteCreateParent = parent ?? 'root';
+		noteCreateName = '';
+		noteCreateOpen = true;
+	}
+
+	function submitNoteCreate(event: SubmitEvent) {
+		event.preventDefault();
+		const name = noteCreateName.trim();
+		if (!name) return;
+		const parent = noteCreateParent === 'root' ? null : noteCreateParent;
+		if (noteCreateType === 'note') void notesState.createNoteIn(parent, name);
+		else void notesState.createFolder(parent, name);
+		noteCreateOpen = false;
+	}
+
+	function parentLabel(rel: string): string {
+		return `${'— '.repeat(rel.split('/').length - 1)}${rel.split('/').pop()}`;
+	}
+
 	onMount(() => {
 		// tablet and below: drawer mode; layout already forces narrow below 1024px
 		const mobileQuery = window.matchMedia('(max-width: 1023px)');
@@ -277,6 +313,14 @@
 		};
 		window.addEventListener('filter-overdue', setFilterActive);
 		window.addEventListener('clear-filters', clearActiveState);
+		const openNoteCreate = (event: Event) => {
+			const detail = (event as CustomEvent).detail ?? {};
+			void openNoteCreateDialog(
+				detail.type === 'folder' ? 'folder' : 'note',
+				detail.parent ?? null
+			);
+		};
+		window.addEventListener('open-note-create-dialog', openNoteCreate);
 		// update check is not needed for first paint; let the ui settle first
 		const updateTimer = window.setTimeout(() => void checkForUpdates(), 4000);
 
@@ -300,6 +344,7 @@
 			window.removeEventListener('filter-upcoming', setFilterActive);
 			window.removeEventListener('filter-overdue', setFilterActive);
 			window.removeEventListener('clear-filters', clearActiveState);
+			window.removeEventListener('open-note-create-dialog', openNoteCreate);
 			unregisterToggleSidebar?.();
 		};
 	});
@@ -482,11 +527,8 @@
 								{...props}
 								variant="ghost"
 								size="icon-sm"
-								aria-label="New note"
-								onclick={() => {
-									void notesState.createNote();
-									if (isMobile) mobileOpen = false;
-								}}
+								aria-label="New note or folder"
+								onclick={() => void openNoteCreateDialog('note', null)}
 								class="text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
 							>
 								<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -498,7 +540,7 @@
 							</Button>
 						{/snippet}
 					</Tooltip.Trigger>
-					<Tooltip.Content side="bottom">New note</Tooltip.Content>
+					<Tooltip.Content side="bottom">New note or folder</Tooltip.Content>
 				</Tooltip.Root>
 			{/if}
 		</div>
@@ -509,20 +551,8 @@
 		<div class="px-2.5 pb-0.5">
 			<Tabs bind:value={notesState.activeTab} class="w-full">
 				<TabsList class="w-full">
-					<TabsTrigger
-						value="tasks"
-						class="text-[12px]"
-						onclick={() => (notesState.showArchived = false)}
-					>
-						Tasks
-					</TabsTrigger>
-					<TabsTrigger
-						value="notes"
-						class="text-[12px]"
-						onclick={() => (notesState.showArchived = false)}
-					>
-						Notes
-					</TabsTrigger>
+					<TabsTrigger value="tasks" class="text-[12px]">Tasks</TabsTrigger>
+					<TabsTrigger value="notes" class="text-[12px]">Notes</TabsTrigger>
 				</TabsList>
 			</Tabs>
 		</div>
@@ -784,7 +814,7 @@
 									>
 									<span>Status</span>
 								</summary>
-								<div class="mt-0.5 grid gap-px">
+								<div class="mt-0.5 ml-[13px] grid gap-px border-l border-sidebar-border/50 pl-1.5">
 									{#each statusOrder as status (status)}
 										<button
 											type="button"
@@ -836,7 +866,7 @@
 									>
 									<span>Priority</span>
 								</summary>
-								<div class="mt-0.5 grid gap-px">
+								<div class="mt-0.5 ml-[13px] grid gap-px border-l border-sidebar-border/50 pl-1.5">
 									{#each [1, 2, 3, 4] as p (p)}
 										<button
 											type="button"
@@ -940,7 +970,7 @@
 								</Tooltip.Root>
 							{/if}
 						</summary>
-						<div class="mt-0.5 grid gap-px">
+						<div class="mt-0.5 ml-[13px] grid gap-px border-l border-sidebar-border/50 pl-1.5">
 							{#each projects as project (project.id)}
 								<ContextMenu.Root>
 									<ContextMenu.Trigger
@@ -1015,7 +1045,7 @@
 								>
 								<span>Labels</span>
 							</summary>
-							<div class="mt-0.5 grid gap-px">
+							<div class="mt-0.5 ml-[13px] grid gap-px border-l border-sidebar-border/50 pl-1.5">
 								{#each labels as label (label.id)}
 									<button
 										type="button"
@@ -1070,20 +1100,18 @@
 		{#if notesState.activeTab === 'notes'}
 			<Button
 				variant="ghost"
+				href="/archive"
 				size={collapsed ? 'icon-sm' : 'default'}
 				class={collapsed
 					? 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
 					: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}
 				aria-label="Archive"
 				onclick={() => {
-					notesState.showArchived = true;
 					closeMobile();
 				}}
 			>
 				<svg
-					class="shrink-0 {notesState.showArchived
-						? 'text-sidebar-foreground'
-						: 'text-muted-foreground'}"
+					class="shrink-0 text-muted-foreground"
 					width="14"
 					height="14"
 					viewBox="0 0 24 24"
@@ -1178,3 +1206,76 @@
 		<UpdateDialogComponent bind:open={updateDialogOpen} />
 	{/await}
 {/if}
+
+<!-- create note or folder -->
+<Dialog.Root bind:open={noteCreateOpen}>
+	<Dialog.Content class="w-[calc(100vw-2rem)] max-w-sm gap-0 p-0" showCloseButton={false}>
+		<Dialog.Title class="sr-only">Create {noteCreateType}</Dialog.Title>
+		<form onsubmit={submitNoteCreate} class="flex flex-col">
+			<div class="flex items-center justify-between px-4 pt-4 pb-3 sm:px-5">
+				<span class="text-[13px] font-medium text-foreground">
+					{noteCreateType === 'note' ? 'New note' : 'New folder'}
+				</span>
+				<Dialog.Close>
+					{#snippet child({ props })}
+						<Button
+							{...props}
+							variant="ghost"
+							size="icon-sm"
+							class="text-muted-foreground hover:text-foreground"
+						>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+								><path
+									fill="currentColor"
+									d="M18.3 5.71a1 1 0 0 0-1.42 0L12 10.59l-4.88-4.88a1 1 0 1 0-1.42 1.42L10.59 12l-4.88 4.88a1 1 0 1 0 1.41 1.42L12 13.41l4.88 4.88a1 1 0 0 0 1.42-1.42L13.41 12l4.88-4.88a1 1 0 0 0 0-1.41Z"
+								/></svg
+							>
+						</Button>
+					{/snippet}
+				</Dialog.Close>
+			</div>
+			<div class="flex flex-col gap-3 px-4 pb-4 sm:px-5">
+				<Select.Root
+					type="single"
+					value={noteCreateType}
+					onValueChange={(v) => (noteCreateType = v as 'note' | 'folder')}
+				>
+					<Select.Trigger class="w-full">
+						{noteCreateType === 'note' ? 'Note' : 'Folder'}
+					</Select.Trigger>
+					<Select.Content>
+						<Select.Item value="note" label="Note">Note</Select.Item>
+						<Select.Item value="folder" label="Folder">Folder</Select.Item>
+					</Select.Content>
+				</Select.Root>
+				<Input
+					bind:value={noteCreateName}
+					placeholder={noteCreateType === 'note' ? 'Untitled' : 'New Folder'}
+				/>
+				<Select.Root
+					type="single"
+					value={noteCreateParent}
+					onValueChange={(v) => (noteCreateParent = v)}
+				>
+					<Select.Trigger class="w-full">
+						{noteCreateParent === 'root' ? 'Notes root' : parentLabel(noteCreateParent)}
+					</Select.Trigger>
+					<Select.Content>
+						<Select.Item value="root" label="Notes root">Notes root</Select.Item>
+						{#each notesState.folders as rel (rel)}
+							<Select.Item value={rel} label={parentLabel(rel)}>
+								{parentLabel(rel)}
+							</Select.Item>
+						{/each}
+					</Select.Content>
+				</Select.Root>
+			</div>
+			<div class="flex justify-end gap-2 px-4 pb-4 sm:px-5">
+				<Button type="button" variant="outline" size="sm" onclick={() => (noteCreateOpen = false)}
+					>Cancel</Button
+				>
+				<Button type="submit" size="sm" disabled={!noteCreateName.trim()}>Create</Button>
+			</div>
+		</form>
+	</Dialog.Content>
+</Dialog.Root>

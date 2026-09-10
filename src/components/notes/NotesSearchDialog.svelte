@@ -34,7 +34,6 @@
 
 	function selectNote(path: string) {
 		notesState.activeTab = 'notes';
-		notesState.showArchived = false;
 		void notesState.openNote(path);
 		open = false;
 	}

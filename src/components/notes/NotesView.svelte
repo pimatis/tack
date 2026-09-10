@@ -162,7 +162,7 @@
 				href: `task:${t.id}`,
 				task: t
 			}));
-		const notes: MentionItem[] = notesState.notes
+		const notes: MentionItem[] = notesState.allNotes
 			.filter((n) => n.name.replace(/\.md$/, '').toLowerCase().includes(query))
 			.slice(0, 5)
 			.map((n) => ({
