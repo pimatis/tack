@@ -1,5 +1,7 @@
 use serde::Serialize;
 
+pub mod watch;
+
 #[derive(Serialize)]
 pub struct NoteInfo {
     pub name: String,

@@ -112,3 +112,19 @@ export function onDbChanged(callback: () => void): () => void {
 		source.close();
 	};
 }
+
+// notes live on the filesystem; the desktop app watches the notes folder
+// and emits notes-changed when a cli or external edit touches it
+export function onNotesChanged(callback: () => void): () => void {
+	if (!isTauri()) return () => {};
+	let cancelled = false;
+	let unlisten: (() => void) | undefined;
+	void import('@tauri-apps/api/event').then(async ({ listen }) => {
+		if (cancelled) return;
+		unlisten = await listen('notes-changed', callback);
+	});
+	return () => {
+		cancelled = true;
+		unlisten?.();
+	};
+}

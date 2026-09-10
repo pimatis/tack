@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { isTauri } from '$lib/db/client';
+import { isTauri, getDb } from '$lib/db/client';
 import { reorderArray } from '$lib/dnd';
 import { reindexNotes, indexNote } from './search';
 
@@ -96,6 +96,37 @@ class NotesPageState {
 		}
 		if (this.folder) await this.refresh();
 		await this.#loadTabs();
+		await this.#activateFolderWatch();
+	}
+
+	// mirror the notes folder + watch it so cli/external edits show up live
+	async #activateFolderWatch() {
+		if (!this.folder || !isTauri()) return;
+		try {
+			const db = await getDb();
+			await db.execute(
+				'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $2',
+				['notesFolder', this.folder]
+			);
+		} catch {
+			// db unavailable (browser dev) - localStorage stays the source of truth
+		}
+		await invoke('watch_notes_dir', { path: this.folder }).catch(() => {});
+	}
+
+	// called on notes-changed events (cli or external edits): refresh the
+	// tree and reload the open note if the disk copy changed underneath us
+	async syncExternal() {
+		const wasSelected = this.selectedPath;
+		const hadPendingSave = this.#saveTimer !== undefined;
+		await this.refresh();
+		if (!wasSelected || wasSelected !== this.selectedPath || hadPendingSave) return;
+		const disk = await invoke<string>('read_file', { path: wasSelected }).catch(() => null);
+		if (disk === null) return;
+		if (disk !== this.#contentCache.get(wasSelected)) {
+			this.#contentCache.set(wasSelected, disk);
+			this.content = disk;
+		}
 	}
 
 	async refresh() {
@@ -123,7 +154,7 @@ class NotesPageState {
 			this.archived = await invoke<NoteInfo[]>('list_notes', { dir: this.archiveDir }).catch(
 				() => []
 			);
-			this.#loadPins();
+			void this.#loadPins();
 			this.#loadVisits();
 			this.#loadOrders();
 			// drop tabs for notes that no longer exist on disk
@@ -153,16 +184,49 @@ class NotesPageState {
 		}
 	}
 
-	#loadPins() {
+	// pins live in the settings db (key notesPinned:<folder>) so the cli sees
+	// them too; localStorage mirrors them for browser dev mode
+	async #loadPins() {
+		if (!this.folder) return;
+		let stored: unknown;
+		try {
+			const db = await getDb();
+			const rows = await db.select<{ value: string }[]>(
+				'SELECT value FROM settings WHERE key = ?1',
+				[`notesPinned:${this.folder}`]
+			);
+			stored = JSON.parse(rows[0]?.value ?? 'null');
+		} catch {
+			try {
+				stored = JSON.parse(localStorage.getItem(`tack-notes-pinned:${this.folder}`) ?? '[]');
+			} catch {
+				stored = null;
+			}
+		}
+		this.pinned = Array.isArray(stored)
+			? stored.filter(
+					(n: unknown): n is string =>
+						typeof n === 'string' && this.allNotes.some((note) => note.name === n)
+				)
+			: [];
+	}
+
+	#persistPins() {
 		if (!this.folder) return;
 		try {
-			const stored = JSON.parse(localStorage.getItem(`tack-notes-pinned:${this.folder}`) ?? '[]');
-			this.pinned = Array.isArray(stored)
-				? stored.filter((n: string) => this.allNotes.some((note) => note.name === n))
-				: [];
+			localStorage.setItem(`tack-notes-pinned:${this.folder}`, JSON.stringify(this.pinned));
 		} catch {
-			this.pinned = [];
+			// storage unavailable - not worth reporting
 		}
+		if (!isTauri()) return;
+		void getDb()
+			.then((db) =>
+				db.execute(
+					'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $2',
+					[`notesPinned:${this.folder}`, JSON.stringify(this.pinned)]
+				)
+			)
+			.catch(() => {});
 	}
 
 	togglePin(name: string) {
@@ -170,7 +234,12 @@ class NotesPageState {
 		this.pinned = this.pinned.includes(name)
 			? this.pinned.filter((n) => n !== name)
 			: [...this.pinned, name];
-		localStorage.setItem(`tack-notes-pinned:${this.folder}`, JSON.stringify(this.pinned));
+		this.#persistPins();
+	}
+
+	// re-read pins after a cli pin change (db-changed)
+	reloadPins() {
+		void this.#loadPins();
 	}
 
 	#loadVisits() {
@@ -297,6 +366,7 @@ class NotesPageState {
 		this.noteTabs = [];
 		await this.refresh();
 		await this.#loadTabs();
+		await this.#activateFolderWatch();
 	}
 
 	async openNote(path: string, countVisit = true) {

@@ -17,6 +17,7 @@
 	import { TaskPageState } from '$lib/task/taskState.svelte';
 	import type { Task } from '$lib/types/task';
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
+	import { onDbChanged, onNotesChanged } from '$lib/db/client';
 	import { getBacklinks, type Backlink } from '$lib/notes/backlinks';
 	import MentionPreviewCard from './MentionPreviewCard.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -56,7 +57,18 @@
 			allowInInput: true,
 			run: () => notesState.cycleTab(-1)
 		});
+		// cli/external edits: the watcher emits notes-changed, the db writer
+		// (pin changes) rides db-changed; both debounce into one sync
+		let syncTimer: ReturnType<typeof setTimeout> | undefined;
+		const requestSync = () => {
+			clearTimeout(syncTimer);
+			syncTimer = setTimeout(() => void notesState.syncExternal(), 800);
+		};
+		const unlistenNotes = onNotesChanged(requestSync);
+		const unlistenDb = onDbChanged(() => void notesState.reloadPins());
 		return () => {
+			unlistenNotes();
+			unlistenDb();
 			unregisterSave();
 			unregisterFind();
 			unregisterCloseTab();

@@ -7,3 +7,4 @@ pub mod activity;
 pub mod data;
 pub mod settings;
 pub mod live;
+pub mod note;
