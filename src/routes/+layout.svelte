@@ -20,7 +20,7 @@
 	import NotesView from '../components/notes/NotesView.svelte';
 	import NotesSearchDialog from '../components/notes/NotesSearchDialog.svelte';
 	import { notesState } from '$lib/notes/notesState.svelte';
-	import { isTauri } from '$lib/db/client';
+	import { isTauri, onDbChanged, onNotesChanged } from '$lib/db/client';
 	import { invoke } from '@tauri-apps/api/core';
 	import { afterNavigate } from '$app/navigation';
 
@@ -70,6 +70,26 @@
 		// notes: restore folder + list notes once
 		void notesState.init();
 
+		// notes stay current no matter which tab is open: external/cli edits
+		// arrive as notes-changed on desktop and as db-changed over the live
+		// sse stream in the browser
+		let notesSyncTimer: ReturnType<typeof setTimeout> | undefined;
+		const requestNotesSync = () => {
+			clearTimeout(notesSyncTimer);
+			notesSyncTimer = setTimeout(() => void notesState.syncExternal(), 600);
+		};
+		const unlistenNotes = onNotesChanged(requestNotesSync);
+		const unlistenNotesDb = onDbChanged(() => void notesState.reloadPins());
+
+		// the live editor debounces saves; flush the last keystrokes before the
+		// tab is hidden or closed so the desktop and cli see them
+		const flushNotes = () => notesState.flushPendingSave();
+		const onVisibilityChange = () => {
+			if (document.visibilityState === 'hidden') notesState.flushPendingSave();
+		};
+		window.addEventListener('pagehide', flushNotes);
+		document.addEventListener('visibilitychange', onVisibilityChange);
+
 		const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 		const handleThemeChange = () => {
 			if (getSettings().theme === 'system') applyTheme('system');
@@ -79,6 +99,11 @@
 			window.clearInterval(syncInterval);
 			stopBackups();
 			stopLive();
+			clearTimeout(notesSyncTimer);
+			unlistenNotes();
+			unlistenNotesDb();
+			window.removeEventListener('pagehide', flushNotes);
+			document.removeEventListener('visibilitychange', onVisibilityChange);
 			narrowQuery.removeEventListener('change', applyNarrow);
 			mediaQuery.removeEventListener('change', handleThemeChange);
 			window.removeEventListener('settings-changed', onSettingsChanged);

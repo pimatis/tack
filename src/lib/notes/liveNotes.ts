@@ -40,8 +40,12 @@ export async function notesInvoke<T>(cmd: string, args: Args = {}): Promise<T> {
 			return http<T>(`/api/notes/folders?dir=${encodeURIComponent(args.dir as string)}`);
 		case 'list_notes':
 			return http<T>(`/api/notes/list?dir=${encodeURIComponent(args.dir as string)}`);
+		// the desktop command returns the raw text; the live endpoint wraps it
+		// in a note object, so unwrap content to keep callers transport-agnostic
 		case 'read_file':
-			return http<T>(`/api/notes/file?path=${encodeURIComponent(args.path as string)}`);
+			return http<{ content: string }>(
+				`/api/notes/file?path=${encodeURIComponent(args.path as string)}`
+			).then((note) => note.content as T);
 		case 'note_info':
 			return http<T>(`/api/notes/info?path=${encodeURIComponent(args.path as string)}`);
 		case 'write_file':

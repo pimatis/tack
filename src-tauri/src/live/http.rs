@@ -71,6 +71,7 @@ pub(super) fn handle_request(request: Request, ctx: &Ctx) {
     }
 
     let mut request = request;
+    let mutating = is_mutation(&method, path);
     let response = match (method, path) {
         (Method::Post, "/api/select") => run_query(&mut request, ctx, true),
         (Method::Post, "/api/execute") => run_query(&mut request, ctx, false),
@@ -100,6 +101,30 @@ pub(super) fn handle_request(request: Request, ctx: &Ctx) {
         _ => json_response(StatusCode(404), json!({ "error": "Not found" })),
     };
     let _ = request.respond(response);
+    // a write through the live server must wake every other client at once;
+    // waiting for the desktop's file/wal watcher adds avoidable latency
+    if mutating {
+        ctx.hub.notify();
+    }
+}
+
+// routes that change stored data; reads (select, file, list) are excluded so
+// a poll never looks like a change to other clients. /api/execute is handled
+// at the source instead: only statements that actually affected a row notify,
+// otherwise no-op DDL (CREATE TABLE IF NOT EXISTS) would loop the clients
+fn is_mutation(method: &Method, path: &str) -> bool {
+    match method {
+        Method::Post => {
+            path.starts_with("/api/notes/")
+                || path == "/api/backups"
+                || (path.starts_with("/api/backups/") && path.ends_with("/restore"))
+        }
+        Method::Put => path.starts_with("/api/attachment/"),
+        Method::Delete => {
+            path.starts_with("/api/attachment/") || path.starts_with("/api/backups/")
+        }
+        _ => false,
+    }
 }
 
 fn serve_static(path: &str, ctx: &Ctx) -> Response<std::io::Cursor<Vec<u8>>> {

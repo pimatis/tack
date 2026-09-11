@@ -4,7 +4,6 @@
 	import { notesState } from '$lib/notes/notesState.svelte';
 	import { searchNotes, type NoteSearchResult } from '$lib/notes/search';
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
-	import { isTauri } from '$lib/db/client';
 
 	let open = $state(false);
 	let query = $state('');
@@ -71,16 +70,14 @@
 	<Command.Input bind:value={query} placeholder="Search notes..." />
 	<Command.List class="max-h-[60vh] sm:max-h-[400px]">
 		<Command.Empty>
-			{!isTauri()
-				? 'Notes are only available in the desktop app.'
-				: !notesState.folder
-					? 'Choose a notes folder first.'
-					: results
-						? 'No matching notes.'
-						: 'No notes found.'}
+			{!notesState.folder
+				? 'Choose a notes folder first.'
+				: results
+					? 'No matching notes.'
+					: 'No notes found.'}
 		</Command.Empty>
 
-		{#if isTauri() && notesState.folder && results}
+		{#if notesState.folder && results}
 			<!-- full-text matches with a content snippet -->
 			<Command.Group heading="Results">
 				{#each results as note (note.path)}
@@ -114,7 +111,7 @@
 					</Command.Item>
 				{/each}
 			</Command.Group>
-		{:else if isTauri() && notesState.folder && notesState.notes.length > 0}
+		{:else if notesState.folder && notesState.notes.length > 0}
 			<Command.Group heading="Notes">
 				{#each notesState.notes as note (note.path)}
 					<Command.Item

@@ -12,7 +12,6 @@
 	import NoteHistoryDialog from './NoteHistoryDialog.svelte';
 	import NoteTagsDialog from './NoteTagsDialog.svelte';
 	import NameWarningDialog from './NameWarningDialog.svelte';
-	import { isTauri } from '$lib/db/client';
 
 	const folderName = $derived(notesState.folder?.split('/').filter(Boolean).pop() ?? '');
 	const noteTitle = $derived(notesState.selectedPath?.split('/').pop() ?? '');
@@ -384,11 +383,7 @@
 	{/if}
 {/snippet}
 
-{#if !isTauri()}
-	<div class="px-4 py-6 text-center text-[12px] text-muted-foreground">
-		Notes are only available in the desktop app.
-	</div>
-{:else if !notesState.folder}
+{#if !notesState.folder}
 	<!-- no folder yet: pick one before notes can exist -->
 	<div class="flex flex-col items-center gap-3 px-4 py-8 text-center">
 		<svg class="text-muted-foreground/50" width="24" height="24" viewBox="0 0 24 24" fill="none"

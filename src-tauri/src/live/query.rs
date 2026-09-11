@@ -66,6 +66,12 @@ pub(super) fn execute_query(
         let affected = conn
             .execute(&sql, params_from_iter(values.iter()))
             .map_err(|e| e.to_string())?;
+        // only a statement that touched a row is a real change; no-op ddl
+        // (CREATE TABLE IF NOT EXISTS, empty UPDATEs) must stay silent or
+        // clients refreshing on db-changed would notify in a loop
+        if affected > 0 {
+            ctx.hub.notify();
+        }
         Ok(json!({ "rowsAffected": affected }))
     }
 }
