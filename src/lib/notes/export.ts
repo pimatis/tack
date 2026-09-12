@@ -1,6 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { renderMarkdown } from '$lib/markdown/render';
+import { isTauri } from '$lib/db/client';
+import { notesInvoke, noteAssetUrl } from './liveNotes';
+import { downloadText } from '$lib/utils';
 
 // export a note as markdown copy or a self-contained html document
 
@@ -43,30 +46,31 @@ export async function exportNote(
 	format: ExportFormat
 ): Promise<string | null> {
 	const name = notePath.split('/').pop()?.replace(/\.md$/i, '') ?? 'note';
-	const content = await invoke<string>('read_file', { path: notePath });
+	const content = await notesInvoke<string>('read_file', { path: notePath });
+	const fileName = `${name}.${format}`;
+	// images resolve to a url that works wherever the exported file is opened:
+	// a file url on desktop, the live asset endpoint in the browser
+	const resolveAsset = (rel: string) => {
+		const abs = rel.startsWith('/') ? rel : `${folder}/${rel}`;
+		return isTauri() ? encodeURI(`file://${abs}`) : noteAssetUrl(abs);
+	};
+	const body =
+		format === 'md' ? content : HTML_SHELL(name, renderMarkdown(content, { resolveAsset }));
+
+	if (!isTauri()) {
+		// no native save dialog in the browser: download the file instead
+		downloadText(fileName, body, format === 'md' ? 'text/markdown' : 'text/html');
+		return fileName;
+	}
+
 	const target = await saveDialog({
-		defaultPath: `${name}.${format}`,
+		defaultPath: fileName,
 		filters:
 			format === 'md'
 				? [{ name: 'Markdown', extensions: ['md'] }]
 				: [{ name: 'HTML', extensions: ['html'] }]
 	});
 	if (typeof target !== 'string') return null;
-	if (format === 'md') {
-		await invoke('write_file', { path: target, content });
-	} else {
-		// images resolve to absolute file paths so the export opens anywhere
-		const body = renderMarkdown(content, {
-			resolveAsset: (rel) => {
-				const abs = rel.startsWith('.tack/')
-					? `${folder}/${rel}`
-					: rel.startsWith('/')
-						? rel
-						: `${folder}/${rel}`;
-				return encodeURI(`file://${abs}`);
-			}
-		});
-		await invoke('write_file', { path: target, content: HTML_SHELL(name, body) });
-	}
+	await invoke('write_file', { path: target, content: body });
 	return target;
 }

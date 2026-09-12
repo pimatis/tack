@@ -1,4 +1,5 @@
 import { getDb } from '$lib/db/client';
+import { newId } from '$lib/utils';
 import type { Subtask } from '$lib/types/subtask';
 
 const COLUMNS = `
@@ -25,7 +26,7 @@ export async function findByTaskId(taskId: string): Promise<Subtask[]> {
 export async function create(taskId: string, title: string): Promise<Subtask> {
 	try {
 		const db = await getDb();
-		const id = crypto.randomUUID();
+		const id = newId();
 		const now = new Date().toISOString();
 		const countResult = await db.select<{ cnt: number }[]>(
 			'SELECT COUNT(*) AS cnt FROM subtasks WHERE task_id = $1',

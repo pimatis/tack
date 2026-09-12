@@ -1,4 +1,5 @@
 import { getDb } from '$lib/db/client';
+import { newId } from '$lib/utils';
 import type { Task, TaskStatus, TaskPriority } from '$lib/types/task';
 import { statusConfig, priorityConfig } from '$lib/task/constants';
 import {
@@ -46,7 +47,7 @@ export async function create(input: CreateTaskInput): Promise<Task> {
 	try {
 		const db = await getDb();
 		const now = new Date().toISOString();
-		const id = input.id ?? crypto.randomUUID();
+		const id = input.id ?? newId();
 		const projectId = input.projectId ?? null;
 
 		// assign next sequential number per project

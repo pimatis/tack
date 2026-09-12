@@ -1,4 +1,5 @@
 import { getDb } from '$lib/db/client';
+import { newId } from '$lib/utils';
 import type { Label, LabelColor } from '$lib/types/label';
 
 type CreateLabelInput = {
@@ -16,7 +17,7 @@ const COLUMNS = `
 export async function create(input: CreateLabelInput): Promise<Label> {
 	try {
 		const db = await getDb();
-		const id = crypto.randomUUID();
+		const id = newId();
 		const now = new Date().toISOString();
 		const label: Label = { id, name: input.name, color: input.color, createdAt: now };
 

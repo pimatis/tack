@@ -1,4 +1,5 @@
 import { getDb, isTauri } from '$lib/db/client';
+import { newId } from '$lib/utils';
 import { invoke } from '@tauri-apps/api/core';
 import type { TaskAttachment } from '$lib/types/attachment';
 
@@ -23,7 +24,7 @@ const METADATA_COLUMNS = `
 export async function create(input: CreateAttachmentInput): Promise<TaskAttachment> {
 	try {
 		const db = await getDb();
-		const id = crypto.randomUUID();
+		const id = newId();
 		const now = new Date().toISOString();
 
 		// save file to disk (rust command in the app, http upload on the live site)

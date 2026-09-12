@@ -1,4 +1,5 @@
 import { getDb } from '$lib/db/client';
+import { newId } from '$lib/utils';
 import type { Project } from '$lib/types/project';
 
 type CreateProjectInput = Pick<Project, 'name' | 'prefix'> & Partial<Pick<Project, 'description'>>;
@@ -8,7 +9,7 @@ export async function create(input: CreateProjectInput): Promise<Project> {
 		const db = await getDb();
 		const now = new Date().toISOString();
 		const project: Project = {
-			id: crypto.randomUUID(),
+			id: newId(),
 			name: input.name,
 			prefix: input.prefix,
 			description: input.description ?? null,

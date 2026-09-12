@@ -11,6 +11,8 @@
 	} from '$lib/repositories/data.repository';
 	import { save, open } from '@tauri-apps/plugin-dialog';
 	import { invoke } from '@tauri-apps/api/core';
+	import { isTauri } from '$lib/db/client';
+	import { downloadText } from '$lib/utils';
 
 	let resetOpen = $state(false);
 	let resetConfirmText = $state('');
@@ -20,34 +22,71 @@
 	async function handleExport() {
 		exportLoading = true;
 		try {
+			const fileName = `tack-export-${new Date().toISOString().split('T')[0]}.json`;
+			const data = await exportAll();
+			const json = JSON.stringify(data, null, 2);
+			if (!isTauri()) {
+				downloadText(fileName, json, 'application/json');
+				exportLoading = false;
+				return;
+			}
 			const filePath = await save({
-				defaultPath: `tack-export-${new Date().toISOString().split('T')[0]}.json`,
+				defaultPath: fileName,
 				filters: [{ name: 'JSON', extensions: ['json'] }]
 			});
 			if (!filePath) {
 				exportLoading = false;
 				return;
 			}
-			const data = await exportAll();
-			await invoke('write_file', { path: filePath, content: JSON.stringify(data, null, 2) });
+			await invoke('write_file', { path: filePath, content: json });
 		} catch (e) {
 			console.error('export failed', e);
 		}
 		exportLoading = false;
 	}
 
+	// browser has no native open dialog: pick the file with a plain input
+	function pickJsonFile(): Promise<File | null> {
+		return new Promise((resolve) => {
+			const input = document.createElement('input');
+			input.type = 'file';
+			input.accept = 'application/json,.json';
+			input.style.display = 'none';
+			input.onchange = () => {
+				resolve(input.files?.[0] ?? null);
+				input.remove();
+			};
+			input.oncancel = () => {
+				resolve(null);
+				input.remove();
+			};
+			document.body.appendChild(input);
+			input.click();
+		});
+	}
+
 	async function handleImport() {
 		importing = true;
 		try {
-			const filePath = await open({
-				filters: [{ name: 'JSON', extensions: ['json'] }],
-				multiple: false
-			});
-			if (!filePath) {
-				importing = false;
-				return;
+			let text: string;
+			if (isTauri()) {
+				const filePath = await open({
+					filters: [{ name: 'JSON', extensions: ['json'] }],
+					multiple: false
+				});
+				if (!filePath) {
+					importing = false;
+					return;
+				}
+				text = await invoke<string>('read_file', { path: filePath });
+			} else {
+				const file = await pickJsonFile();
+				if (!file) {
+					importing = false;
+					return;
+				}
+				text = await file.text();
 			}
-			const text = await invoke<string>('read_file', { path: filePath });
 			const data = JSON.parse(text) as ExportData;
 			await importData(data);
 			window.location.reload();

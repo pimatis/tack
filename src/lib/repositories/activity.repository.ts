@@ -1,4 +1,5 @@
 import { getDb } from '$lib/db/client';
+import { newId } from '$lib/utils';
 import type { ActivityLog, ActivityAction } from '$lib/types/activity';
 
 const COLUMNS = `
@@ -33,7 +34,7 @@ export async function log(
 ): Promise<void> {
 	try {
 		const db = await getDb();
-		const id = crypto.randomUUID();
+		const id = newId();
 		const now = new Date().toISOString();
 		await db.execute(
 			`INSERT INTO activity_log (id, task_id, action, field, old_value, new_value, source, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,

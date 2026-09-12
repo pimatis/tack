@@ -3,8 +3,12 @@
 	import { Spinner } from '$lib/components/ui/spinner/index.js';
 	import { checkForUpdate, downloadAndInstall, relaunchApp } from '$lib/updater/update.service';
 	import type { Update } from '$lib/updater/update.service';
+	import { isTauri } from '$lib/db/client';
 
 	let { appVersion = '' }: { appVersion?: string } = $props();
+
+	// the live site cannot update the desktop app, so the check is desktop-only
+	const browser = !isTauri();
 
 	type CheckState =
 		| { status: 'idle' }
@@ -64,7 +68,7 @@
 			{appVersion || 'Unknown'}
 		</p>
 	</div>
-	{#if checkState.status === 'idle'}
+	{#if checkState.status === 'idle' && !browser}
 		<Button variant="outline" size="sm" onclick={() => void handleCheck()}>
 			Check for updates
 		</Button>
