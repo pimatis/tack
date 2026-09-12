@@ -319,6 +319,20 @@ body {
 	}
 }
 
+/* images written on consecutive lines should stack tightly: the typography
+   plugin adds block display and 2em margins, and an inline <br> between two
+   block images would still leave an empty line. this lives in the utilities
+   layer so it beats the plugin's own rules (layer order, not specificity) */
+@layer utilities {
+	.prose img {
+		display: inline-block;
+		vertical-align: top;
+		max-width: 100%;
+		margin-top: 0;
+		margin-bottom: 0;
+	}
+}
+
 /* floating ghost preview - follows cursor during drag */
 .dnd-ghost {
 	font-family: 'SF Pro Display', sans-serif;

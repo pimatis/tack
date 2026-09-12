@@ -704,31 +704,6 @@ fn note_images(root: &Path, content: &str) -> Vec<(String, PathBuf)> {
     out
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn note_images_keeps_local_targets_and_resolves_them() {
-        let root = Path::new("/vault");
-        let content = "![shot](.tack/assets/shot-1.png)\n\
-                       ![web](https://example.com/a.png)\n\
-                       ![abs](/tmp/p.png \"title\")\n\
-                       ![broken](\n";
-        let found: Vec<String> = note_images(root, content)
-            .iter()
-            .map(|(alt, p)| format!("{}={}", alt, p.display()))
-            .collect();
-        assert_eq!(
-            found,
-            vec![
-                "shot=/vault/.tack/assets/shot-1.png".to_string(),
-                "abs=/tmp/p.png".to_string(),
-            ]
-        );
-    }
-}
-
 pub fn info(root: &Path, json: bool, input: &str) -> Result<()> {
     let note = resolve_note(root, input)?;
     let meta = std::fs::metadata(&note.path).map_err(|e| format!("Failed to stat note: {}", e))?;

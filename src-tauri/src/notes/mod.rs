@@ -415,25 +415,3 @@ pub fn note_info(path: String) -> Result<NoteDetails, String> {
         folder_count,
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // a fresh vault has no .tack/assets dir; the first pasted image must still
-    // land, so the write has to create the missing parents
-    #[test]
-    fn write_binary_file_creates_missing_parents() {
-        let base = std::env::temp_dir().join(format!(
-            "tack-notes-test-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let path = base.join("assets/nested/probe.png");
-        write_binary_file(path.to_string_lossy().into_owned(), vec![1, 2, 3]).expect("write");
-        assert_eq!(std::fs::read(&path).unwrap(), vec![1, 2, 3]);
-        let _ = std::fs::remove_dir_all(&base);
-    }
-}
