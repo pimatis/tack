@@ -33,6 +33,12 @@
 	// load persisted settings before any child component reads them
 	let settings = $state(initSettings());
 
+	// remember the tasks/notes tab across reloads; the browser reload drops
+	// the in-memory state, so the live site would otherwise open on tasks
+	$effect(() => {
+		notesState.persistActiveTab(notesState.activeTab);
+	});
+
 	// narrow viewports (tablets/phones) switch the sidebar to drawer mode;
 	// the drawer open state lives here so the hamburger (main column) can drive it
 	let isNarrow = $state(false);

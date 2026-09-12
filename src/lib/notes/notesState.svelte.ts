@@ -24,6 +24,16 @@ function loadInitialTab(): 'tasks' | 'notes' {
 	}
 }
 
+// the tab must survive a real page reload: in the browser a refresh drops the
+// in-memory state, so without this the live site always fell back to tasks
+function persistTab(tab: 'tasks' | 'notes') {
+	try {
+		localStorage.setItem(TAB_KEY, tab);
+	} catch {
+		// ignore private-mode storage failures
+	}
+}
+
 // shared between the sidebar tabs, the notes sidebar and the editor
 class NotesPageState {
 	activeTab = $state<'tasks' | 'notes'>(loadInitialTab());
@@ -101,6 +111,11 @@ class NotesPageState {
 			this.spellcheck = false;
 		}
 		await this.#loadVaults();
+	}
+
+	// called from an effect in the layout so any tab change is remembered
+	persistActiveTab(tab: 'tasks' | 'notes') {
+		persistTab(tab);
 	}
 
 	toggleSpellcheck() {
@@ -561,7 +576,7 @@ class NotesPageState {
 	}
 
 	async #loadTabs() {
-		if (!this.folder || !isTauri()) return;
+		if (!this.folder) return;
 		let paths: string[] = [];
 		let active: string | null = null;
 		try {
