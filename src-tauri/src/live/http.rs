@@ -175,7 +175,7 @@ fn file_response(
     )
 }
 
-fn mime_for(path: &Path) -> &'static str {
+pub(crate) fn mime_for(path: &Path) -> &'static str {
     match path.extension().and_then(|e| e.to_str()) {
         Some("html") => "text/html; charset=utf-8",
         Some("js") | Some("mjs") => "text/javascript; charset=utf-8",
@@ -196,7 +196,7 @@ fn mime_for(path: &Path) -> &'static str {
     }
 }
 
-pub(super) fn percent_decode(s: &str) -> String {
+pub(crate) fn percent_decode(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
     let mut i = 0;

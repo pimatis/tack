@@ -75,6 +75,11 @@ pub fn run() {
         .plugin(tauri_plugin_sql::Builder::default().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // pasted note images are served through our own scheme: the asset
+        // protocol refuses dotfile paths, and .tack/assets is one
+        .register_uri_scheme_protocol("tackasset", |_ctx, request| {
+            notes::asset::respond(request)
+        })
         .on_page_load(move |webview, payload| {
             // rust-side reveal: unlike requestAnimationFrame, this fires even
             // while the window is hidden (webkit pauses rAF off-screen)

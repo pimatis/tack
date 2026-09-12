@@ -5,6 +5,7 @@ import { reorderArray } from '$lib/dnd';
 import { notesInvoke, notesRoot } from './liveNotes';
 import { reindexNotes, indexNote, type IndexedNote } from './search';
 import { splitFrontmatter, tagsOf, addTag, removeTag } from './frontmatter';
+import { newId } from '$lib/utils';
 
 export type NoteInfo = { name: string; path: string; modified: number };
 
@@ -737,26 +738,33 @@ class NotesPageState {
 	// ---- attachments ----
 
 	// store pasted/dropped binary data under .tack/assets and return the
-	// markdown link (relative) to embed in the note
+	// markdown link (relative) to embed in the note. the name is made unique
+	// up front: the disk write overwrites, so a second screenshot would
+	// otherwise clobber the first under the generic clipboard name
 	async saveAttachment(fileName: string, bytes: Uint8Array): Promise<string | null> {
 		if (!this.folder) return null;
 		const rootAbs = this.folder.replace(/\/+$/, '');
 		const dot = fileName.lastIndexOf('.');
-		const stem = dot > 0 ? fileName.slice(0, dot) : fileName;
-		const ext = dot > 0 ? fileName.slice(dot) : '';
-		let rel = `.tack/assets/${stem}${ext}`;
-		for (let i = 2; i < 1000; i++) {
-			try {
-				await notesInvoke('write_binary_file', {
-					path: `${rootAbs}/${rel}`,
-					bytes: [...bytes]
-				});
-				return rel;
-			} catch {
-				rel = `.tack/assets/${stem}-${i}${ext}`;
-			}
+		const rawStem = dot > 0 ? fileName.slice(0, dot) : fileName;
+		const stem =
+			rawStem
+				.trim()
+				.replace(/[^\w.-]+/g, '-')
+				.replace(/^-+|-+$/g, '') || 'image';
+		const ext = dot > 0 ? fileName.slice(dot).toLowerCase() : '.png';
+		const rel = `.tack/assets/${stem}-${newId().slice(0, 8)}${ext}`;
+		try {
+			// a fresh vault has no assets dir, and the live server only allows
+			// writing into existing dirs; create_folder is a no-op once it exists
+			await notesInvoke('create_folder', { dir: rootAbs, name: '.tack/assets' }).catch(() => {});
+			await notesInvoke('write_binary_file', {
+				path: `${rootAbs}/${rel}`,
+				bytes: [...bytes]
+			});
+			return rel;
+		} catch {
+			return null;
 		}
-		return null;
 	}
 
 	// mention links embed absolute file paths; after a rename/move every

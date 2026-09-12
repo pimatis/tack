@@ -451,14 +451,15 @@
 		await notesState.createNoteIn(null, clean);
 	}
 
-	// preview images resolve relative .tack/assets paths through the asset
-	// protocol on desktop, through the live server in the browser
+	// preview images resolve relative .tack/assets paths through our own uri
+	// scheme on desktop (the built-in asset protocol refuses dotfiles) and
+	// through the live server in the browser
 	function resolveAsset(rel: string): string {
 		const folder = notesState.folder;
 		if (!folder) return rel;
 		const abs = rel.startsWith('/') ? rel : `${folder.replace(/\/+$/, '')}/${rel}`;
 		if (!isTauri()) return noteAssetUrl(abs);
-		return convertFileSrc(abs);
+		return convertFileSrc(abs, 'tackasset');
 	}
 
 	// convert a note into a task: title becomes the task title, the markdown
@@ -486,6 +487,7 @@
 		const textarea = editorEl;
 		if (!textarea) {
 			notesState.content += text;
+			notesState.scheduleSave();
 			return;
 		}
 		const start = textarea.selectionStart ?? notesState.content.length;
@@ -493,6 +495,9 @@
 		const before = notesState.content.slice(0, start);
 		const after = notesState.content.slice(end);
 		notesState.content = `${before}${text}${after}`;
+		// a programmatic content change never fires the textarea's input event,
+		// so without this the pasted image link would not be written to disk
+		notesState.scheduleSave();
 		const caret = start + text.length;
 		tick().then(() => {
 			textarea.focus();
@@ -501,11 +506,13 @@
 	}
 
 	function handlePaste(e: ClipboardEvent) {
-		const item = [...(e.clipboardData?.items ?? [])].find((i) => i.type.startsWith('image/'));
-		if (!item) return;
+		// screenshots arrive as clipboard items; some sources only fill files
+		const file =
+			[...(e.clipboardData?.items ?? [])].find((i) => i.type.startsWith('image/'))?.getAsFile() ??
+			[...(e.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'));
+		if (!file) return;
 		e.preventDefault();
-		const file = item.getAsFile();
-		if (file) void insertImageFile(file);
+		void insertImageFile(file);
 	}
 
 	function handleDropImage(e: DragEvent) {

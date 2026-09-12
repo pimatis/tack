@@ -25,6 +25,9 @@ pub fn watch_notes_dir(app: tauri::AppHandle, path: String) -> Result<(), String
     if !dir.is_dir() {
         return Err(format!("notes folder does not exist: {}", path));
     }
+    // the preview serves pasted images through our own uri scheme; it needs the
+    // current notes root to resolve requests
+    super::asset::set_root(&path);
 
     let (tx, rx) = std::sync::mpsc::channel::<()>();
     let mut watcher = notify::recommended_watcher(move |res: Result<notify::Event, _>| {

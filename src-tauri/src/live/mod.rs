@@ -2,7 +2,7 @@ mod attachments;
 mod auth;
 mod backups;
 mod events;
-mod http;
+pub(crate) mod http;
 mod hub;
 mod query;
 mod server;

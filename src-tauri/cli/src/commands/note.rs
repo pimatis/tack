@@ -660,12 +660,82 @@ pub fn pin(conn: &Connection, json: bool, root: &Path, input: &str, unpin: bool)
     Ok(())
 }
 
+// markdown image links in a note, resolved against the vault root; the local
+// files (pasted screenshots live in .tack/assets) are what `note info` lists,
+// mirroring how task show reports attachments
+fn note_images(root: &Path, content: &str) -> Vec<(String, PathBuf)> {
+    let mut out: Vec<(String, PathBuf)> = Vec::new();
+    let mut cursor = 0usize;
+    while let Some(rel) = content[cursor..].find("![") {
+        let label_start = cursor + rel + 2;
+        let Some(label_rel) = content[label_start..].find("](") else {
+            break;
+        };
+        let label_end = label_start + label_rel;
+        let alt = content[label_start..label_end].trim().to_string();
+        let url_start = label_end + 2;
+        let Some(url_rel) = content[url_start..].find(')') else {
+            break;
+        };
+        let url_end = url_start + url_rel;
+        // an optional "title" follows the path: keep only the first token
+        let raw = content[url_start..url_end].trim();
+        let target = raw
+            .trim_matches(|c| c == '"' || c == '\'')
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .to_string();
+        cursor = url_end + 1;
+        if target.is_empty()
+            || target.starts_with("http://")
+            || target.starts_with("https://")
+            || target.starts_with("data:")
+        {
+            continue;
+        }
+        let abs = if target.starts_with('/') {
+            PathBuf::from(&target)
+        } else {
+            root.join(&target)
+        };
+        out.push((alt, abs));
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn note_images_keeps_local_targets_and_resolves_them() {
+        let root = Path::new("/vault");
+        let content = "![shot](.tack/assets/shot-1.png)\n\
+                       ![web](https://example.com/a.png)\n\
+                       ![abs](/tmp/p.png \"title\")\n\
+                       ![broken](\n";
+        let found: Vec<String> = note_images(root, content)
+            .iter()
+            .map(|(alt, p)| format!("{}={}", alt, p.display()))
+            .collect();
+        assert_eq!(
+            found,
+            vec![
+                "shot=/vault/.tack/assets/shot-1.png".to_string(),
+                "abs=/tmp/p.png".to_string(),
+            ]
+        );
+    }
+}
+
 pub fn info(root: &Path, json: bool, input: &str) -> Result<()> {
     let note = resolve_note(root, input)?;
     let meta = std::fs::metadata(&note.path).map_err(|e| format!("Failed to stat note: {}", e))?;
     let content = std::fs::read_to_string(&note.path).unwrap_or_default();
     let words = content.split_whitespace().count();
     let tags = note_tags(&note.path);
+    let images = note_images(root, &content);
     if json {
         println!(
             "{}",
@@ -677,6 +747,12 @@ pub fn info(root: &Path, json: bool, input: &str) -> Result<()> {
                 "modified": note.modified,
                 "word_count": words,
                 "tags": tags,
+                "images": images.iter().map(|(alt, p)| json!({
+                    "alt": alt,
+                    "path": p.to_string_lossy(),
+                    "size_bytes": std::fs::metadata(p).map(|m| m.len()).unwrap_or(0),
+                    "exists": p.is_file(),
+                })).collect::<Vec<_>>(),
             }))
             .map_err(|e| e.to_string())?
         );
@@ -697,9 +773,23 @@ pub fn info(root: &Path, json: bool, input: &str) -> Result<()> {
                 tags.join(", ")
             },
         ],
+        vec!["Images".to_string(), images.len().to_string()],
         vec!["Location".to_string(), note.rel.clone()],
     ];
     print_table(&["Field", "Value"], &rows);
+    if !images.is_empty() {
+        println!();
+        println!("Images:");
+        for (alt, path) in &images {
+            let label = if alt.is_empty() { "-" } else { alt.as_str() };
+            if path.is_file() {
+                let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+                println!("  {} ({}) -> {}", label, format_size(size), path.display());
+            } else {
+                println!("  {} (missing) -> {}", label, path.display());
+            }
+        }
+    }
     Ok(())
 }
 
