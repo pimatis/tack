@@ -1,11 +1,12 @@
 import { getDb } from '$lib/db/client';
 
-// wrap terms as fts5 phrases so user input is matched as literal text
-export function toFtsQuery(query: string): string {
+// wrap terms as fts5 phrases so user input is matched as literal text; with
+// prefix, each term also matches longer tokens ("sad" finds "sadadsa")
+export function toFtsQuery(query: string, prefix = false): string {
 	return query
 		.trim()
 		.split(/\s+/)
-		.map((term) => `"${term.replaceAll('"', '""')}"`)
+		.map((term) => `"${term.replaceAll('"', '""')}"${prefix ? '*' : ''}`)
 		.join(' ');
 }
 

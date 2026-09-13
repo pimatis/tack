@@ -1,6 +1,7 @@
 import Database from '@tauri-apps/plugin-sql';
 
 import { requireLiveAuth } from '$lib/live/auth.service';
+import { presenceQuery } from '$lib/live/presence';
 
 const DATABASE_URL = 'sqlite:tack.db';
 
@@ -104,7 +105,7 @@ export function onDbChanged(callback: () => void): () => void {
 	}
 	// the local server pushes db-changed events over sse; EventSource
 	// reconnects automatically, so a dropped connection self-heals
-	const source = new EventSource('/api/events/stream');
+	const source = new EventSource(`/api/events/stream?${presenceQuery()}`);
 	const onEvent = () => callback();
 	source.addEventListener('db-changed', onEvent);
 	return () => {
@@ -130,7 +131,7 @@ export function onNotesChanged(callback: () => void): () => void {
 			unlisten?.();
 		};
 	}
-	const source = new EventSource('/api/events/stream');
+	const source = new EventSource(`/api/events/stream?${presenceQuery()}`);
 	const onEvent = () => callback();
 	source.addEventListener('db-changed', onEvent);
 	return () => {

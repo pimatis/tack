@@ -92,6 +92,11 @@ pub(crate) fn run_migrations(conn: &Connection) -> Result<(), String> {
             "create_notes_fts_index",
             include_str!("../migrations/017_notes_fts.sql"),
         ),
+        (
+            18,
+            "create_task_notes_table",
+            include_str!("../migrations/018_task_notes.sql"),
+        ),
     ];
     let known: std::collections::HashSet<i64> =
         migrations.iter().map(|(v, _, _)| *v as i64).collect();

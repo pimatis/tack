@@ -10,11 +10,40 @@
 	import { issueId } from '$lib/task/utils';
 	import { getSettings } from '$lib/stores/settings';
 	import { notesState } from '$lib/notes/notesState.svelte';
+	import { searchNotes, type NoteSearchResult } from '$lib/notes/search';
 	import StatusIcon from './StatusIcon.svelte';
 
 	let open = $state(false);
+	let query = $state('');
 	let tasks = $state<Task[]>([]);
 	let projects = $state<Project[]>([]);
+	let noteResults = $state<NoteSearchResult[] | null>(null);
+
+	const normalized = $derived(query.trim().toLowerCase());
+
+	// cmdk's built-in filter cannot mix with async fts results, so filter here
+	const shownTasks = $derived(
+		normalized
+			? tasks.filter((t) =>
+					`${issueId(t, projects, getSettings())} ${t.title}`.toLowerCase().includes(normalized)
+				)
+			: tasks
+	);
+
+	const shownProjects = $derived(
+		normalized
+			? projects.filter((p) => `${p.name} ${p.prefix}`.toLowerCase().includes(normalized))
+			: projects
+	);
+
+	// notes: fts hits while typing, the plain root list when the query is empty
+	const shownNotes = $derived<NoteSearchResult[]>(
+		normalized
+			? (noteResults ?? [])
+			: notesState.folder
+				? notesState.notes.map((n) => ({ path: n.path, name: n.name, snippet: '' }))
+				: []
+	);
 
 	async function goHomeThenDispatch(eventName: string, detail?: unknown) {
 		if (window.location.pathname !== '/') {
@@ -34,11 +63,34 @@
 		} catch {
 			// ignore
 		}
+		if (notesState.folder) void notesState.refresh();
 	}
 
 	$effect(() => {
 		if (open) void loadData();
 	});
+
+	// debounced full-text search over note names and content
+	$effect(() => {
+		const q = normalized;
+		if (!open || !q) {
+			noteResults = null;
+			return;
+		}
+		const timer = setTimeout(async () => {
+			noteResults = await searchNotes(q).catch(() => []);
+		}, 150);
+		return () => clearTimeout(timer);
+	});
+
+	// folder path of a note relative to the notes root ('' for root notes)
+	function folderLabel(path: string): string {
+		const root = notesState.folder?.replace(/\/+$/, '');
+		if (!root || !path.startsWith(`${root}/`)) return '';
+		const parts = path.slice(root.length + 1).split('/');
+		parts.pop();
+		return parts.join(' / ');
+	}
 
 	function selectTask(task: Task) {
 		void goHomeThenDispatch('edit-task-from-command', task);
@@ -47,6 +99,16 @@
 
 	function selectProject(project: Project) {
 		void goHomeThenDispatch('filter-by-project', project.id);
+		open = false;
+	}
+
+	async function selectNote(path: string) {
+		notesState.activeTab = 'notes';
+		if (window.location.pathname !== '/') {
+			await goto('/');
+			await tick();
+		}
+		void notesState.openNote(path);
 		open = false;
 	}
 
@@ -63,18 +125,19 @@
 	onMount(() => {
 		const registry = getShortcutRegistry();
 
-		// in the notes tab the palette shortcut opens the notes search instead
-		const openPalette = () => {
-			if (notesState.activeTab === 'notes') {
-				window.dispatchEvent(new Event('open-notes-search'));
-				return;
-			}
-			open = !open;
-		};
+		// one unified search over tasks, projects and notes
+		const openPalette = () => (open = !open);
 
 		const unregisterCommandPalette = registry.register({
 			id: 'command-palette',
 			run: openPalette
+		});
+
+		// Cmd+P stays a notes-tab shortcut and opens the same unified search
+		const unregisterNotesSearch = registry.register({
+			id: 'notes-search',
+			enabled: () => notesState.activeTab === 'notes',
+			run: () => (open = true)
 		});
 
 		const unregisterNewTask = registry.register({
@@ -97,6 +160,7 @@
 		window.addEventListener('open-command-palette', handleOpenPalette);
 		return () => {
 			unregisterCommandPalette();
+			unregisterNotesSearch();
 			unregisterNewTask();
 			unregisterNewProject();
 			window.removeEventListener('open-command-palette', handleOpenPalette);
@@ -106,17 +170,16 @@
 
 <Command.Dialog
 	bind:open
-	title="Command palette"
-	description="Search for commands, tasks, and projects"
+	shouldFilter={false}
+	title="Search"
+	description="Search tasks, projects, and notes"
 	showCloseButton={false}
 	class="top-[12%]! w-[calc(100vw-2rem)]! max-w-[560px]! sm:top-[18%]"
 >
-	<Command.Input placeholder="Type a command or search..." />
+	<Command.Input bind:value={query} placeholder="Search tasks, projects, and notes..." />
 	<Command.List class="max-h-[60vh] sm:max-h-[400px]">
-		<Command.Empty>No results found.</Command.Empty>
-
 		<Command.Group heading="Actions">
-			<Command.Item onSelect={() => newTask()}>
+			<Command.Item value="new-task" onSelect={() => newTask()}>
 				<svg class="text-muted-foreground" width="16" height="16" viewBox="0 0 24 24" fill="none"
 					><path
 						fill="currentColor"
@@ -126,7 +189,7 @@
 				<span>New task</span>
 				<Command.Shortcut>C</Command.Shortcut>
 			</Command.Item>
-			<Command.Item onSelect={() => newProject()}>
+			<Command.Item value="new-project" onSelect={() => newProject()}>
 				<svg class="text-muted-foreground" width="16" height="16" viewBox="0 0 24 24" fill="none"
 					><path
 						fill="currentColor"
@@ -138,12 +201,12 @@
 			</Command.Item>
 		</Command.Group>
 
-		{#if tasks.length > 0}
+		{#if shownTasks.length > 0}
 			<Command.Separator />
 			<Command.Group heading="Tasks">
-				{#each tasks as task (task.id)}
+				{#each shownTasks as task (task.id)}
 					<Command.Item
-						value={`${issueId(task, projects, getSettings())} ${task.title}`}
+						value={task.id}
 						onSelect={() => selectTask(task)}
 						class="[&_.cn-command-item-indicator]:hidden"
 					>
@@ -157,12 +220,12 @@
 			</Command.Group>
 		{/if}
 
-		{#if projects.length > 0}
+		{#if shownProjects.length > 0}
 			<Command.Separator />
 			<Command.Group heading="Projects">
-				{#each projects as project (project.id)}
+				{#each shownProjects as project (project.id)}
 					<Command.Item
-						value={`${project.name} ${project.prefix}`}
+						value={project.id}
 						onSelect={() => selectProject(project)}
 						class="[&_.cn-command-item-indicator]:hidden"
 					>
@@ -181,6 +244,42 @@
 						<span class="ml-auto shrink-0 text-[11px] text-muted-foreground/50"
 							>{project.prefix}</span
 						>
+					</Command.Item>
+				{/each}
+			</Command.Group>
+		{/if}
+
+		{#if shownNotes.length > 0}
+			<Command.Separator />
+			<Command.Group heading="Notes">
+				{#each shownNotes as note (note.path)}
+					<Command.Item
+						value={note.path}
+						onSelect={() => selectNote(note.path)}
+						class="[&_.cn-command-item-indicator]:hidden"
+					>
+						<svg
+							class="mt-0.5 text-muted-foreground"
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							><path
+								fill="currentColor"
+								d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.17a2 2 0 0 0-.59-1.42l-4.58-4.58A2 2 0 0 0 13.41 2zm7.5 1.13L18.87 8H13.5zM8 12h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2m0 4h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2"
+							/></svg
+						>
+						<span class="flex min-w-0 flex-col">
+							<span class="truncate">{note.name.replace(/\.md$/, '')}</span>
+							{#if folderLabel(note.path)}
+								<span class="truncate text-[10px] text-muted-foreground/60">
+									{folderLabel(note.path)}
+								</span>
+							{/if}
+							{#if note.snippet}
+								<span class="truncate text-[11px] text-muted-foreground">{note.snippet}</span>
+							{/if}
+						</span>
 					</Command.Item>
 				{/each}
 			</Command.Group>

@@ -7,7 +7,12 @@
 	import { isTauri } from '$lib/db/client';
 	import { invoke } from '@tauri-apps/api/core';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
-	import { getLiveStatus, type LiveStatus } from '$lib/live/live.service';
+	import {
+		getLiveStatus,
+		getLivePresence,
+		type LiveStatus,
+		type PresenceClient
+	} from '$lib/live/live.service';
 	import type { Settings } from '$lib/types/settings';
 
 	let {
@@ -21,6 +26,7 @@
 	const browser = !isTauri();
 
 	let status = $state<LiveStatus | null>(null);
+	let presence = $state<PresenceClient[]>([]);
 	let error = $state('');
 	let copied = $state('');
 	let busy = $state(false);
@@ -74,6 +80,7 @@
 
 	async function refresh() {
 		status = await getLiveStatus();
+		presence = await getLivePresence();
 	}
 
 	async function handleToggle(enabled: boolean) {
@@ -261,6 +268,27 @@
 					</Button>
 				{/if}
 			</div>
+		</div>
+
+		<Separator />
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<div class="min-w-0">
+				<p class="text-[13px] font-medium">Connected clients</p>
+				<p class="text-xs text-muted-foreground">
+					{presence.length === 0
+						? 'No one else is connected right now'
+						: `${presence.length} connected`}
+				</p>
+			</div>
+			{#if presence.length > 0}
+				<div class="flex max-w-[60%] flex-wrap justify-end gap-1.5">
+					{#each presence as client (client.id)}
+						<span class="rounded-full bg-muted/50 px-2 py-0.5 text-[11px] text-muted-foreground">
+							{client.name}
+						</span>
+					{/each}
+				</div>
+			{/if}
 		</div>
 
 		<Separator />

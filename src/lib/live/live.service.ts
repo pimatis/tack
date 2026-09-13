@@ -1,8 +1,44 @@
 import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '$lib/db/client';
+import { requireLiveAuth } from '$lib/live/auth.service';
 import { getSettings, setSettings } from '$lib/stores/settings';
 
 export type LiveStatus = { port: number; url: string };
+
+// one connected live client, as reported by the embedded server
+export type PresenceClient = {
+	id: string;
+	name: string;
+	kind: string;
+	connections: number;
+	joinedMs: number;
+};
+
+export async function getLivePresence(): Promise<PresenceClient[]> {
+	if (isTauri()) {
+		try {
+			return await invoke<PresenceClient[]>('live_presence');
+		} catch {
+			return [];
+		}
+	}
+	return fetchPresence();
+}
+
+async function fetchPresence(): Promise<PresenceClient[]> {
+	try {
+		const res = await fetch('/api/presence');
+		if (res.status === 401) {
+			await requireLiveAuth();
+			return fetchPresence();
+		}
+		if (!res.ok) return [];
+		const data = (await res.json()) as { clients?: PresenceClient[] };
+		return data.clients ?? [];
+	} catch {
+		return [];
+	}
+}
 
 // marks the one-time session reset; in sessionStorage so it survives webview
 // reloads (dev hot-reload must not stop a running live server)

@@ -73,6 +73,10 @@ fn err(message: String) -> BytesResponse {
     json_response(StatusCode(500), json!({ "error": message }))
 }
 
+fn not_found(message: &str) -> BytesResponse {
+    json_response(StatusCode(404), json!({ "error": message }))
+}
+
 fn query_param(query: &str, key: &str) -> Option<String> {
     let prefix = format!("{}=", key);
     query.split('&').find_map(|pair| {
@@ -146,8 +150,16 @@ pub(super) fn serve_file(ctx: &Ctx, query: &str) -> BytesResponse {
     let Some(path) = query_param(query, "path") else {
         return json_response(StatusCode(400), json!({ "error": "Missing path" }));
     };
+    let p = match validate_all(ctx, &[Some(&path)]) {
+        Ok(mut paths) => paths.remove(0),
+        Err(e) => return err(e),
+    };
+    // a note that was moved or deleted is a missing resource (404), not a
+    // server error, so clients can tell it apart from a real failure
+    if !p.is_file() {
+        return not_found("Note not found");
+    }
     let read = || -> Result<NoteFull, String> {
-        let p = validate_all(ctx, &[Some(&path)])?.remove(0);
         let meta = std::fs::metadata(&p).map_err(|e| e.to_string())?;
         Ok(NoteFull {
             path: p.to_string_lossy().into_owned(),
@@ -175,9 +187,14 @@ pub(super) fn serve_info(ctx: &Ctx, query: &str) -> BytesResponse {
     let Some(path) = query_param(query, "path") else {
         return json_response(StatusCode(400), json!({ "error": "Missing path" }));
     };
-    match validate_all(ctx, &[Some(&path)])
-        .and_then(|mut p| note_info(p.remove(0).to_string_lossy().into_owned()))
-    {
+    let p = match validate_all(ctx, &[Some(&path)]) {
+        Ok(mut paths) => paths.remove(0),
+        Err(e) => return err(e),
+    };
+    if !p.exists() {
+        return not_found("Note not found");
+    }
+    match note_info(p.to_string_lossy().into_owned()) {
         Ok(details) => ok(details),
         Err(e) => err(e),
     }

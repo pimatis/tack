@@ -7,7 +7,7 @@ mod hub;
 mod query;
 mod server;
 
-pub use hub::LiveHub;
+pub use hub::{LiveHub, PresenceClient};
 mod notes;
 pub use server::{LiveState, LiveStatus};
 
@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tauri::Manager;
 
 pub type Result<T> = std::result::Result<T, String>;
 
@@ -44,6 +45,11 @@ pub fn live_stop(app: tauri::AppHandle) -> Result<()> {
 #[tauri::command]
 pub fn live_status(app: tauri::AppHandle) -> Option<LiveStatus> {
     server::status(&app)
+}
+
+#[tauri::command]
+pub fn live_presence(app: tauri::AppHandle) -> Vec<PresenceClient> {
+    app.state::<LiveState>().hub.presence_snapshot()
 }
 
 #[tauri::command]

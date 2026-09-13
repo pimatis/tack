@@ -111,7 +111,7 @@ export async function searchNotes(query: string): Promise<NoteSearchResult[]> {
 	return db.select<NoteSearchResult[]>(
 		`SELECT path, name, snippet(notes_fts, 2, '', '', '…', 8) AS snippet
 		 FROM notes_fts WHERE notes_fts MATCH $1 ORDER BY rank LIMIT 50`,
-		[toFtsQuery(query)]
+		[toFtsQuery(query, true)]
 	);
 }
 

@@ -48,6 +48,12 @@
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
 	import { getLinkingNotes } from '$lib/notes/search';
 	import { notesState } from '$lib/notes/notesState.svelte';
+	import {
+		findByTaskId as findNoteLinks,
+		add as addNoteLink,
+		remove as removeNoteLink,
+		type TaskNoteLink
+	} from '$lib/repositories/noteLink.repository';
 
 	type Props = {
 		open?: boolean;
@@ -131,6 +137,11 @@
 	// notes that mention this task; loaded with the panel content
 	let mentioningNotes = $state<{ path: string; name: string }[]>([]);
 
+	// explicit task -> note links added from this panel
+	let linkedNotes = $state<TaskNoteLink[]>([]);
+	let notePickerOpen = $state(false);
+	let noteQuery = $state('');
+
 	const statusLabels: Record<TaskStatus, string> = {
 		todo: 'Todo',
 		in_progress: 'In progress',
@@ -167,6 +178,9 @@
 		attachmentUrls = {};
 		selectedLabelIds = [];
 		newSubtaskTitle = '';
+		linkedNotes = [];
+		notePickerOpen = false;
+		noteQuery = '';
 		original = {
 			title: task.title,
 			description: task.description ?? '',
@@ -182,6 +196,7 @@
 		void loadSubtasks(task.id);
 		void loadActivity(task.id);
 		void loadMentioningNotes(task.id);
+		void loadLinkedNotes(task.id);
 		// the list view omits the description column; fetch the full task so
 		// existing descriptions (e.g. from a note conversion) show up
 		void loadFullTask(task.id);
@@ -198,9 +213,9 @@
 		}
 	}
 
-	// jump from a task to the note that mentions it: switch to the notes tab
-	// first so the notes view is mounted when the note opens
-	async function openMentioningNote(path: string) {
+	// jump from a task to a note: switch to the notes tab first so the notes
+	// view is mounted when the note opens
+	async function openNote(path: string) {
 		notesState.activeTab = 'notes';
 		await notesState.openNote(path);
 	}
@@ -211,6 +226,50 @@
 			mentioningNotes = await getLinkingNotes(`task:${taskId}`);
 		} catch {
 			// the links index may not exist yet
+		}
+	}
+
+	async function loadLinkedNotes(taskId: string) {
+		try {
+			linkedNotes = await findNoteLinks(taskId);
+		} catch {
+			linkedNotes = [];
+		}
+	}
+
+	// notes that can be linked: everything in the vault, minus already linked
+	const noteCandidates = $derived.by(() => {
+		const query = noteQuery.trim().toLowerCase();
+		const linked = new Set(linkedNotes.map((link) => link.notePath));
+		return notesState.allNotes
+			.filter((note) => !linked.has(note.path))
+			.filter((note) => !query || note.name.toLowerCase().includes(query))
+			.slice(0, 8);
+	});
+
+	function noteLabel(path: string): string {
+		return path.split('/').pop()?.replace(/\.md$/i, '') ?? path;
+	}
+
+	async function addLinkedNote(path: string) {
+		if (!task) return;
+		try {
+			await addNoteLink(task.id, path);
+			linkedNotes = await findNoteLinks(task.id);
+			noteQuery = '';
+			notePickerOpen = false;
+		} catch {
+			error = 'Failed to link note';
+		}
+	}
+
+	async function removeLinkedNote(path: string) {
+		if (!task) return;
+		try {
+			await removeNoteLink(task.id, path);
+			linkedNotes = linkedNotes.filter((link) => link.notePath !== path);
+		} catch {
+			error = 'Failed to unlink note';
 		}
 	}
 
@@ -1087,6 +1146,91 @@
 							<p class="pt-3 text-[12px] text-destructive" role="alert">{error}</p>
 						{/if}
 
+						<!-- explicit note links added from this panel -->
+						<div class="pt-5">
+							<div
+								class="flex items-center gap-1.5 pb-2 text-[11px] font-medium text-muted-foreground/60"
+							>
+								<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+									<path
+										fill="currentColor"
+										d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.17a2 2 0 0 0-.59-1.42l-4.58-4.58A2 2 0 0 0 13.41 2zm7.5 1.13L18.87 8H13.5zM8 12h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2m0 4h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2"
+									/>
+								</svg>
+								<span>Linked notes</span>
+								<div class="flex-1"></div>
+								<button
+									type="button"
+									class="text-[11px] text-muted-foreground/60 transition-colors hover:text-foreground"
+									onclick={() => (notePickerOpen = !notePickerOpen)}
+								>
+									{notePickerOpen ? 'Cancel' : '+ Link note'}
+								</button>
+							</div>
+
+							{#if linkedNotes.length > 0}
+								<div class="flex flex-wrap gap-1.5">
+									{#each linkedNotes as link (link.notePath)}
+										<span
+											class="flex max-w-52 items-center gap-1 rounded-full border border-border bg-muted/30 py-0.5 pr-1 pl-2 text-[11px]"
+										>
+											<button
+												type="button"
+												class="truncate text-muted-foreground transition-colors hover:text-foreground"
+												onclick={() => void openNote(link.notePath)}
+											>
+												{noteLabel(link.notePath)}
+											</button>
+											<button
+												type="button"
+												class="flex size-3.5 shrink-0 items-center justify-center rounded-full text-muted-foreground/50 transition-colors hover:bg-muted/60 hover:text-destructive"
+												aria-label="Unlink note"
+												onclick={() => void removeLinkedNote(link.notePath)}
+											>
+												<svg width="8" height="8" viewBox="0 0 24 24" fill="none"
+													><path
+														fill="currentColor"
+														d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
+													/></svg
+												>
+											</button>
+										</span>
+									{/each}
+								</div>
+							{/if}
+
+							{#if notePickerOpen}
+								<div class="mt-1.5 rounded-lg border border-border bg-muted/20 p-2">
+									<Input
+										bind:value={noteQuery}
+										placeholder="Search notes..."
+										class="h-7 text-[12px]"
+									/>
+									<div class="mt-1 max-h-40 overflow-y-auto">
+										{#if !notesState.folder}
+											<p class="px-1 py-1.5 text-[12px] text-muted-foreground/50">
+												Choose a notes folder first.
+											</p>
+										{:else if noteCandidates.length === 0}
+											<p class="px-1 py-1.5 text-[12px] text-muted-foreground/50">
+												No notes found.
+											</p>
+										{:else}
+											{#each noteCandidates as candidate (candidate.path)}
+												<button
+													type="button"
+													class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[12px] text-foreground/90 transition-colors hover:bg-muted/50"
+													onclick={() => void addLinkedNote(candidate.path)}
+												>
+													<span class="truncate">{candidate.name.replace(/\.md$/, '')}</span>
+												</button>
+											{/each}
+										{/if}
+									</div>
+								</div>
+							{/if}
+						</div>
+
 						<!-- notes that mention this task via @-links -->
 						{#if mentioningNotes.length > 0}
 							<div class="pt-5">
@@ -1106,7 +1250,7 @@
 										<button
 											type="button"
 											class="max-w-52 truncate rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-											onclick={() => void openMentioningNote(note.path)}
+											onclick={() => void openNote(note.path)}
 										>
 											{note.name.replace(/\.md$/, '')}
 										</button>

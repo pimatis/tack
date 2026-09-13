@@ -8,9 +8,12 @@ use super::Ctx;
 use serde::Serialize;
 use serde_json::json;
 use std::path::Path;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use tiny_http::{Header, Method, Request, Response, StatusCode};
+
+// unique ids for agent connections that carry no client id of their own
+static AGENT_SEQ: AtomicU64 = AtomicU64::new(0);
 
 pub(super) fn json_response<T: Serialize>(
     status: StatusCode,
@@ -62,11 +65,16 @@ pub(super) fn handle_request(request: Request, ctx: &Ctx) {
     // sse bypasses respond(): tiny_http only flushes a response body once it
     // finishes, so write frames straight to the connection writer instead
     if method == Method::Get && path == "/api/events/stream" {
+        // a live connection is what "presence" counts, so register this client
+        // for as long as the stream stays open
+        let (client_id, name, kind) = presence_identity(&request, query);
+        ctx.hub.presence_join(&client_id, &name, &kind);
         let closed = Arc::new(AtomicBool::new(false));
         ctx.sse.lock().unwrap().push(closed.clone());
         let mut writer = request.into_writer();
         stream_events(&mut writer, ctx, &closed);
         ctx.sse.lock().unwrap().retain(|f| !Arc::ptr_eq(f, &closed));
+        ctx.hub.presence_leave(&client_id);
         return;
     }
 
@@ -76,6 +84,7 @@ pub(super) fn handle_request(request: Request, ctx: &Ctx) {
         (Method::Post, "/api/select") => run_query(&mut request, ctx, true),
         (Method::Post, "/api/execute") => run_query(&mut request, ctx, false),
         (Method::Get, "/api/events") => poll_events(ctx),
+        (Method::Get, "/api/presence") => presence_list(ctx),
         (Method::Get, p) if p.starts_with("/api/attachment/") => serve_attachment(p, query, ctx),
         (Method::Put, p) if p.starts_with("/api/attachment/") => {
             put_attachment(&mut request, p, ctx)
@@ -221,4 +230,47 @@ fn hex_val(c: u8) -> Option<u8> {
         b'A'..=b'F' => Some(c - b'A' + 10),
         _ => None,
     }
+}
+
+fn presence_list(ctx: &Ctx) -> Response<std::io::Cursor<Vec<u8>>> {
+    json_response(
+        StatusCode(200),
+        json!({ "clients": ctx.hub.presence_snapshot() }),
+    )
+}
+
+// identity for the presence list: browser clients send a stable id + display
+// name, agents (curl, cli) fall back to their remote address
+fn presence_identity(request: &Request, query: &str) -> (String, String, String) {
+    let params = parse_query(query);
+    if let Some(id) = params.get("client") {
+        let name = params
+            .get("name")
+            .filter(|n| !n.is_empty())
+            .cloned()
+            .unwrap_or_else(|| "Web client".to_string());
+        return (format!("web:{}", id), name, "web".to_string());
+    }
+    let ip = request
+        .remote_addr()
+        .map(|addr| addr.ip().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    let seq = AGENT_SEQ.fetch_add(1, Ordering::Relaxed);
+    (
+        format!("agent:{}:{}", ip, seq),
+        format!("Agent ({})", ip),
+        "agent".to_string(),
+    )
+}
+
+fn parse_query(query: &str) -> std::collections::HashMap<String, String> {
+    let mut out = std::collections::HashMap::new();
+    for pair in query.split('&') {
+        if pair.is_empty() {
+            continue;
+        }
+        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+        out.insert(key.to_string(), percent_decode(value));
+    }
+    out
 }

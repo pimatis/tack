@@ -6,6 +6,7 @@ import { notesInvoke, notesRoot } from './liveNotes';
 import { reindexNotes, indexNote, type IndexedNote } from './search';
 import { splitFrontmatter, tagsOf, addTag, removeTag } from './frontmatter';
 import { newId } from '$lib/utils';
+import { remapPaths as remapTaskNotePaths } from '$lib/repositories/noteLink.repository';
 import { toast } from 'svelte-sonner';
 
 export type NoteInfo = { name: string; path: string; modified: number };
@@ -857,6 +858,12 @@ class NotesPageState {
 			if (!changed) continue;
 			await notesInvoke('write_file', { path: note.path, content });
 			if (note.path === this.selectedPath) this.content = content;
+		}
+		// explicit task -> note links follow the same rename/move
+		try {
+			await remapTaskNotePaths(remap);
+		} catch {
+			// the note itself already moved; a stale link is recoverable
 		}
 		if (this.noteTabs.some((t) => remap.has(t))) {
 			this.noteTabs = this.noteTabs.map((t) => remap.get(t) ?? t);

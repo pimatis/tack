@@ -125,6 +125,7 @@ pub fn run() {
             live::live_start,
             live::live_stop,
             live::live_status,
+            live::live_presence,
             live::hash_live_password
         ])
         .setup(|app| {

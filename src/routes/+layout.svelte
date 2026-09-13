@@ -18,7 +18,6 @@
 	import { isLiveAuthRequired } from '$lib/live/auth.service';
 	import LiveAuthDialog from '../components/LiveAuthDialog.svelte';
 	import NotesView from '../components/notes/NotesView.svelte';
-	import NotesSearchDialog from '../components/notes/NotesSearchDialog.svelte';
 	import { notesState } from '$lib/notes/notesState.svelte';
 	import { isTauri, onDbChanged, onNotesChanged } from '$lib/db/client';
 	import { invoke } from '@tauri-apps/api/core';
@@ -179,7 +178,6 @@
 				</main>
 			</div>
 			<CommandPalette />
-			<NotesSearchDialog />
 		</Shortcuts>
 		<Toaster position="bottom-right" />
 	</Tooltip.Provider>
