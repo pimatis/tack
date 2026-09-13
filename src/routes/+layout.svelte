@@ -23,6 +23,7 @@
 	import { isTauri, onDbChanged, onNotesChanged } from '$lib/db/client';
 	import { invoke } from '@tauri-apps/api/core';
 	import { afterNavigate } from '$app/navigation';
+	import { Toaster } from '$lib/components/ui/sonner';
 
 	const { children } = $props();
 
@@ -180,5 +181,6 @@
 			<CommandPalette />
 			<NotesSearchDialog />
 		</Shortcuts>
+		<Toaster position="bottom-right" />
 	</Tooltip.Provider>
 {/if}

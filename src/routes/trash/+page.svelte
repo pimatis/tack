@@ -18,7 +18,7 @@
 	import type { Task } from '$lib/types/task';
 	import type { Project } from '$lib/types/project';
 	import { getSettings } from '$lib/stores/settings';
-	import { onDbChanged, isTauri } from '$lib/db/client';
+	import { onDbChanged } from '$lib/db/client';
 	import { searchTaskIds } from '$lib/search/fts.service';
 	import { issueId } from '$lib/task/utils';
 	import { listTrashedNotes, restoreTrashedNote, purgeNote, purgeAllNotes } from '$lib/notes/trash';
@@ -95,8 +95,9 @@
 			const [t, p] = await Promise.all([findTrashed(), findProjects()]);
 			tasks = t;
 			projects = p;
-			// deleted notes live as files in <notes folder>/trash
-			const folder = isTauri() ? localStorage.getItem('tack-notes-folder') : null;
+			// deleted notes live as files in <notes folder>/trash; in live mode
+			// notesState.folder already comes from the desktop app's notes root
+			const folder = notesState.folder;
 			trashedNotes = folder ? await listTrashedNotes(folder) : [];
 		} catch (e) {
 			error = 'Failed to load trash';

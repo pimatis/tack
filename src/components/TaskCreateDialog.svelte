@@ -15,6 +15,7 @@
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import { Label as FormLabel } from '$lib/components/ui/label/index.js';
 	import { Spinner } from '$lib/components/ui/spinner/index.js';
 	import LabelSelector from './LabelSelector.svelte';
 	import MarkdownRenderer from './MarkdownRenderer.svelte';
@@ -67,6 +68,16 @@
 	let uploading = $state(false);
 	let previewMode = $state(false);
 	let lightboxUrl = $state<string | null>(null);
+	let lightboxAtt: PendingAttachment | null = $state(null);
+
+	// attachments live as data urls before the task exists: a plain anchor download saves them
+	function downloadDataUrl(dataUrl: string, fileName: string) {
+		const a = document.createElement('a');
+		a.href = dataUrl;
+		a.download = fileName;
+		a.click();
+		a.remove();
+	}
 
 	const statusLabels: Record<TaskStatus, string> = {
 		todo: 'Todo',
@@ -333,9 +344,11 @@
 							tabindex="0"
 							onclick={() => {
 								if (att.fileData) lightboxUrl = att.fileData;
+								lightboxAtt = att;
 							}}
 							onkeydown={(e) => {
 								if (e.key === 'Enter' && att.fileData) lightboxUrl = att.fileData;
+								lightboxAtt = att;
 							}}
 						>
 							<img src={att.fileData} alt={att.fileName} class="size-full object-cover" />
@@ -456,8 +469,10 @@
 			<div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-5">
 				<div class="flex items-center gap-2">
 					<Checkbox id="create-more" bind:checked={createMore} />
-					<label for="create-more" class="cursor-pointer text-[12px] text-muted-foreground"
-						>Create more</label
+					<FormLabel
+						for="create-more"
+						class="cursor-pointer text-[12px] font-normal text-muted-foreground"
+						>Create more</FormLabel
 					>
 				</div>
 				<div class="flex items-center gap-2">
@@ -490,4 +505,13 @@
 	</Dialog.Content>
 </Dialog.Root>
 
-<Lightbox url={lightboxUrl} onClose={() => (lightboxUrl = null)} />
+<Lightbox
+	url={lightboxUrl}
+	onClose={() => {
+		lightboxUrl = null;
+		lightboxAtt = null;
+	}}
+	onDownload={() => {
+		if (lightboxAtt) downloadDataUrl(lightboxAtt.fileData, lightboxAtt.fileName);
+	}}
+/>

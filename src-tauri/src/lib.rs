@@ -8,13 +8,20 @@ mod migrations;
 mod notes;
 
 use rusqlite::Connection;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 use tauri_plugin_window_state::StateFlags;
 
-// reveal the window once the design is on screen; called from the command,
-// the page-load hook, and the fallback timer
+static REVEALED: AtomicBool = AtomicBool::new(false);
+
+// reveal the window once, on first paint; called from the command, the
+// page-load hook, and the fallback timer. later page loads (dev hmr reloads
+// while a build runs) must not steal focus from whatever the user is doing
 fn reveal_main_window(app: &tauri::AppHandle) {
+    if REVEALED.swap(true, Ordering::SeqCst) {
+        return;
+    }
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.set_focus();

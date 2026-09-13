@@ -80,9 +80,12 @@
 				selectedCount={state.selectedCount}
 				isAllSelected={state.isAllSelected()}
 				projects={state.projects}
+				labels={state.labels}
+				selectedTasks={state.selectedTasks}
 				onBulkChangeStatus={(s) => state.bulkChangeStatus(s)}
 				onBulkChangePriority={(p) => state.bulkChangePriority(p)}
 				onBulkMoveProject={(id) => state.bulkMoveProject(id)}
+				onBulkLabel={(id, add) => state.bulkApplyLabel(id, add)}
 				onBulkDuplicate={() => state.bulkDuplicateTasks()}
 				onBulkDelete={() => state.bulkDeleteTasks()}
 				onClearSelection={() => state.clearSelection()}

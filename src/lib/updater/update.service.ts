@@ -1,6 +1,7 @@
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { invoke } from '@tauri-apps/api/core';
+import { isTauri } from '$lib/db/client';
 
 export type { Update };
 
@@ -23,7 +24,9 @@ export async function getAppVersion(): Promise<string> {
 }
 
 // check for updates without auto-installing; returns null when up to date
+// or when running in a browser (live site): the updater is desktop-only
 export async function checkForUpdate(): Promise<Update | null> {
+	if (!isTauri()) return null;
 	return check();
 }
 

@@ -859,6 +859,93 @@ pub fn bulk_move(
     Ok(())
 }
 
+pub fn bulk_label(
+    conn: &Connection,
+    json: bool,
+    ids: &[String],
+    label_id: &str,
+    remove: bool,
+) -> Result<()> {
+    if ids.is_empty() {
+        return Err("No task IDs provided".to_string());
+    }
+    let label_name: String = conn
+        .query_row(
+            "SELECT name FROM labels WHERE id = ?1",
+            params![label_id],
+            |row| row.get(0),
+        )
+        .map_err(|_| format!("Label not found: {}", label_id))?;
+
+    // add inserts per task so ignored duplicates don't inflate the count;
+    // remove clears the label from every listed task in one statement
+    let count = if remove {
+        let placeholders = ids
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("?{}", i + 2))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "DELETE FROM task_labels WHERE label_id = ?1 AND task_id IN ({})",
+            placeholders
+        );
+        let mut args: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(label_id.to_string())];
+        for id in ids {
+            args.push(Box::new(id.clone()));
+        }
+        let arg_refs: Vec<&dyn rusqlite::ToSql> = args.iter().map(|a| a.as_ref()).collect();
+        conn.execute(&sql, &arg_refs[..])
+            .map_err(|e| format!("Failed to remove label: {}", e))?
+    } else {
+        let mut inserted = 0;
+        for id in ids {
+            inserted += conn
+                .execute(
+                    "INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?1, ?2)",
+                    params![id, label_id],
+                )
+                .map_err(|e| format!("Failed to assign label: {}", e))?;
+        }
+        inserted
+    };
+
+    let action = if remove { "label_removed" } else { "label_added" };
+    for id in ids {
+        let _ = log_activity(
+            conn,
+            id,
+            action,
+            None,
+            if remove { Some(&label_name) } else { None },
+            if remove { None } else { Some(&label_name) },
+            "cli",
+        );
+    }
+
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": true,
+                "action": "tasks_bulk_labeled",
+                "count": count,
+                "label_id": label_id,
+                "removed": remove
+            }))
+            .map_err(|e| e.to_string())?
+        );
+    } else {
+        println!(
+            "{} label {} {} task(s)",
+            if remove { "Removed" } else { "Added" },
+            label_name,
+            count
+        );
+    }
+    Ok(())
+}
+
 pub fn trash_list(conn: &Connection, json: bool) -> Result<()> {
     let mut stmt = conn
         .prepare(

@@ -131,3 +131,30 @@ export async function findAllTaskLabelIds(): Promise<Map<string, string[]>> {
 		throw new Error('Failed to load task labels', { cause: error });
 	}
 }
+
+export async function addLabelToTasks(taskIds: string[], labelId: string): Promise<void> {
+	try {
+		const db = await getDb();
+		for (const taskId of taskIds) {
+			await db.execute('INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES ($1, $2)', [
+				taskId,
+				labelId
+			]);
+		}
+	} catch (error) {
+		throw new Error('Failed to add label to tasks', { cause: error });
+	}
+}
+
+export async function removeLabelFromTasks(taskIds: string[], labelId: string): Promise<void> {
+	try {
+		const db = await getDb();
+		const placeholders = taskIds.map((_, i) => `$${i + 2}`).join(', ');
+		await db.execute(
+			`DELETE FROM task_labels WHERE label_id = $1 AND task_id IN (${placeholders})`,
+			[labelId, ...taskIds]
+		);
+	} catch (error) {
+		throw new Error('Failed to remove label from tasks', { cause: error });
+	}
+}

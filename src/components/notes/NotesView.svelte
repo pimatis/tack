@@ -1226,7 +1226,13 @@
 					Your notes are saved as markdown files in that folder.
 				</p>
 			</div>
-			<Button size="sm" onclick={() => void notesState.pickFolder()}>Choose folder</Button>
+			{#if isTauri()}
+				<Button size="sm" onclick={() => void notesState.pickFolder()}>Choose folder</Button>
+			{:else}
+				<p class="text-[12px] text-muted-foreground">
+					The notes folder is managed by the desktop app.
+				</p>
+			{/if}
 		</div>
 	{:else if !noteTitle}
 		{#if notesState.recentNotes.length > 0}

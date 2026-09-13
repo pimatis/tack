@@ -319,6 +319,43 @@ body {
 	}
 }
 
+/* pin the typography plugin's palette to the app theme variables; unlayered
+   so it always beats the plugin's own utilities-layer definitions */
+.prose.prose-invert {
+	--tw-prose-body: var(--foreground);
+	--tw-prose-headings: var(--foreground);
+	--tw-prose-lead: var(--muted-foreground);
+	--tw-prose-links: var(--foreground);
+	--tw-prose-bold: var(--foreground);
+	--tw-prose-counters: var(--muted-foreground);
+	--tw-prose-bullets: var(--muted-foreground);
+	--tw-prose-hr: var(--border);
+	--tw-prose-quotes: var(--muted-foreground);
+	--tw-prose-quote-borders: var(--border);
+	--tw-prose-captions: var(--muted-foreground);
+	--tw-prose-code: var(--foreground);
+	--tw-prose-pre-code: var(--foreground);
+	--tw-prose-pre-bg: var(--muted);
+	--tw-prose-th-borders: var(--border);
+	--tw-prose-td-borders: var(--border);
+	--tw-prose-invert-body: var(--foreground);
+	--tw-prose-invert-headings: var(--foreground);
+	--tw-prose-invert-lead: var(--muted-foreground);
+	--tw-prose-invert-links: var(--foreground);
+	--tw-prose-invert-bold: var(--foreground);
+	--tw-prose-invert-counters: var(--muted-foreground);
+	--tw-prose-invert-bullets: var(--muted-foreground);
+	--tw-prose-invert-hr: var(--border);
+	--tw-prose-invert-quotes: var(--muted-foreground);
+	--tw-prose-invert-quote-borders: var(--border);
+	--tw-prose-invert-captions: var(--muted-foreground);
+	--tw-prose-invert-code: var(--foreground);
+	--tw-prose-invert-pre-code: var(--foreground);
+	--tw-prose-invert-pre-bg: var(--muted);
+	--tw-prose-invert-th-borders: var(--border);
+	--tw-prose-invert-td-borders: var(--border);
+}
+
 /* images written on consecutive lines should stack tightly: the typography
    plugin adds block display and 2em margins, and an inline <br> between two
    block images would still leave an empty line. this lives in the utilities
@@ -504,24 +541,20 @@ body {
 .callout p {
 	margin: 0;
 }
-.callout-note {
-	border-left-color: oklch(0.7 0.12 245);
-}
+.callout-note,
 .callout-info {
-	border-left-color: oklch(0.7 0.14 230);
+	border-left-color: var(--muted-foreground);
 }
-.callout-tip {
-	border-left-color: oklch(0.75 0.13 160);
-}
+.callout-tip,
 .callout-success {
-	border-left-color: oklch(0.75 0.15 150);
+	border-left-color: color-mix(in oklch, var(--foreground) 70%, var(--border));
 }
 .callout-warning {
-	border-left-color: oklch(0.78 0.14 75);
+	border-left-color: color-mix(in oklch, var(--foreground) 55%, var(--border));
 }
 .callout-danger,
 .callout-error {
-	border-left-color: oklch(0.68 0.19 25);
+	border-left-color: var(--destructive);
 }
 
 /* wiki links and inline tags in the preview are clickable */

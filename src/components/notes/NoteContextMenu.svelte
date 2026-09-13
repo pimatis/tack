@@ -6,6 +6,7 @@
 		note,
 		archived = false,
 		pinned = false,
+		selected = false,
 		onRename,
 		onInfo,
 		onTogglePin,
@@ -15,11 +16,13 @@
 		onTags,
 		onHistory,
 		onExport,
-		onConvertToTask
+		onConvertToTask,
+		onToggleSelect
 	}: {
 		note: NoteInfo;
 		archived?: boolean;
 		pinned?: boolean;
+		selected?: boolean;
 		onRename: (note: NoteInfo) => void;
 		onInfo: (note: NoteInfo) => void;
 		onTogglePin?: (note: NoteInfo) => void;
@@ -30,10 +33,23 @@
 		onHistory: (note: NoteInfo) => void;
 		onExport: (note: NoteInfo, format: 'md' | 'html') => void;
 		onConvertToTask: (note: NoteInfo) => void;
+		onToggleSelect?: (note: NoteInfo) => void;
 	} = $props();
 </script>
 
 <ContextMenu.Content>
+	{#if onToggleSelect}
+		<ContextMenu.Item onclick={() => onToggleSelect(note)}>
+			<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+				><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg
+			>
+			{#if selected}
+				Deselect
+			{:else}
+				Select
+			{/if}
+		</ContextMenu.Item>
+	{/if}
 	{#if onTogglePin && !archived}
 		<ContextMenu.Item onclick={() => onTogglePin(note)}>
 			<svg width="16" height="16" viewBox="0 0 24 24" fill="none"

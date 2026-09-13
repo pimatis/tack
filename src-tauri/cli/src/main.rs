@@ -234,6 +234,15 @@ enum TaskAction {
         #[arg(long, help = "Target project prefix")]
         project_prefix: Option<String>,
     },
+    /// Add or remove a label on multiple tasks
+    BulkLabel {
+        #[arg(long, help = "Comma-separated task IDs")]
+        ids: String,
+        #[arg(long, help = "Label ID (see `tack label list`)")]
+        label: String,
+        #[arg(long, help = "Remove the label instead of adding it")]
+        remove: bool,
+    },
     /// List trashed tasks
     Trash,
     /// Restore a task from trash
@@ -772,6 +781,9 @@ fn main() {
                 project.as_deref(),
                 project_prefix.as_deref(),
             ),
+            TaskAction::BulkLabel { ids, label, remove } => {
+                commands::task::bulk_label(&conn, json, &parse_ids(&ids), &label, remove)
+            }
             TaskAction::Trash => commands::task::trash_list(&conn, json),
             TaskAction::Restore { id } => commands::task::restore(&conn, json, &id),
             TaskAction::PermanentDelete { id } => {

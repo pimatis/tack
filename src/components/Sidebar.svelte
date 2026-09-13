@@ -24,6 +24,7 @@
 	import NotesSidebar from './notes/Sidebar.svelte';
 	import { Tabs, TabsList, TabsTrigger } from '$lib/components/ui/tabs/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import * as Collapsible from '$lib/components/ui/collapsible/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 
@@ -873,12 +874,12 @@
 									handleSidebarReorder(state, item)
 							}}
 						>
-							<details open class="group/status">
-								<summary
+							<Collapsible.Root open class="group/status">
+								<Collapsible.Trigger
 									class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
 								>
 									<svg
-										class="text-muted-foreground transition-transform duration-150 group-open/status:rotate-90"
+										class="text-muted-foreground transition-transform duration-150 group-data-[state=open]/status:rotate-90"
 										width="14"
 										height="14"
 										viewBox="0 0 24 24"
@@ -889,8 +890,10 @@
 										/></svg
 									>
 									<span>Status</span>
-								</summary>
-								<div class="mt-0.5 ml-[13px] grid gap-px border-l border-sidebar-border/50 pl-1.5">
+								</Collapsible.Trigger>
+								<Collapsible.Content
+									class="mt-0.5 ml-[13px] grid gap-px border-l border-sidebar-border/50 pl-1.5"
+								>
 									{#each statusOrder as status (status)}
 										<button
 											type="button"
@@ -910,8 +913,8 @@
 											{/if}
 										</button>
 									{/each}
-								</div>
-							</details>
+								</Collapsible.Content>
+							</Collapsible.Root>
 						</div>
 					{:else if item.id === 'priority'}
 						<div
@@ -925,12 +928,12 @@
 									handleSidebarReorder(state, item)
 							}}
 						>
-							<details open class="group/priority">
-								<summary
+							<Collapsible.Root open class="group/priority">
+								<Collapsible.Trigger
 									class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
 								>
 									<svg
-										class="text-muted-foreground transition-transform duration-150 group-open/priority:rotate-90"
+										class="text-muted-foreground transition-transform duration-150 group-data-[state=open]/priority:rotate-90"
 										width="14"
 										height="14"
 										viewBox="0 0 24 24"
@@ -941,8 +944,10 @@
 										/></svg
 									>
 									<span>Priority</span>
-								</summary>
-								<div class="mt-0.5 ml-[13px] grid gap-px border-l border-sidebar-border/50 pl-1.5">
+								</Collapsible.Trigger>
+								<Collapsible.Content
+									class="mt-0.5 ml-[13px] grid gap-px border-l border-sidebar-border/50 pl-1.5"
+								>
 									{#each [1, 2, 3, 4] as p (p)}
 										<button
 											type="button"
@@ -962,8 +967,8 @@
 											{/if}
 										</button>
 									{/each}
-								</div>
-							</details>
+								</Collapsible.Content>
+							</Collapsible.Root>
 						</div>
 					{/if}
 				{/each}
@@ -1000,12 +1005,12 @@
 			<!-- projects -->
 			{#if !collapsed}
 				<div class="px-1.5">
-					<details open class="group/projects">
-						<summary
+					<Collapsible.Root open class="group/projects">
+						<Collapsible.Trigger
 							class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
 						>
 							<svg
-								class="text-muted-foreground transition-transform duration-150 group-open/projects:rotate-90"
+								class="text-muted-foreground transition-transform duration-150 group-data-[state=open]/projects:rotate-90"
 								width="14"
 								height="14"
 								viewBox="0 0 24 24"
@@ -1045,8 +1050,10 @@
 									</Tooltip.Content>
 								</Tooltip.Root>
 							{/if}
-						</summary>
-						<div class="mt-0.5 ml-[13px] grid gap-px border-l border-sidebar-border/50 pl-1.5">
+						</Collapsible.Trigger>
+						<Collapsible.Content
+							class="mt-0.5 ml-[13px] grid gap-px border-l border-sidebar-border/50 pl-1.5"
+						>
 							{#each projects as project (project.id)}
 								<ContextMenu.Root>
 									<ContextMenu.Trigger
@@ -1099,17 +1106,17 @@
 									</ContextMenu.Content>
 								</ContextMenu.Root>
 							{/each}
-						</div>
-					</details>
+						</Collapsible.Content>
+					</Collapsible.Root>
 
 					<!-- labels -->
 					{#if labels.length > 0}
-						<details open class="group/labels mt-0.5">
-							<summary
+						<Collapsible.Root open class="group/labels mt-0.5">
+							<Collapsible.Trigger
 								class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
 							>
 								<svg
-									class="text-muted-foreground transition-transform duration-150 group-open/labels:rotate-90"
+									class="text-muted-foreground transition-transform duration-150 group-data-[state=open]/labels:rotate-90"
 									width="14"
 									height="14"
 									viewBox="0 0 24 24"
@@ -1120,8 +1127,10 @@
 									/></svg
 								>
 								<span>Labels</span>
-							</summary>
-							<div class="mt-0.5 ml-[13px] grid gap-px border-l border-sidebar-border/50 pl-1.5">
+							</Collapsible.Trigger>
+							<Collapsible.Content
+								class="mt-0.5 ml-[13px] grid gap-px border-l border-sidebar-border/50 pl-1.5"
+							>
 								{#each labels as label (label.id)}
 									<button
 										type="button"
@@ -1142,8 +1151,8 @@
 										{/if}
 									</button>
 								{/each}
-							</div>
-						</details>
+							</Collapsible.Content>
+						</Collapsible.Root>
 					{/if}
 				</div>
 			{/if}

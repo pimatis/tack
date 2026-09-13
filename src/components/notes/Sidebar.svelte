@@ -4,14 +4,25 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { sortableItem, dropZone, reorderArray, type DragDropState } from '$lib/dnd';
 	import { notesState, type NoteInfo } from '$lib/notes/notesState.svelte';
 	import { exportNote } from '$lib/notes/export';
 	import NoteContextMenu from './NoteContextMenu.svelte';
+	import NotesBulkBar from './NotesBulkBar.svelte';
 	import NoteInfoDialog from './NoteInfoDialog.svelte';
 	import NoteHistoryDialog from './NoteHistoryDialog.svelte';
 	import NoteTagsDialog from './NoteTagsDialog.svelte';
 	import NameWarningDialog from './NameWarningDialog.svelte';
+
+	// ctrl/cmd+a outside any input selects all visible notes, like the task list
+	function handleGlobalKeydown(e: KeyboardEvent) {
+		if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'a') return;
+		const target = e.target as HTMLElement | null;
+		if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+		e.preventDefault();
+		notesState.toggleSelectAll();
+	}
 
 	const folderName = $derived(notesState.folder?.split('/').filter(Boolean).pop() ?? '');
 	const noteTitle = $derived(notesState.selectedPath?.split('/').pop() ?? '');
@@ -173,11 +184,22 @@
 				<div
 					role="button"
 					tabindex="0"
-					class="flex w-full cursor-grab items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {noteTitle ===
-					note.name
-						? 'bg-sidebar-accent/70 text-sidebar-foreground'
-						: 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}"
-					onclick={() => void notesState.openNote(note.path)}
+					class="group flex w-full cursor-grab items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {notesState.selectedPaths.has(
+						note.path
+					)
+						? 'bg-sidebar-accent text-sidebar-foreground'
+						: noteTitle === note.name
+							? 'bg-sidebar-accent/70 text-sidebar-foreground'
+							: 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}"
+					onclick={(e) => {
+						// shift-click extends the bulk selection instead of opening
+						if (e.shiftKey) {
+							e.preventDefault();
+							notesState.toggleSelect(note.path, true);
+							return;
+						}
+						void notesState.openNote(note.path);
+					}}
 					onkeydown={(e) => {
 						if (e.key === 'Enter' || e.key === ' ') {
 							e.preventDefault();
@@ -185,6 +207,17 @@
 						}
 					}}
 				>
+					<span
+						class="flex shrink-0 items-center {notesState.selectedPaths.has(note.path)
+							? ''
+							: 'hidden group-hover:flex'}"
+					>
+						<Checkbox
+							checked={notesState.selectedPaths.has(note.path)}
+							onclick={(e) => e.stopPropagation()}
+							onCheckedChange={() => notesState.toggleSelect(note.path, false)}
+						/>
+					</span>
 					<svg
 						class="shrink-0 text-muted-foreground"
 						width="14"
@@ -216,6 +249,7 @@
 		<NoteContextMenu
 			{note}
 			pinned={notesState.pinned.includes(note.name)}
+			selected={notesState.selectedPaths.has(note.path)}
 			onRename={openRenameDialog}
 			onInfo={(n) =>
 				window.dispatchEvent(
@@ -236,6 +270,7 @@
 			onExport={(n, format) => void handleExport(n, format)}
 			onConvertToTask={(n) =>
 				window.dispatchEvent(new CustomEvent('convert-note-to-task', { detail: { path: n.path } }))}
+			onToggleSelect={(n) => notesState.toggleSelect(n.path, false)}
 		/>
 	</ContextMenu.Root>
 {/snippet}
@@ -383,6 +418,8 @@
 	{/if}
 {/snippet}
 
+<svelte:window onkeydown={handleGlobalKeydown} />
+
 {#if !notesState.folder}
 	<!-- no folder yet: pick one before notes can exist -->
 	<div class="flex flex-col items-center gap-3 px-4 py-8 text-center">
@@ -489,36 +526,35 @@
 	{#if notesState.allTags.length > 0}
 		<!-- tag panel: collapsible chip list, active tag filters every note list -->
 		<div class="px-3 pb-1">
-			<button
-				type="button"
-				class="flex w-full items-center gap-1.5 rounded-md px-1 py-1 text-left text-[11px] font-medium text-muted-foreground/70 transition-colors hover:text-sidebar-foreground"
-				onclick={toggleTagsPanel}
-			>
-				<svg
-					class="shrink-0 transition-transform duration-150 {tagsOpen ? 'rotate-90' : ''}"
-					width="11"
-					height="11"
-					viewBox="0 0 24 24"
-					fill="none"
-					><path
-						fill="currentColor"
-						d="M16.06 10.94a1.5 1.5 0 0 1 0 2.12l-5.656 5.658a1.5 1.5 0 1 1-2.121-2.122L12.879 12 8.283 7.404a1.5 1.5 0 0 1 2.12-2.122l5.658 5.657Z"
-					/></svg
+			<div class="flex w-full items-center gap-1.5">
+				<button
+					type="button"
+					class="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-1 text-left text-[11px] font-medium text-muted-foreground/70 transition-colors hover:text-sidebar-foreground"
+					onclick={toggleTagsPanel}
 				>
-				Tags
+					<svg
+						class="shrink-0 transition-transform duration-150 {tagsOpen ? 'rotate-90' : ''}"
+						width="11"
+						height="11"
+						viewBox="0 0 24 24"
+						fill="none"
+						><path
+							fill="currentColor"
+							d="M16.06 10.94a1.5 1.5 0 0 1 0 2.12l-5.656 5.658a1.5 1.5 0 1 1-2.121-2.122L12.879 12 8.283 7.404a1.5 1.5 0 0 1 2.12-2.122l5.658 5.657Z"
+						/></svg
+					>
+					Tags
+				</button>
 				{#if notesState.activeTag}
 					<button
 						type="button"
-						class="ml-auto rounded-full bg-primary/15 px-2 py-0.5 text-[10px] text-primary transition-colors hover:bg-primary/25"
-						onclick={(e) => {
-							e.stopPropagation();
-							notesState.setActiveTag(notesState.activeTag);
-						}}
+						class="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] text-primary transition-colors hover:bg-primary/25"
+						onclick={() => notesState.setActiveTag(notesState.activeTag)}
 					>
 						clear
 					</button>
 				{/if}
-			</button>
+			</div>
 			{#if tagsOpen}
 				<div class="mt-1 ml-[13px] flex flex-wrap gap-1 border-l border-sidebar-border/50 pl-1.5">
 					{#each notesState.allTags as tag (tag)}
@@ -536,6 +572,19 @@
 				</div>
 			{/if}
 		</div>
+	{/if}
+
+	{#if notesState.hasSelection}
+		<NotesBulkBar
+			selectedCount={notesState.selectedCount}
+			isAllSelected={notesState.isAllSelected()}
+			onToggleSelectAll={() => notesState.toggleSelectAll()}
+			onBulkTag={(tag, add) => void notesState.bulkApplyTag(tag, add)}
+			onBulkMove={(rel) => void notesState.bulkMoveNotes(rel)}
+			onBulkArchive={() => void notesState.bulkArchiveNotes()}
+			onBulkDelete={() => void notesState.bulkDeleteNotes()}
+			onClearSelection={() => notesState.clearSelection()}
+		/>
 	{/if}
 
 	{#if notesState.error}

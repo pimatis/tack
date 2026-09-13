@@ -6,6 +6,7 @@ import { notesInvoke, notesRoot } from './liveNotes';
 import { reindexNotes, indexNote, type IndexedNote } from './search';
 import { splitFrontmatter, tagsOf, addTag, removeTag } from './frontmatter';
 import { newId } from '$lib/utils';
+import { toast } from 'svelte-sonner';
 
 export type NoteInfo = { name: string; path: string; modified: number };
 
@@ -50,6 +51,9 @@ class NotesPageState {
 	sortBy = $state<'modified' | 'name' | 'manual'>('modified');
 	visitCounts = $state<Record<string, number>>({});
 	selectedPath = $state<string | null>(null);
+	// bulk selection mirrors the task list: paths of selected notes
+	selectedPaths = $state<Set<string>>(new Set());
+	lastSelectedPath = $state<string | null>(null);
 	// open editor tabs (ordered note paths); only the active tab loads content
 	noteTabs = $state<string[]>([]);
 	content = $state('');
@@ -57,6 +61,9 @@ class NotesPageState {
 	loading = $state(false);
 	saving = $state(false);
 	error = $state<string | null>(null);
+	selectedCount = $derived(this.selectedPaths.size);
+	hasSelection = $derived(this.selectedCount > 0);
+	selectedNotes = $derived(this.allNotes.filter((n) => this.selectedPaths.has(n.path)));
 	// name-too-long is a user input problem: shown as a dialog, not the error banner
 	nameWarning = $state<string | null>(null);
 	// tags per note path (frontmatter + inline), aggregated for the tag panel
@@ -362,6 +369,51 @@ class NotesPageState {
 		return [...this.notes, ...Object.values(this.folderNotes).flat()];
 	}
 
+	// ---- bulk selection ----
+
+	// flat display order of the visible tree; shift-range selection walks this
+	get visiblePaths(): string[] {
+		if (this.activeTag) return this.taggedNotes.map((n) => n.path);
+		return [
+			...this.sortedNotes.map((n) => n.path),
+			...this.folders.flatMap((rel) => this.sortedFolderNotes(rel).map((n) => n.path))
+		];
+	}
+
+	toggleSelect(path: string, shiftKey: boolean) {
+		if (shiftKey && this.lastSelectedPath) {
+			const order = this.visiblePaths;
+			const start = order.indexOf(this.lastSelectedPath);
+			const end = order.indexOf(path);
+			if (start !== -1 && end !== -1) {
+				const next = new Set(this.selectedPaths);
+				for (const p of order.slice(Math.min(start, end), Math.max(start, end) + 1)) next.add(p);
+				this.selectedPaths = next;
+				return;
+			}
+		}
+		const next = new Set(this.selectedPaths);
+		if (next.has(path)) next.delete(path);
+		else next.add(path);
+		this.selectedPaths = next;
+		this.lastSelectedPath = path;
+	}
+
+	isAllSelected() {
+		const visible = this.visiblePaths;
+		return visible.length > 0 && visible.every((p) => this.selectedPaths.has(p));
+	}
+
+	toggleSelectAll() {
+		if (this.isAllSelected()) this.clearSelection();
+		else this.selectedPaths = new Set(this.visiblePaths);
+	}
+
+	clearSelection() {
+		this.selectedPaths = new Set();
+		this.lastSelectedPath = null;
+	}
+
 	// ---- tags ----
 
 	// distinct tags sorted by how many notes use them
@@ -482,6 +534,7 @@ class NotesPageState {
 	async setFolder(dir: string) {
 		this.flushPendingSave();
 		this.folder = dir;
+		this.clearSelection();
 		localStorage.setItem(FOLDER_KEY, dir);
 		if (!this.vaults.includes(dir)) {
 			this.vaults = [...this.vaults, dir];
@@ -1133,6 +1186,79 @@ class NotesPageState {
 		}
 		await this.#rewriteMentionLinks(new Map([[path, `${this.trashDir}/${name}`]]));
 		await this.refresh();
+	}
+
+	// ---- bulk operations ----
+
+	async bulkDeleteNotes() {
+		await this.#moveSelected((p) => `${this.trashDir}/${p.split('/').pop()}`, 'trash');
+	}
+
+	async bulkArchiveNotes() {
+		await this.#moveSelected((p) => `${this.archiveDir}/${p.split('/').pop()}`, 'archive');
+	}
+
+	async bulkMoveNotes(parentRel: string | null) {
+		const rootAbs = this.folder?.replace(/\/+$/, '') ?? '';
+		await this.#moveSelected(
+			(p) =>
+				parentRel
+					? `${rootAbs}/${parentRel}/${p.split('/').pop()}`
+					: `${rootAbs}/${p.split('/').pop()}`,
+			'move'
+		);
+	}
+
+	async #moveSelected(destOf: (path: string) => string | null, kind: 'trash' | 'archive' | 'move') {
+		const paths = [...this.selectedPaths];
+		if (!paths.length) return;
+		this.clearSelection();
+		const remap = new Map<string, string>();
+		for (const p of paths) {
+			const dest = destOf(p);
+			if (!dest || dest === p) continue;
+			try {
+				await notesInvoke('rename_note', { oldPath: p, newPath: dest });
+				remap.set(p, dest);
+			} catch (e) {
+				this.#fail(e);
+				break;
+			}
+		}
+		if (remap.size === 0) return;
+		if (this.selectedPath && remap.has(this.selectedPath)) {
+			if (kind === 'move') this.selectedPath = remap.get(this.selectedPath)!;
+			else {
+				this.selectedPath = null;
+				this.content = '';
+			}
+		}
+		await this.#rewriteMentionLinks(remap);
+		await this.refresh();
+		if (kind === 'trash') {
+			const count = remap.size;
+			toast.success(count === 1 ? 'Note moved to trash' : `${count} notes moved to trash`, {
+				action: {
+					label: 'Undo',
+					onClick: () => {
+						void (async () => {
+							for (const dest of remap.values()) await this.restoreNote(dest);
+						})();
+					}
+				}
+			});
+		}
+	}
+
+	// tag click in the bulk bar: every selected note not carrying the tag
+	// gets it, and when all of them already have it the click removes it
+	async bulkApplyTag(tag: string, add: boolean) {
+		const notes = this.selectedNotes;
+		this.clearSelection();
+		for (const n of notes) {
+			if (add) await this.addTagToNote(n.path, tag);
+			else await this.removeTagFromNote(n.path, tag);
+		}
 	}
 }
 

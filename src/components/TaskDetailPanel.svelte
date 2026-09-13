@@ -28,7 +28,6 @@
 	import type { Subtask } from '$lib/types/subtask';
 	import type { ActivityLog } from '$lib/types/activity';
 	import type { Task, TaskPriority, TaskStatus } from '$lib/types/task';
-	import { fade, fly } from 'svelte/transition';
 	import { sortableItem, reorderArray, type DragDropState } from '$lib/dnd';
 	import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 	import { isTauri } from '$lib/db/client';
@@ -41,6 +40,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import LabelSelector from './LabelSelector.svelte';
 	import StatusIcon from './StatusIcon.svelte';
 	import MarkdownRenderer from './MarkdownRenderer.svelte';
@@ -85,14 +85,14 @@
 	let attachments = $state<TaskAttachment[]>([]);
 	let attachmentUrls = $state<Record<string, string>>({});
 	let lightboxUrl = $state<string | null>(null);
+	let lightboxAtt = $state<TaskAttachment | null>(null);
+	let lightboxPending: { fileName: string; fileData: string } | null = $state(null);
 	let pendingAttachments = $state<
 		{ fileName: string; fileData: string; mimeType: string; fileSize: number }[]
 	>([]);
 	let uploading = $state(false);
 	let loadingAttachments = $state(false);
 	let selectedLabelIds = $state<string[]>([]);
-	let panelRef = $state<HTMLElement | null>(null);
-
 	// subtasks
 	let subtasks = $state<Subtask[]>([]);
 	let newSubtaskTitle = $state('');
@@ -292,6 +292,15 @@
 		} catch {
 			error = 'Failed to delete attachment';
 		}
+	}
+
+	// pending attachments are in-memory data urls: a plain anchor download saves them
+	function downloadDataUrl(dataUrl: string, fileName: string) {
+		const a = document.createElement('a');
+		a.href = dataUrl;
+		a.download = fileName;
+		a.click();
+		a.remove();
 	}
 
 	async function handleDownloadAttachment(att: TaskAttachment) {
@@ -548,32 +557,15 @@
 </script>
 
 <!-- backdrop + panel -->
-{#if open}
-	<div
-		class="fixed inset-0 z-40 bg-background/40 backdrop-blur-[2px]"
-		transition:fade={{ duration: 200 }}
-		onclick={close}
-		onkeydown={(e) => {
-			if (e.key === 'Escape') close();
-		}}
-		role="button"
-		tabindex="-1"
-		aria-label="Close panel"
-	></div>
-
-	<div
-		bind:this={panelRef}
-		class="fixed top-0 right-0 z-50 h-full w-full max-w-[640px] bg-card shadow-2xl sm:max-w-[680px] lg:max-w-[720px]"
-		transition:fly={{ x: 640, duration: 280, opacity: 1 }}
-		role="dialog"
-		aria-modal="true"
+<Sheet.Root bind:open>
+	<Sheet.Content
+		side="right"
+		showCloseButton={false}
+		class="w-full! max-w-[640px]! gap-0 bg-card shadow-2xl sm:max-w-[680px]! lg:max-w-[720px]!"
 		aria-label="Task detail"
-		tabindex="-1"
-		onkeydown={(e) => {
-			if (e.key === 'Escape') close();
-		}}
 	>
 		{#if task}
+			<Sheet.Title class="sr-only">Task detail</Sheet.Title>
 			<form
 				onsubmit={(e) => {
 					e.preventDefault();
@@ -918,11 +910,19 @@
 											tabindex="0"
 											onclick={() => {
 												const url = attachmentUrls[att.id];
-												if (url) lightboxUrl = url;
+												if (url) {
+													lightboxUrl = url;
+													lightboxAtt = att;
+													lightboxPending = null;
+												}
 											}}
 											onkeydown={(e) => {
 												const url = attachmentUrls[att.id];
-												if (e.key === 'Enter' && url) lightboxUrl = url;
+												if (e.key === 'Enter' && url) {
+													lightboxUrl = url;
+													lightboxAtt = att;
+													lightboxPending = null;
+												}
 											}}
 										>
 											{#if isImage(att.mimeType)}
@@ -987,10 +987,18 @@
 											role="button"
 											tabindex="0"
 											onclick={() => {
-												if (att.fileData) lightboxUrl = att.fileData;
+												if (att.fileData) {
+													lightboxUrl = att.fileData;
+													lightboxPending = att;
+													lightboxAtt = null;
+												}
 											}}
 											onkeydown={(e) => {
-												if (e.key === 'Enter' && att.fileData) lightboxUrl = att.fileData;
+												if (e.key === 'Enter' && att.fileData) {
+													lightboxUrl = att.fileData;
+													lightboxPending = att;
+													lightboxAtt = null;
+												}
 											}}
 										>
 											{#if isImage(att.mimeType)}
@@ -1266,7 +1274,18 @@
 				</div>
 			</form>
 		{/if}
-	</div>
+	</Sheet.Content>
+</Sheet.Root>
 
-	<Lightbox url={lightboxUrl} onClose={() => (lightboxUrl = null)} />
-{/if}
+<Lightbox
+	url={lightboxUrl}
+	onClose={() => {
+		lightboxUrl = null;
+		lightboxAtt = null;
+		lightboxPending = null;
+	}}
+	onDownload={() => {
+		if (lightboxAtt) void handleDownloadAttachment(lightboxAtt);
+		else if (lightboxPending) downloadDataUrl(lightboxPending.fileData, lightboxPending.fileName);
+	}}
+/>

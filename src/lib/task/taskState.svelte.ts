@@ -4,6 +4,7 @@ import {
 	remove,
 	findAll,
 	update,
+	restore,
 	bulkDelete,
 	bulkUpdateStatus,
 	bulkUpdatePriority,
@@ -13,8 +14,13 @@ import {
 	togglePin
 } from '$lib/repositories/task.repository';
 import { findAll as findProjects } from '$lib/repositories/project.repository';
-import { findAll as findLabels } from '$lib/repositories/label.repository';
+import {
+	findAll as findLabels,
+	addLabelToTasks,
+	removeLabelFromTasks
+} from '$lib/repositories/label.repository';
 import { getSettings, setSettings } from '$lib/stores/settings';
+import { toast } from 'svelte-sonner';
 import { searchTaskIds } from '$lib/search/fts.service';
 import { getShortcutRegistry } from '$lib/shortcuts/index.js';
 import { sortableItem, dropZone, useDndActive, type DragDropState } from '$lib/dnd';
@@ -91,6 +97,7 @@ export class TaskPageState {
 	);
 	selectedCount = $derived(this.selectedIds.size);
 	hasSelection = $derived(this.selectedCount > 0);
+	selectedTasks = $derived(this.tasks.filter((t) => this.selectedIds.has(t.id)));
 	labelMap = $derived(new Map(this.labels.map((l) => [l.id, l])));
 
 	filteredTasks = $derived.by(() => {
@@ -272,6 +279,12 @@ export class TaskPageState {
 		try {
 			await bulkDelete(ids);
 			await this.refresh();
+			toast.success(
+				ids.length === 1 ? 'Task moved to trash' : `${ids.length} tasks moved to trash`,
+				{
+					action: { label: 'Undo', onClick: () => void this.undoDelete(ids) }
+				}
+			);
 		} catch {
 			this.error = 'Failed to delete tasks';
 		}
@@ -318,6 +331,20 @@ export class TaskPageState {
 			await this.refresh();
 		} catch {
 			this.error = 'Failed to move tasks';
+		}
+	}
+
+	// label click in the bulk bar: every selected task not carrying the label
+	// gets it, and when all of them already have it the click removes it
+	async bulkApplyLabel(labelId: string, add: boolean) {
+		const ids = [...this.selectedIds];
+		this.clearSelection();
+		try {
+			if (add) await addLabelToTasks(ids, labelId);
+			else await removeLabelFromTasks(ids, labelId);
+			await this.refresh();
+		} catch {
+			this.error = 'Failed to update labels';
 		}
 	}
 
@@ -392,8 +419,21 @@ export class TaskPageState {
 		try {
 			await remove(id);
 			await this.refresh();
+			toast.success('Task moved to trash', {
+				action: { label: 'Undo', onClick: () => void this.undoDelete([id]) }
+			});
 		} catch {
 			this.error = 'Failed to delete task';
+		}
+	}
+
+	// undo path for the delete toast: put every task back in one refresh
+	async undoDelete(ids: string[]) {
+		try {
+			for (const id of ids) await restore(id);
+			await this.refresh();
+		} catch {
+			this.error = 'Failed to restore task';
 		}
 	}
 

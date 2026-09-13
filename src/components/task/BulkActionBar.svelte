@@ -9,15 +9,21 @@
 	import PriorityMenu from '../PriorityMenu.svelte';
 	import type { TaskPriority, TaskStatus } from '$lib/types/task';
 	import type { Project } from '$lib/types/project';
+	import type { Label } from '$lib/types/label';
+	import { labelColorMap } from '$lib/types/label';
+	import type { Task } from '$lib/types/task';
 
 	let {
 		selectedCount,
 		isAllSelected,
 		onToggleSelectAll,
 		projects,
+		labels,
+		selectedTasks,
 		onBulkChangeStatus,
 		onBulkChangePriority,
 		onBulkMoveProject,
+		onBulkLabel,
 		onBulkDuplicate,
 		onBulkDelete,
 		onClearSelection
@@ -26,13 +32,26 @@
 		isAllSelected: boolean;
 		onToggleSelectAll: () => void;
 		projects: Project[];
+		labels: Label[];
+		selectedTasks: Task[];
 		onBulkChangeStatus: (status: TaskStatus) => void;
 		onBulkChangePriority: (priority: TaskPriority) => void;
 		onBulkMoveProject: (projectId: string) => void;
+		onBulkLabel: (labelId: string, add: boolean) => void;
 		onBulkDuplicate: () => void;
 		onBulkDelete: () => void;
 		onClearSelection: () => void;
 	} = $props();
+
+	// click semantics per label: every selected task not carrying it gets it;
+	// when all of them already have it the click removes it from all
+	function labelState(labelId: string): 'all' | 'some' | 'none' {
+		let count = 0;
+		for (const task of selectedTasks) {
+			if (task.labelIds?.includes(labelId)) count++;
+		}
+		return count === 0 ? 'none' : count === selectedTasks.length ? 'all' : 'some';
+	}
 </script>
 
 <div class="flex flex-wrap items-center gap-2 pb-4">
@@ -119,6 +138,60 @@
 						<span class="truncate">{project.name}</span>
 					</Button>
 				{/each}
+			</Popover.Content>
+		</Popover.Root>
+
+		<!-- bulk labels -->
+		<Popover.Root>
+			<Popover.Trigger>
+				{#snippet child({ props })}
+					<Button
+						{...props}
+						variant="outline"
+						size="sm"
+						class="flex h-8 items-center gap-1.5 rounded-lg border border-input px-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
+					>
+						<svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+							><path
+								fill="currentColor"
+								d="M12 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-.59 1.42l-8 8a2 2 0 0 1-2.82 0l-8-8a2 2 0 0 1 0-2.82l8-8A2 2 0 0 1 12 2m0 3.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3"
+							/></svg
+						>
+						<span>Labels</span>
+					</Button>
+				{/snippet}
+			</Popover.Trigger>
+			<Popover.Content class="w-52 p-1.5" align="end">
+				<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
+					Toggle label for all
+				</div>
+				{#each labels as label (label.id)}
+					{@const state = labelState(label.id)}
+					<Button
+						variant="ghost"
+						class="flex h-auto w-full items-center justify-start gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-foreground transition-colors hover:bg-muted"
+						onclick={() => onBulkLabel(label.id, state !== 'all')}
+					>
+						<span
+							class="size-2.5 shrink-0 rounded-full {labelColorMap[label.color]?.dot ??
+								'bg-muted-foreground'}"
+						></span>
+						<span class="truncate">{label.name}</span>
+						{#if state !== 'none'}
+							<svg
+								class="ml-auto shrink-0 {state === 'some' ? 'opacity-40' : ''}"
+								width="13"
+								height="13"
+								viewBox="0 0 24 24"
+								fill="none"
+								><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg
+							>
+						{/if}
+					</Button>
+				{/each}
+				{#if labels.length === 0}
+					<div class="px-2 py-1.5 text-[12px] text-muted-foreground">No labels yet</div>
+				{/if}
 			</Popover.Content>
 		</Popover.Root>
 

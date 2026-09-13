@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { notesInvoke } from './liveNotes';
 import type { NoteInfo } from './notesState.svelte';
 
 // helpers for the trash page; work on <folder>/.tack/trash where deleted notes go
@@ -9,11 +9,11 @@ function trashDir(folder: string): string {
 
 export async function listTrashedNotes(folder: string): Promise<NoteInfo[]> {
 	// missing trash folder just means no notes were deleted
-	return invoke<NoteInfo[]>('list_notes', { dir: trashDir(folder) }).catch(() => []);
+	return notesInvoke<NoteInfo[]>('list_notes', { dir: trashDir(folder) }).catch(() => []);
 }
 
 async function noteExists(dir: string, name: string): Promise<boolean> {
-	const notes = await invoke<NoteInfo[]>('list_notes', { dir }).catch(() => []);
+	const notes = await notesInvoke<NoteInfo[]>('list_notes', { dir }).catch(() => []);
 	return notes.some((n) => n.name === name);
 }
 
@@ -25,16 +25,16 @@ export async function restoreTrashedNote(folder: string, name: string): Promise<
 	for (let i = 2; await noteExists(base, target.split('/').pop()!); i++) {
 		target = `${base}/${stem} ${i}.md`;
 	}
-	await invoke('rename_note', { oldPath: `${trashDir(folder)}/${name}`, newPath: target });
+	await notesInvoke('rename_note', { oldPath: `${trashDir(folder)}/${name}`, newPath: target });
 }
 
 export async function purgeNote(folder: string, name: string): Promise<void> {
-	await invoke('delete_note', { path: `${trashDir(folder)}/${name}` });
+	await notesInvoke('delete_note', { path: `${trashDir(folder)}/${name}` });
 }
 
 export async function purgeAllNotes(folder: string): Promise<void> {
 	const trashed = await listTrashedNotes(folder);
 	for (const note of trashed) {
-		await invoke('delete_note', { path: note.path }).catch(() => {});
+		await notesInvoke('delete_note', { path: note.path }).catch(() => {});
 	}
 }
