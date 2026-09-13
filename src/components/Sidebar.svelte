@@ -193,6 +193,53 @@
 	let doneCount = $derived(allTasks.filter((t) => !t.deletedAt && t.status === 'done').length);
 	let doneProgress = $derived(totalTasks > 0 ? Math.round((doneCount / totalTasks) * 100) : 0);
 
+	// sidebar list vertical scroll fade: mask top/bottom edges only when scrollable
+	let listViewport = $state<HTMLElement | null>(null);
+	let listScrollTop = $state(0);
+	let listScrollMax = $state(0);
+
+	function updateListScroll() {
+		if (!listViewport) return;
+		listScrollTop = listViewport.scrollTop;
+		listScrollMax = listViewport.scrollHeight - listViewport.clientHeight;
+	}
+
+	$effect(() => {
+		const el = listViewport;
+		if (!el) return;
+		updateListScroll();
+		el.addEventListener('scroll', updateListScroll, { passive: true });
+		const ro = new ResizeObserver(updateListScroll);
+		ro.observe(el);
+		if (el.firstElementChild) ro.observe(el.firstElementChild);
+		return () => {
+			el.removeEventListener('scroll', updateListScroll);
+			ro.disconnect();
+		};
+	});
+
+	const listMaskStyle = $derived.by(() => {
+		const fadeTop = listScrollTop > 1;
+		const fadeBottom = listScrollTop < listScrollMax - 1;
+		if (!fadeTop && !fadeBottom) return '';
+		const top = fadeTop ? 'transparent 0' : 'black 0';
+		const bottom = fadeBottom ? 'transparent 100%' : 'black 100%';
+		const m = `linear-gradient(to bottom, ${top}, black 20px, black calc(100% - 20px), ${bottom})`;
+		return `mask-image:${m};-webkit-mask-image:${m}`;
+	});
+
+	$effect(() => {
+		const el = listViewport;
+		if (!el) return;
+		el.style.maskImage = '';
+		el.style.webkitMaskImage = '';
+		if (listMaskStyle) {
+			const [mi, wi] = listMaskStyle.split(';');
+			el.style.maskImage = mi.slice('mask-image:'.length);
+			el.style.webkitMaskImage = wi.slice('-webkit-mask-image:'.length);
+		}
+	});
+
 	// navigate home if not already there, then dispatch event
 	async function goHomeThenDispatch(eventName: string, detail?: unknown) {
 		if (isMobile) mobileOpen = false;
@@ -347,8 +394,9 @@
 			!document.querySelector("[role='dialog'] input");
 		const unregisterNewNote = registry?.register({
 			id: 'new-note',
-			enabled: notesShortcutReady,
-			run: () => void notesState.createNoteIn(null)
+			// quick capture: works anywhere in the app, even while typing
+			allowInInput: true,
+			run: () => void notesState.quickCapture()
 		});
 		const unregisterTodayNote = registry?.register({
 			id: 'today-note',
@@ -619,7 +667,7 @@
 
 	<Separator class="mx-2 my-2 bg-sidebar-border/40" />
 
-	<ScrollArea class="min-h-0 flex-1">
+	<ScrollArea class="min-h-0 flex-1" bind:viewportRef={listViewport}>
 		{#if notesState.activeTab === 'notes'}
 			<NotesSidebar />
 		{:else}

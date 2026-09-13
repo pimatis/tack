@@ -11,7 +11,10 @@
 	let { href }: { href: string } = $props();
 
 	const kind = $derived(href.startsWith('note:') ? 'note' : 'task');
-	const notePath = $derived(kind === 'note' ? decodeURIComponent(href.slice(5)) : '');
+	// note hrefs may carry a #L<line> fragment; the preview reads the whole note
+	const notePath = $derived(
+		kind === 'note' ? decodeURIComponent(href.slice(5)).replace(/#L\d+$/, '') : ''
+	);
 	const task = $derived.by(() => {
 		if (kind !== 'task') return undefined;
 		const id = decodeURIComponent(href.slice(5));

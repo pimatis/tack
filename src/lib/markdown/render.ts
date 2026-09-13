@@ -13,6 +13,8 @@ function escapeHtml(text: string): string {
 export type RenderOptions = {
 	// resolves a relative image path to something the webview can load
 	resolveAsset?: (rel: string) => string;
+	// zero-based markdown line to mark with data-target-line (block links)
+	highlightLine?: number;
 };
 
 const CALLOUT_TYPES = new Set(['note', 'info', 'tip', 'success', 'warning', 'danger', 'error']);
@@ -414,9 +416,14 @@ export function renderMarkdown(md: string, opts?: RenderOptions): string {
 	let i = 0;
 	// heading ids are used by the outline to scroll to a heading
 	let headingCount = 0;
+	// html[] slot of the block that contains opts.highlightLine
+	let targetBlock = -1;
 
 	while (i < lines.length) {
 		const line = lines[i];
+		// a multi-line block advances i past the highlight line, so the last
+		// block starting at or before it wins
+		if (opts?.highlightLine !== undefined && i <= opts.highlightLine) targetBlock = html.length;
 
 		// code block
 		if (line.trim().startsWith('```')) {
@@ -541,6 +548,11 @@ export function renderMarkdown(md: string, opts?: RenderOptions): string {
 			i++;
 		}
 		html.push(`<p>${renderInline(para.join('\n'), opts).replaceAll('\n', '<br />')}</p>`);
+	}
+
+	// wrap the target block so the preview can scroll to and flash it
+	if (targetBlock >= 0 && targetBlock < html.length) {
+		html[targetBlock] = `<div data-target-line="1">${html[targetBlock]}</div>`;
 	}
 
 	return html.join('\n');

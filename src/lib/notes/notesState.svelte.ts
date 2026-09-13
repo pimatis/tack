@@ -67,6 +67,12 @@ class NotesPageState {
 	// focus mode hides everything but the editor; spellcheck toggles the textarea
 	focusMode = $state(false);
 	spellcheck = $state(false);
+	// bumped to ask the editor for focus after quick capture
+	editorFocusNonce = $state(0);
+	// block link navigation: scroll the target note to this markdown line
+	// once the note content is loaded
+	pendingLine = $state<{ path: string; line: number; nonce: number } | null>(null);
+	#lineNonce = 0;
 	// manual drag order per container ('root' or a relative folder path)
 	#manualOrders: Record<string, string[]> = {};
 	// per-tab content cache: tab switches skip the disk read; cleared on
@@ -411,6 +417,11 @@ class NotesPageState {
 	// pinned notes first, then by the chosen sort order
 	get sortedNotes(): NoteInfo[] {
 		return this.sortedNotesIn(this.notes, 'root');
+	}
+
+	// tag filter view: matching notes from every folder as one flat list
+	get taggedNotes(): NoteInfo[] {
+		return this.sortedNotesIn(this.allNotes, 'root');
 	}
 
 	// display order for a folder's notes
@@ -779,9 +790,14 @@ class NotesPageState {
 			let content = note.content;
 			let changed = false;
 			for (const [oldPath, newPath] of remap) {
-				const token = `](note:${encodeURIComponent(oldPath)})`;
-				if (content.includes(token)) {
-					content = content.split(token).join(`](note:${encodeURIComponent(newPath)})`);
+				// block links keep their #L<n> fragment across the rewrite
+				const re = new RegExp(
+					`\\]\\(note:${encodeURIComponent(oldPath).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(#L\\d+)?\\)`,
+					'g'
+				);
+				const next = content.replace(re, `](note:${encodeURIComponent(newPath)}$1)`);
+				if (next !== content) {
+					content = next;
 					changed = true;
 				}
 			}
@@ -843,6 +859,18 @@ class NotesPageState {
 
 	async createNote() {
 		await this.createNoteIn(null);
+	}
+
+	// quick capture: unnamed note in the root, opened and focused, caret at end
+	async quickCapture() {
+		this.activeTab = 'notes';
+		await this.createNoteIn(null);
+		this.editorFocusNonce++;
+	}
+
+	// queue a scroll to a markdown line of a note (block link navigation)
+	requestLine(path: string, line: number) {
+		this.pendingLine = { path, line, nonce: ++this.#lineNonce };
 	}
 
 	// create a note in the given folder (null = notes root); empty name becomes Untitled

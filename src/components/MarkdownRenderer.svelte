@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { mount, unmount } from 'svelte';
+	import { mount, unmount, tick } from 'svelte';
 	import { renderMarkdown } from '$lib/markdown/render';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 
@@ -12,7 +12,11 @@
 		onMentionLeave?: () => void;
 		onOpenWiki?: (name: string) => void;
 		onOpenTag?: (tag: string) => void;
+		// right-click on a task-list row: line index + viewport coords
+		onTodoMenu?: (line: number, x: number, y: number) => void;
 		resolveAsset?: (rel: string) => string;
+		// markdown line to scroll to and flash (block link navigation)
+		highlight?: { line: number; nonce: number } | null;
 	};
 
 	let {
@@ -24,10 +28,27 @@
 		onMentionLeave,
 		onOpenWiki,
 		onOpenTag,
-		resolveAsset
+		onTodoMenu,
+		resolveAsset,
+		highlight
 	}: Props = $props();
-	let html = $derived(renderMarkdown(content, { resolveAsset }));
+	let html = $derived(renderMarkdown(content, { resolveAsset, highlightLine: highlight?.line }));
 	let container = $state<HTMLElement | null>(null);
+
+	// scroll the marked block into view and flash it whenever a new
+	// navigation request arrives (each request is a fresh highlight object)
+	$effect(() => {
+		if (!highlight) return;
+		const root = container;
+		if (!root) return;
+		void tick().then(() => {
+			const block = root.querySelector('[data-target-line]');
+			if (!block) return;
+			block.scrollIntoView({ block: 'center' });
+			block.classList.add('note-line-flash');
+			setTimeout(() => block.classList.remove('note-line-flash'), 1600);
+		});
+	});
 
 	const COPY_ICON =
 		'<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path fill="currentColor" d="M9 2a2 2 0 0 0-2 2v2h2V4h11v11h-2v2h2a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM4 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg>';
@@ -66,6 +87,16 @@
 		} catch {
 			// clipboard unavailable (permissions) - stay quiet
 		}
+	}
+
+	// right-click on a task-list row: report the markdown line so the host can
+	// offer conversions (checkbox → real task)
+	function handleContextMenu(event: MouseEvent) {
+		const row = (event.target as HTMLElement).closest?.('li');
+		const todo = row?.querySelector('[data-todo]');
+		if (!(todo instanceof HTMLElement)) return;
+		event.preventDefault();
+		onTodoMenu?.(Number(todo.dataset.todo), event.clientX, event.clientY);
 	}
 
 	// hover delegation for mention previews; the anchor element lets the
@@ -118,6 +149,7 @@
 	<div
 		bind:this={container}
 		onclick={handleClick}
+		oncontextmenu={handleContextMenu}
 		onmouseover={handleMouseOver}
 		onmouseout={handleMouseOut}
 		class="prose prose-sm max-w-none prose-invert {className}"

@@ -418,6 +418,13 @@ enum NoteAction {
         #[arg(long, help = "Initial markdown content")]
         content: Option<String>,
     },
+    /// Quick capture: create an Untitled note in one step
+    Quick {
+        #[arg(long, help = "Folder to create the note in (defaults to root)")]
+        folder: Option<String>,
+        #[arg(long, help = "Initial markdown content")]
+        content: Option<String>,
+    },
     /// Print a note's content
     Show {
         #[arg(long, help = "Note name or folder path")]
@@ -857,6 +864,12 @@ fn main() {
                     &root,
                     json,
                     &title,
+                    folder.as_deref(),
+                    content.as_deref(),
+                ),
+                NoteAction::Quick { folder, content } => commands::note::quick(
+                    &root,
+                    json,
                     folder.as_deref(),
                     content.as_deref(),
                 ),

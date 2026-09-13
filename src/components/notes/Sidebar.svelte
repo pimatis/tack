@@ -555,12 +555,22 @@
 			{#if notesState.notes.length === 0 && notesState.folders.length === 0}
 				<div class="px-3 py-3 text-[12px] text-muted-foreground/60">No notes yet</div>
 			{/if}
-			{#each notesState.sortedNotes as note (note.path)}
-				{@render noteRow(note, null)}
-			{/each}
-			{#each childFolders(null) as rel (rel)}
-				{@render folderNode(rel)}
-			{/each}
+			{#if notesState.activeTag}
+				<!-- tag filter: flat list of matching notes, no folder tree -->
+				{#if notesState.taggedNotes.length === 0}
+					<div class="px-3 py-3 text-[12px] text-muted-foreground/60">No notes with this tag</div>
+				{/if}
+				{#each notesState.taggedNotes as note (note.path)}
+					{@render noteRow(note, null)}
+				{/each}
+			{:else}
+				{#each notesState.sortedNotes as note (note.path)}
+					{@render noteRow(note, null)}
+				{/each}
+				{#each childFolders(null) as rel (rel)}
+					{@render folderNode(rel)}
+				{/each}
+			{/if}
 		</div>
 	{/if}
 {/if}

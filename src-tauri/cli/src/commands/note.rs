@@ -323,6 +323,37 @@ pub fn create(
     Ok(())
 }
 
+// quick capture: an Untitled note in the root with optional content, same
+// naming the app's quick capture uses
+pub fn quick(root: &Path, json: bool, folder: Option<&str>, content: Option<&str>) -> Result<()> {
+    let target_dir = match folder {
+        Some(rel) => {
+            let dir = root.join(rel.trim_matches('/'));
+            std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create folder: {}", e))?;
+            dir
+        }
+        None => root.to_path_buf(),
+    };
+    let name = first_free_name(&target_dir, "Untitled");
+    let path = target_dir.join(&name);
+    std::fs::write(&path, content.unwrap_or(""))
+        .map_err(|e| format!("Failed to create note: {}", e))?;
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": true, "action": "note_created",
+                "name": name,
+                "path": path.to_string_lossy(),
+            }))
+            .map_err(|e| e.to_string())?
+        );
+    } else {
+        println!("Created note: {}", path.display());
+    }
+    Ok(())
+}
+
 pub fn show(root: &Path, json: bool, input: &str) -> Result<()> {
     let note = resolve_note(root, input)?;
     let content =

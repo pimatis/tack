@@ -19,7 +19,7 @@
 	import { TaskPageState } from '$lib/task/taskState.svelte';
 	import type { Task } from '$lib/types/task';
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
-	import { getBacklinks, getUnlinkedMentions, type Backlink } from '$lib/notes/backlinks';
+	import { getLinkPanels, type Backlink } from '$lib/notes/backlinks';
 	import { wikiToFileName } from '$lib/notes/links';
 	import { create as createTaskRepo } from '$lib/repositories/task.repository';
 	import MentionPreviewCard from './MentionPreviewCard.svelte';
@@ -80,6 +80,22 @@
 			window.removeEventListener('convert-note-to-task', convertHandler);
 			notesState.flushPendingSave();
 		};
+	});
+
+	// quick capture: focus the editor with the caret at the end whenever a
+	// new note is requested from anywhere in the app
+	let lastFocusNonce = 0;
+	$effect(() => {
+		const nonce = notesState.editorFocusNonce;
+		if (nonce === lastFocusNonce) return;
+		lastFocusNonce = nonce;
+		if (notesState.preview) return;
+		void tick().then(() => {
+			const textarea = editorEl;
+			if (!textarea) return;
+			textarea.focus();
+			textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+		});
 	});
 
 	const noteTitle = $derived(
@@ -143,8 +159,14 @@
 		updateSlashMenu(caret);
 		if (slashOpen) {
 			if (mentionOpen) mentionOpen = false;
+			if (wikiOpen) wikiOpen = false;
 		} else {
 			updateMentionMenu(caret);
+			if (mentionOpen) {
+				if (wikiOpen) wikiOpen = false;
+			} else {
+				updateWikiMenu(caret);
+			}
 		}
 	}
 
@@ -274,13 +296,77 @@
 		});
 	}
 
-	// preview clicks on mention links open the task dialog or the note
+	// [[wiki]] autocomplete: typing "[[" opens a note-name picker anchored to
+	// the caret; picked names become [[Name]] links
+	let wikiOpen = $state(false);
+	let wikiStart = $state(0);
+	let wikiCaret = $state(0);
+	let wikiAnchor = $state({ x: 0, y: 0 });
+	let wikiFilter = $state('');
+	const wikiItems = $derived.by(() => {
+		const query = wikiFilter.toLowerCase().trim();
+		return notesState.allNotes
+			.filter((n) => n.name.replace(/\.md$/, '').toLowerCase().includes(query))
+			.slice(0, 6)
+			.map((n) => ({ label: n.name.replace(/\.md$/, '') }));
+	});
+
+	function updateWikiMenu(caret: number) {
+		const textarea = editorEl;
+		if (!textarea) return;
+		wikiCaret = caret;
+		const before = notesState.content.slice(0, caret);
+		// the token is "[[" plus an unclosed name; mid-word is fine
+		const wiki = before.match(/\[\[([^\]\n[]*)$/);
+		if (!wiki) {
+			if (wikiOpen) wikiOpen = false;
+			return;
+		}
+		wikiStart = caret - wiki[1].length - 2;
+		wikiFilter = wiki[1];
+
+		// same caret math as the other menus
+		const beforeToken = notesState.content.slice(0, wikiStart);
+		const line = beforeToken.split('\n').length - 1;
+		const col = beforeToken.length - (beforeToken.lastIndexOf('\n') + 1);
+		const lineHeight = 21; // matches leading-[21px]
+		const charWidth = 7.8; // 13px monospace
+		wikiAnchor = {
+			x: Math.min(12 + col * charWidth, Math.max(textarea.clientWidth - 270, 0)),
+			y: Math.min(
+				12 + (line + 1) * lineHeight - textarea.scrollTop,
+				Math.max(textarea.clientHeight - 240, 0)
+			)
+		};
+		wikiOpen = true;
+	}
+
+	function applyWiki(label: string) {
+		// replace the "[[query" token with the completed wiki link
+		notesState.content =
+			notesState.content.slice(0, wikiStart) + `[[${label}]]` + notesState.content.slice(wikiCaret);
+		wikiOpen = false;
+		void tick().then(() => {
+			editorEl?.focus();
+			const caret = wikiStart + label.length + 4;
+			editorEl?.setSelectionRange(caret, caret);
+			notesState.scheduleSave();
+		});
+	}
+
+	// preview clicks on mention links open the task dialog or the note;
+	// note links may carry a #L<line> fragment to jump to that markdown line
 	async function openMention(href: string) {
 		// navigating must close the hover card, the cursor can stay on the same spot
 		dismissMentionPreview();
 		if (href.startsWith('note:')) {
+			const raw = decodeURIComponent(href.slice(5));
+			const line = raw.match(/#L(\d+)$/);
+			const path = line ? raw.replace(/#L\d+$/, '') : raw;
 			notesState.activeTab = 'notes';
-			void notesState.openNote(decodeURIComponent(href.slice(5)));
+			void notesState.openNote(path).then(() => {
+				if (line) notesState.requestLine(path, Number(line[1]));
+			});
 			return;
 		}
 		if (href.startsWith('task:')) {
@@ -293,6 +379,28 @@
 			state.handleEdit(task);
 		}
 	}
+
+	// block link navigation in the editor: select the target line and scroll
+	// it to the upper third of the view; the preview consumes the same
+	// request through the highlight prop
+	$effect(() => {
+		const pending = notesState.pendingLine;
+		if (!pending || notesState.selectedPath !== pending.path) return;
+		if (notesState.preview) {
+			// the MarkdownRenderer effect does the scrolling; clear once handled
+			void tick().then(() => (notesState.pendingLine = null));
+			return;
+		}
+		const textarea = editorEl;
+		if (!textarea) return;
+		const lines = notesState.content.split('\n');
+		const line = Math.min(pending.line, lines.length - 1);
+		const start = lines.slice(0, line).reduce((n, l) => n + l.length + 1, 0);
+		textarea.scrollTop = Math.max(0, line * 21 - textarea.clientHeight / 3);
+		textarea.focus();
+		textarea.setSelectionRange(start, start + lines[line].length);
+		notesState.pendingLine = null;
+	});
 
 	// notion-style selection effects, applied by wrapping the markdown selection
 	const EFFECTS = [
@@ -307,12 +415,22 @@
 	// effects dropdown opens at the right-click position
 	let effectsOpen = $state(false);
 	let effectsAnchor = $state({ x: 0, y: 0 });
+	// set when the right-clicked line is a checkbox; adds a convert action
+	let effectsTodoLine = $state<number | null>(null);
 
 	function handleEditorContextMenu(event: MouseEvent) {
 		event.preventDefault();
-		const rect = editorEl?.getBoundingClientRect();
-		if (!rect) return;
+		const textarea = editorEl;
+		const rect = textarea?.getBoundingClientRect();
+		if (!textarea || !rect) return;
 		effectsAnchor = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+		// the caret's todo line (if any) gets a convert action in the same menu
+		const caretLine = notesState.content.slice(0, textarea.selectionStart).split('\n').length - 1;
+		effectsTodoLine = /^(\s*)[-*+]\s+\[( |x|X)\]\s+\S/.test(
+			notesState.content.split('\n')[caretLine] ?? ''
+		)
+			? caretLine
+			: null;
 		effectsOpen = true;
 	}
 
@@ -378,6 +496,36 @@
 		notesState.scheduleSave();
 	}
 
+	// right-click on a preview checkbox offers converting it into a real task
+	let todoMenuOpen = $state(false);
+	let todoMenuLine = $state(0);
+	let todoMenuAnchor = $state({ x: 0, y: 0 });
+
+	function openTodoMenu(line: number, x: number, y: number) {
+		todoMenuLine = line;
+		todoMenuAnchor = { x, y };
+		todoMenuOpen = true;
+	}
+
+	// checkbox → real task: the line becomes a live task mention so the title
+	// and status live in the task system (sidebar, board) from then on
+	async function convertTodoToTask(line: number) {
+		const lines = notesState.content.split('\n');
+		const raw = lines[line] ?? '';
+		const m = raw.match(/^(\s*)[-*+]\s+\[( |x|X)\]\s+(.*)$/);
+		const title = m?.[3].trim();
+		if (!m || !title) return;
+		const task = await createTaskRepo({
+			title,
+			// a checked box keeps its state as a done task
+			...(m[2] === ' ' ? {} : { status: 'done' as const })
+		});
+		lines[line] = `${m[1]}- @[${title.replace(/[[\]]/g, '')}](task:${task.id})`;
+		notesState.content = lines.join('\n');
+		notesState.scheduleSave();
+		window.dispatchEvent(new Event('tasks-changed'));
+	}
+
 	// ---- outline (table of contents) ----
 	// mirrors render.ts: headings get sequential ids in document order
 	type OutlineEntry = { id: string; level: number; text: string; line: number };
@@ -422,8 +570,9 @@
 			return;
 		}
 		const timer = setTimeout(async () => {
-			backlinks = await getBacklinks(folder, path);
-			unlinkedMentions = await getUnlinkedMentions(folder, path);
+			const panels = await getLinkPanels(folder, path);
+			backlinks = panels.backlinks;
+			unlinkedMentions = panels.unlinked;
 		}, 600);
 		return () => clearTimeout(timer);
 	});
@@ -648,6 +797,41 @@
 	type MentionPreviewState = { href: string; x: number; y: number; above: boolean } | null;
 	type TabDrag = { path: string };
 	let mentionPreview = $state<MentionPreviewState>(null);
+
+	// tab strip scroll fade: mask edges only when there's overflow to scroll
+	let tabsEl = $state<HTMLElement | null>(null);
+	let tabsScrollLeft = $state(0);
+	let tabsScrollMax = $state(0);
+
+	function updateTabScroll() {
+		if (!tabsEl) return;
+		tabsScrollLeft = tabsEl.scrollLeft;
+		tabsScrollMax = tabsEl.scrollWidth - tabsEl.clientWidth;
+	}
+
+	$effect(() => {
+		if (!tabsEl) return;
+		updateTabScroll();
+		const ro = new ResizeObserver(updateTabScroll);
+		ro.observe(tabsEl);
+		return () => ro.disconnect();
+	});
+
+	// re-measure when tabs open/close; container width may stay the same
+	$effect(() => {
+		void notesState.noteTabs.length;
+		updateTabScroll();
+	});
+
+	const tabsFadeLeft = $derived(tabsScrollLeft > 1);
+	const tabsFadeRight = $derived(tabsScrollLeft < tabsScrollMax - 1);
+	const tabsMaskStyle = $derived.by(() => {
+		if (!tabsFadeLeft && !tabsFadeRight) return '';
+		const left = tabsFadeLeft ? 'transparent 0' : 'black 0';
+		const right = tabsFadeRight ? 'transparent 100%' : 'black 100%';
+		const m = `linear-gradient(to right, ${left}, black 16px, black calc(100% - 16px), ${right})`;
+		return `mask-image:${m};-webkit-mask-image:${m}`;
+	});
 	let mentionPreviewTimer: ReturnType<typeof setTimeout> | undefined;
 	let mentionHideTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -724,7 +908,10 @@
 		<!-- editor tabs: vs code/chrome pattern softened to match the app chrome -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
+			bind:this={tabsEl}
+			style={tabsMaskStyle}
 			class="-mx-3 -mt-3 mb-3 flex [scrollbar-width:none] items-end gap-0.5 overflow-x-auto border-b border-border px-3 pt-1 sm:-mx-5 sm:-mt-5 sm:px-5 lg:-mx-8 lg:px-8 [&::-webkit-scrollbar]:hidden"
+			onscroll={updateTabScroll}
 			ondblclick={() => void notesState.createNote()}
 		>
 			{#each notesState.noteTabs as tabPath (tabPath)}
@@ -1096,8 +1283,26 @@
 					onMentionLeave={handleMentionLeave}
 					onOpenWiki={(name) => void openWiki(name)}
 					onOpenTag={(tag) => notesState.setActiveTag(tag)}
+					onTodoMenu={(line, x, y) => openTodoMenu(line, x, y)}
+					highlight={notesState.pendingLine &&
+					notesState.pendingLine.path === notesState.selectedPath
+						? notesState.pendingLine
+						: null}
 					{resolveAsset}
 				/>
+				<DropdownMenu.Root bind:open={todoMenuOpen}>
+					<DropdownMenu.Trigger
+						class="h-0 w-0 outline-none"
+						style="position: fixed; left: {todoMenuAnchor.x}px; top: {todoMenuAnchor.y}px"
+						aria-label="Task list options"
+					/>
+					<DropdownMenu.Content class="w-52" collisionPadding={8}>
+						<DropdownMenu.Item class="gap-2.5" onclick={() => void convertTodoToTask(todoMenuLine)}>
+							<StatusIcon status="todo" size={14} />
+							Convert to task
+						</DropdownMenu.Item>
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
 			</div>
 			{#if outlineOpen}
 				{@render outlinePanel()}
@@ -1224,6 +1429,16 @@
 							<LinkIcon class="size-4 shrink-0" />
 							Link
 						</DropdownMenu.Item>
+						{#if effectsTodoLine !== null}
+							<DropdownMenu.Separator />
+							<DropdownMenu.Item
+								class="gap-2.5"
+								onclick={() => void convertTodoToTask(effectsTodoLine ?? 0)}
+							>
+								<StatusIcon status="todo" size={14} />
+								Convert to task
+							</DropdownMenu.Item>
+						{/if}
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
 				<DropdownMenu.Root bind:open={slashOpen}>
@@ -1338,6 +1553,62 @@
 							{/each}
 							{#if mentionItems.length === 0}
 								<div class="px-3 py-2 text-[12px] text-muted-foreground">No matches</div>
+							{/if}
+						</div>
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
+				<DropdownMenu.Root bind:open={wikiOpen}>
+					<DropdownMenu.Trigger
+						class="absolute h-0 w-0 outline-none"
+						style="left: {wikiAnchor.x}px; top: {wikiAnchor.y}px"
+						aria-label="Wiki links"
+					/>
+					<DropdownMenu.Content class="w-64 p-0" collisionPadding={8}>
+						<div class="flex items-center gap-2 border-b border-border px-3">
+							<svg
+								class="shrink-0 text-muted-foreground/50"
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								><path
+									fill="currentColor"
+									d="M2 10.5a8.5 8.5 0 1 1 15.176 5.262l3.652 3.652a1 1 0 0 1-1.414 1.414l-3.652-3.652A8.5 8.5 0 0 1 2 10.5M10.5 6a1 1 0 0 0 0 2 2.5 2.5 0 0 1 2.5 2.5 1 1 0 1 0 2 0A4.5 4.5 0 0 0 10.5 6"
+								/></svg
+							>
+							<input
+								bind:value={wikiFilter}
+								placeholder="Link to note..."
+								spellcheck="false"
+								class="h-9 w-full bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50"
+								onkeydown={(e) => {
+									// enter or tab picks the first match, like the other menus
+									if (e.key === 'Enter' || e.key === 'Tab') {
+										e.preventDefault();
+										if (wikiItems[0]) applyWiki(wikiItems[0].label);
+									}
+								}}
+							/>
+						</div>
+						<div class="p-1">
+							{#each wikiItems as item (item.label)}
+								<DropdownMenu.Item class="gap-2.5 py-1.5" onSelect={() => applyWiki(item.label)}>
+									<svg
+										class="shrink-0 text-muted-foreground"
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										><path
+											fill="currentColor"
+											d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.17a2 2 0 0 0-.59-1.42l-4.58-4.58A2 2 0 0 0 13.41 2zm7.5 1.13L18.87 8H13.5z"
+										/></svg
+									>
+									<span class="truncate text-[13px]">{item.label}</span>
+								</DropdownMenu.Item>
+							{/each}
+							{#if wikiItems.length === 0}
+								<div class="px-3 py-2 text-[12px] text-muted-foreground">No notes found</div>
 							{/if}
 						</div>
 					</DropdownMenu.Content>

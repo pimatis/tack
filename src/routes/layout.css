@@ -540,3 +540,18 @@ body {
 .note-tag:hover {
 	color: var(--foreground);
 }
+
+/* block link navigation: brief pulse on the target block */
+.note-line-flash {
+	animation: note-line-flash 1.6s ease-out;
+}
+@keyframes note-line-flash {
+	0%,
+	30% {
+		background-color: color-mix(in oklch, var(--primary) 18%, transparent);
+		border-radius: 6px;
+	}
+	100% {
+		background-color: transparent;
+	}
+}

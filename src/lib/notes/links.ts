@@ -21,7 +21,11 @@ export function extractLinks(content: string): ExtractedLinks {
 	const taskIds = new Set<string>();
 	const wikiNames = new Set<string>();
 	const inlineTags = new Set<string>();
-	for (const m of content.matchAll(MENTION_RE)) noteTargets.add(decodeURIComponent(m[1]));
+	for (const m of content.matchAll(MENTION_RE)) {
+		// block links carry a #L<n> line fragment; the index stores the bare path
+		const target = decodeURIComponent(m[1]).replace(/#L\d+$/, '');
+		if (target) noteTargets.add(target);
+	}
 	for (const m of content.matchAll(TASK_RE)) taskIds.add(decodeURIComponent(m[1]));
 	for (const m of content.matchAll(WIKI_RE)) {
 		const name = m[1].trim();

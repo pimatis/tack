@@ -61,7 +61,7 @@ export const SHORTCUTS: ShortcutDefinition[] = [
 	},
 	{
 		id: 'new-note',
-		label: 'Create new note',
+		label: 'Quick capture (new note)',
 		keys: [{ key: 'n', mod: metaOrCtrl, shift: true }]
 	},
 	{
