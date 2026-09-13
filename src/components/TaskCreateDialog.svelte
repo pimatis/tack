@@ -496,7 +496,7 @@
 							>
 						{/if}
 					</Button>
-					<Button type="submit" size="sm" disabled={submitting}>
+					<Button type="submit" size="sm" disabled={submitting || !title.trim()}>
 						{submitting ? 'Creating...' : 'Create task'}
 					</Button>
 				</div>

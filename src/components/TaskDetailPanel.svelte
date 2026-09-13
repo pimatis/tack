@@ -100,6 +100,31 @@
 	let editingSubtaskId = $state<string | null>(null);
 	let editingSubtaskTitle = $state('');
 
+	// field snapshot taken when the panel opens; save stays disabled until
+	// something actually changes
+	let original = $state<{
+		title: string;
+		description: string;
+		status: TaskStatus;
+		priority: string;
+		dueDate: string;
+		endDate: string;
+		labelIds: string[];
+		pendingCount: number;
+	} | null>(null);
+	let isDirty = $derived(
+		!!original &&
+			(original.title !== title ||
+				original.description !== description ||
+				original.status !== status ||
+				original.priority !== priority ||
+				original.dueDate !== dueDate ||
+				original.endDate !== endDate ||
+				original.pendingCount !== pendingAttachments.length ||
+				original.labelIds.length !== selectedLabelIds.length ||
+				selectedLabelIds.some((id) => !original!.labelIds.includes(id)))
+	);
+
 	// activity
 	let activities = $state<ActivityLog[]>([]);
 
@@ -142,6 +167,16 @@
 		attachmentUrls = {};
 		selectedLabelIds = [];
 		newSubtaskTitle = '';
+		original = {
+			title: task.title,
+			description: task.description ?? '',
+			status: task.status,
+			priority: String(task.priority),
+			dueDate: task.dueDate ?? '',
+			endDate: task.endDate ?? '',
+			labelIds: [],
+			pendingCount: 0
+		};
 		void loadAttachments(task.id);
 		void loadTaskLabels(task.id);
 		void loadSubtasks(task.id);
@@ -157,7 +192,10 @@
 		// the open effect already set the fields; only patch the heavy fields
 		// the list doesn't carry, and only while the same task is still open
 		if (!full || full.id !== task?.id) return;
-		if (!description) description = full.description ?? '';
+		if (!description) {
+			description = full.description ?? '';
+			if (original && !original.description) original.description = full.description ?? '';
+		}
 	}
 
 	// jump from a task to the note that mentions it: switch to the notes tab
@@ -187,6 +225,8 @@
 		} catch {
 			selectedLabelIds = [];
 		}
+		// labels loaded after the snapshot: they are the original state, not a change
+		if (original) original.labelIds = [...selectedLabelIds];
 	}
 
 	async function loadAttachments(taskId: string) {
@@ -1267,7 +1307,7 @@
 					</div>
 					<div class="flex items-center gap-2">
 						<Button variant="ghost" size="sm" onclick={close}>Cancel</Button>
-						<Button type="submit" size="sm" disabled={submitting}>
+						<Button type="submit" size="sm" disabled={submitting || !isDirty}>
 							{submitting ? 'Saving...' : 'Save changes'}
 						</Button>
 					</div>

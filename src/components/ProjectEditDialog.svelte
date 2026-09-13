@@ -19,6 +19,13 @@
 	let submitting = $state(false);
 	let nameRef = $state<HTMLInputElement | null>(null);
 
+	// snapshot on open; save stays disabled until something actually changes
+	let original = $state<{ name: string; prefix: string; description: string } | null>(null);
+	let isDirty = $derived(
+		!!original &&
+			(original.name !== name || original.prefix !== prefix || original.description !== description)
+	);
+
 	$effect(() => {
 		if (!open || !project) return;
 		name = project.name;
@@ -26,6 +33,11 @@
 		description = project.description ?? '';
 		previewMode = false;
 		error = null;
+		original = {
+			name: project.name,
+			prefix: project.prefix,
+			description: project.description ?? ''
+		};
 	});
 
 	$effect(() => {
@@ -164,7 +176,7 @@
 				<Button type="button" variant="ghost" size="sm" onclick={() => (open = false)}
 					>Cancel</Button
 				>
-				<Button type="submit" size="sm" disabled={submitting}>
+				<Button type="submit" size="sm" disabled={submitting || !isDirty}>
 					{submitting ? 'Saving...' : 'Save changes'}
 				</Button>
 			</div>

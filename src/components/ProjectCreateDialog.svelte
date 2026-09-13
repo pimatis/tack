@@ -182,7 +182,7 @@
 				<Button type="button" variant="ghost" size="sm" onclick={() => (open = false)}
 					>Cancel</Button
 				>
-				<Button type="submit" size="sm" disabled={submitting}>
+				<Button type="submit" size="sm" disabled={submitting || !name.trim()}>
 					{submitting ? 'Creating...' : 'Create project'}
 				</Button>
 			</div>

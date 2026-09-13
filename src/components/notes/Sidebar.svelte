@@ -663,7 +663,7 @@
 				<Button type="button" variant="outline" size="sm" onclick={() => (renameDialogOpen = false)}
 					>Cancel</Button
 				>
-				<Button type="submit" size="sm">Rename</Button>
+				<Button type="submit" size="sm" disabled={!renameDraft.trim()}>Rename</Button>
 			</div>
 		</form>
 	</Dialog.Content>

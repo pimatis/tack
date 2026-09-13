@@ -56,7 +56,12 @@
 			class="flex gap-2 px-5 pt-4"
 		>
 			<Input bind:ref={inputEl} bind:value={draft} placeholder="Add a tag…" spellcheck="false" />
-			<Button type="submit" size="sm" variant="outline">Add</Button>
+			<Button
+				type="submit"
+				size="sm"
+				variant="outline"
+				disabled={!draft.trim() || tags.includes(draft.trim().replace(/^#/, ''))}>Add</Button
+			>
 		</form>
 		<div class="flex flex-wrap gap-1.5 px-5 py-4">
 			{#each tags as tag (tag)}

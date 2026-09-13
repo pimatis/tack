@@ -17,6 +17,17 @@
 
 	let selectedDate = $state<DateValue | undefined>(undefined);
 
+	// dialog width follows the field card that opens it
+	let triggerRef = $state<HTMLButtonElement | null>(null);
+	let contentWidth = $state<number | null>(null);
+
+	$effect(() => {
+		if (!open) return;
+		const measured = triggerRef?.offsetWidth ?? 0;
+		// keep the calendar usable: at least 280px, never wider than the viewport
+		contentWidth = measured ? Math.max(280, Math.min(measured, window.innerWidth - 32)) : null;
+	});
+
 	$effect(() => {
 		if (open && value) {
 			try {
@@ -59,6 +70,7 @@
 	<Dialog.Trigger>
 		{#snippet child({ props })}
 			<Button
+				bind:ref={triggerRef}
 				{...props}
 				variant="outline"
 				size="sm"
@@ -102,7 +114,11 @@
 			</Button>
 		{/snippet}
 	</Dialog.Trigger>
-	<Dialog.Content class="w-[calc(100vw-2rem)] max-w-[320px] gap-0 p-0" showCloseButton={false}>
+	<Dialog.Content
+		class="w-[calc(100vw-2rem)] gap-0 p-0"
+		style={contentWidth ? `width: ${contentWidth}px` : undefined}
+		showCloseButton={false}
+	>
 		<Dialog.Title class="sr-only">Pick {title.toLowerCase()}</Dialog.Title>
 
 		<!-- header -->
