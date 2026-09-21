@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import * as Popover from '$lib/components/ui/popover/index.js';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import StatusIcon from '../StatusIcon.svelte';
 	import type { TaskStatus } from '$lib/types/task';
 	import type { Project } from '$lib/types/project';
@@ -34,6 +34,26 @@
 		onToggleLabelFilter: (labelId: string) => void;
 		onClearFilters: () => void;
 	} = $props();
+
+	// each filter opens on left-click and on right-click
+	let statusOpen = $state(false);
+	let projectOpen = $state(false);
+	let labelOpen = $state(false);
+
+	function openStatus(event: MouseEvent) {
+		event.preventDefault();
+		statusOpen = true;
+	}
+
+	function openProject(event: MouseEvent) {
+		event.preventDefault();
+		projectOpen = true;
+	}
+
+	function openLabel(event: MouseEvent) {
+		event.preventDefault();
+		labelOpen = true;
+	}
 </script>
 
 <div class="flex flex-wrap items-center gap-2 pb-4">
@@ -52,7 +72,7 @@
 		>
 		<Input
 			bind:value={searchQuery}
-			placeholder="Filter by title..."
+			placeholder="Search tasks..."
 			class="h-8 w-full rounded-lg border border-input bg-transparent pr-3 pl-8 text-[13px] text-foreground transition-all outline-none placeholder:text-muted-foreground/50 dark:bg-input/30"
 		/>
 		{#if searchQuery}
@@ -74,11 +94,12 @@
 	</div>
 
 	<!-- status filter -->
-	<Popover.Root>
-		<Popover.Trigger>
+	<DropdownMenu.Root bind:open={statusOpen}>
+		<DropdownMenu.Trigger>
 			{#snippet child({ props })}
 				<Button
 					{...props}
+					oncontextmenu={openStatus}
 					variant="outline"
 					size="sm"
 					class="flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium transition-colors {statusFilters.size >
@@ -101,13 +122,13 @@
 					{/if}
 				</Button>
 			{/snippet}
-		</Popover.Trigger>
-		<Popover.Content class="w-48 p-1.5" align="end">
+		</DropdownMenu.Trigger>
+		<DropdownMenu.Content class="w-48 p-1.5" align="end">
 			<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">Filter by status</div>
 			{#each statusOrder as s (s)}
-				<Button
-					variant="ghost"
-					class="flex h-auto w-full items-center justify-start gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-foreground transition-colors hover:bg-muted"
+				<DropdownMenu.Item
+					closeOnSelect={false}
+					class="gap-2.5 py-1.5 text-[13px]"
 					onclick={() => onToggleStatusFilter(s)}
 				>
 					<StatusIcon status={s} size={14} />
@@ -125,17 +146,18 @@
 							/></svg
 						>
 					{/if}
-				</Button>
+				</DropdownMenu.Item>
 			{/each}
-		</Popover.Content>
-	</Popover.Root>
+		</DropdownMenu.Content>
+	</DropdownMenu.Root>
 
 	<!-- project filter -->
-	<Popover.Root>
-		<Popover.Trigger>
+	<DropdownMenu.Root bind:open={projectOpen}>
+		<DropdownMenu.Trigger>
 			{#snippet child({ props })}
 				<Button
 					{...props}
+					oncontextmenu={openProject}
 					variant="outline"
 					size="sm"
 					class="flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium transition-colors {projectFilters.size >
@@ -158,16 +180,16 @@
 					{/if}
 				</Button>
 			{/snippet}
-		</Popover.Trigger>
-		<Popover.Content class="w-52 p-1.5" align="end">
+		</DropdownMenu.Trigger>
+		<DropdownMenu.Content class="w-52 p-1.5" align="end">
 			<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">Filter by project</div>
 			{#if projects.length === 0}
 				<div class="px-2 py-3 text-[12px] text-muted-foreground/60">No projects available</div>
 			{:else}
 				{#each projects as project (project.id)}
-					<Button
-						variant="ghost"
-						class="flex h-auto w-full items-center justify-start gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-foreground transition-colors hover:bg-muted"
+					<DropdownMenu.Item
+						closeOnSelect={false}
+						class="gap-2.5 py-1.5 text-[13px]"
 						onclick={() => onToggleProjectFilter(project.id)}
 					>
 						<span class="shrink-0 font-mono text-[11px] text-muted-foreground/60">
@@ -187,19 +209,20 @@
 								/></svg
 							>
 						{/if}
-					</Button>
+					</DropdownMenu.Item>
 				{/each}
 			{/if}
-		</Popover.Content>
-	</Popover.Root>
+		</DropdownMenu.Content>
+	</DropdownMenu.Root>
 
 	<!-- label filter -->
 	{#if labels.length > 0}
-		<Popover.Root>
-			<Popover.Trigger>
+		<DropdownMenu.Root bind:open={labelOpen}>
+			<DropdownMenu.Trigger>
 				{#snippet child({ props })}
 					<Button
 						{...props}
+						oncontextmenu={openLabel}
 						variant="outline"
 						size="sm"
 						class="flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium transition-colors {labelFilters.size >
@@ -222,13 +245,13 @@
 						{/if}
 					</Button>
 				{/snippet}
-			</Popover.Trigger>
-			<Popover.Content class="w-52 p-1.5" align="end">
+			</DropdownMenu.Trigger>
+			<DropdownMenu.Content class="w-52 p-1.5" align="end">
 				<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">Filter by label</div>
 				{#each labels as label (label.id)}
-					<Button
-						variant="ghost"
-						class="flex h-auto w-full items-center justify-start gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-foreground transition-colors hover:bg-muted"
+					<DropdownMenu.Item
+						closeOnSelect={false}
+						class="gap-2.5 py-1.5 text-[13px]"
 						onclick={() => onToggleLabelFilter(label.id)}
 					>
 						<span class="size-2.5 shrink-0 rounded-full {labelColorMap[label.color].dot}"></span>
@@ -246,10 +269,10 @@
 								/></svg
 							>
 						{/if}
-					</Button>
+					</DropdownMenu.Item>
 				{/each}
-			</Popover.Content>
-		</Popover.Root>
+			</DropdownMenu.Content>
+		</DropdownMenu.Root>
 	{/if}
 
 	{#if hasFilters}

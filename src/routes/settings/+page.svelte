@@ -22,6 +22,7 @@
 	import ShortcutsSection from '../../components/settings/ShortcutsSection.svelte';
 	import WorkspaceSection from '../../components/settings/WorkspaceSection.svelte';
 	import LiveSection from '../../components/settings/LiveSection.svelte';
+	import PermissionsSection from '../../components/settings/PermissionsSection.svelte';
 	import CliSection from '../../components/settings/CliSection.svelte';
 	import AboutSection from '../../components/settings/AboutSection.svelte';
 
@@ -187,6 +188,12 @@
 				keywords: ['network', 'address', 'http', s.livePort]
 			},
 			{
+				tab: 'permissions',
+				label: 'Notification permission',
+				description: 'Allow tack to show system alerts for task reminders',
+				keywords: ['permission', 'notifications', 'reminder', 'grant', 'allow', 'system', 'access']
+			},
+			{
 				tab: 'workspace',
 				label: 'Workspace stats',
 				description: 'Projects, tasks, completed and completion rate',
@@ -215,6 +222,7 @@
 		backup: 'Backup',
 		shortcuts: 'Shortcuts',
 		live: 'Live',
+		permissions: 'Permissions',
 		workspace: 'Workspace'
 	};
 
@@ -477,6 +485,9 @@
 							<Tabs.Trigger value="live" class="flex-1 shrink-0 whitespace-nowrap"
 								>Live</Tabs.Trigger
 							>
+							<Tabs.Trigger value="permissions" class="flex-1 shrink-0 whitespace-nowrap"
+								>Permissions</Tabs.Trigger
+							>
 							<Tabs.Trigger value="workspace" class="flex-1 shrink-0 whitespace-nowrap"
 								>Workspace</Tabs.Trigger
 							>
@@ -509,6 +520,10 @@
 
 					<Tabs.Content value="live" class="mt-4 space-y-5 sm:mt-6 sm:space-y-6">
 						<LiveSection {settings} update={updateSetting} />
+					</Tabs.Content>
+
+					<Tabs.Content value="permissions" class="mt-4 space-y-5 sm:mt-6 sm:space-y-6">
+						<PermissionsSection />
 					</Tabs.Content>
 
 					<Tabs.Content value="workspace" class="mt-4 space-y-5 sm:mt-6 sm:space-y-6">

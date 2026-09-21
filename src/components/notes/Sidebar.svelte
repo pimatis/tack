@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
-	import * as ContextMenu from '$lib/components/ui/context-menu/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -8,7 +7,7 @@
 	import { sortableItem, dropZone, reorderArray, type DragDropState } from '$lib/dnd';
 	import { notesState, type NoteInfo } from '$lib/notes/notesState.svelte';
 	import { exportNote } from '$lib/notes/export';
-	import NoteContextMenu from './NoteContextMenu.svelte';
+	import NoteMenu from './NoteMenu.svelte';
 	import NotesBulkBar from './NotesBulkBar.svelte';
 	import NoteInfoDialog from './NoteInfoDialog.svelte';
 	import NoteHistoryDialog from './NoteHistoryDialog.svelte';
@@ -150,6 +149,33 @@
 		}
 	}
 
+	// right-click opens a dropdown at the pointer; one menu per kind is enough
+	let noteMenuOpen = $state(false);
+	let noteMenuX = $state(0);
+	let noteMenuY = $state(0);
+	let noteMenuNote = $state<NoteInfo | null>(null);
+
+	let folderMenuOpen = $state(false);
+	let folderMenuX = $state(0);
+	let folderMenuY = $state(0);
+	let folderMenuRel = $state<string | null>(null);
+
+	function openNoteMenu(event: MouseEvent, note: NoteInfo) {
+		event.preventDefault();
+		noteMenuNote = note;
+		noteMenuX = event.clientX;
+		noteMenuY = event.clientY;
+		noteMenuOpen = true;
+	}
+
+	function openFolderMenu(event: MouseEvent, rel: string) {
+		event.preventDefault();
+		folderMenuRel = rel;
+		folderMenuX = event.clientX;
+		folderMenuY = event.clientY;
+		folderMenuOpen = true;
+	}
+
 	// tag panel collapse, remembered across sessions
 	let tagsOpen = $state(false);
 	function initTagsPanel() {
@@ -171,108 +197,79 @@
 </script>
 
 {#snippet noteRow(note: NoteInfo, rel: string | null)}
-	<ContextMenu.Root>
-		<ContextMenu.Trigger class="contents">
-			<div
-				role="listitem"
-				use:sortableItem={{
-					dragData: { kind: 'note' as const, name: note.name, path: note.path },
-					container: containerId(rel),
-					onDrop: (s: DragDropState<NoteDrag>) => handleNoteDrop(s, note, rel)
-				}}
+	<div
+		role="listitem"
+		oncontextmenu={(e) => openNoteMenu(e, note)}
+		use:sortableItem={{
+			dragData: { kind: 'note' as const, name: note.name, path: note.path },
+			container: containerId(rel),
+			onDrop: (s: DragDropState<NoteDrag>) => handleNoteDrop(s, note, rel)
+		}}
+	>
+		<div
+			role="button"
+			tabindex="0"
+			class="group flex w-full cursor-grab items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {notesState.selectedPaths.has(
+				note.path
+			)
+				? 'bg-sidebar-accent text-sidebar-foreground'
+				: noteTitle === note.name
+					? 'bg-sidebar-accent/70 text-sidebar-foreground'
+					: 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}"
+			onclick={(e) => {
+				// shift-click extends the bulk selection instead of opening
+				if (e.shiftKey) {
+					e.preventDefault();
+					notesState.toggleSelect(note.path, true);
+					return;
+				}
+				void notesState.openNote(note.path);
+			}}
+			onkeydown={(e) => {
+				if (e.key === 'Enter' || e.key === ' ') {
+					e.preventDefault();
+					void notesState.openNote(note.path);
+				}
+			}}
+		>
+			<span
+				class="flex shrink-0 items-center {notesState.selectedPaths.has(note.path)
+					? ''
+					: 'hidden group-hover:flex'}"
 			>
-				<div
-					role="button"
-					tabindex="0"
-					class="group flex w-full cursor-grab items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {notesState.selectedPaths.has(
-						note.path
-					)
-						? 'bg-sidebar-accent text-sidebar-foreground'
-						: noteTitle === note.name
-							? 'bg-sidebar-accent/70 text-sidebar-foreground'
-							: 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}"
-					onclick={(e) => {
-						// shift-click extends the bulk selection instead of opening
-						if (e.shiftKey) {
-							e.preventDefault();
-							notesState.toggleSelect(note.path, true);
-							return;
-						}
-						void notesState.openNote(note.path);
-					}}
-					onkeydown={(e) => {
-						if (e.key === 'Enter' || e.key === ' ') {
-							e.preventDefault();
-							void notesState.openNote(note.path);
-						}
-					}}
+				<Checkbox
+					checked={notesState.selectedPaths.has(note.path)}
+					onclick={(e) => e.stopPropagation()}
+					onCheckedChange={() => notesState.toggleSelect(note.path, false)}
+				/>
+			</span>
+			<svg
+				class="shrink-0 text-muted-foreground"
+				width="14"
+				height="14"
+				viewBox="0 0 24 24"
+				fill="none"
+				><path
+					fill="currentColor"
+					d="M18 2a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm-6 11H9a1 1 0 1 0 0 2h3a1 1 0 1 0 0-2m3-5H9a1 1 0 0 0-.117 1.993L9 10h6a1 1 0 0 0 .117-1.993z"
+				/></svg
+			>
+			<span class="min-w-0 truncate">{noteLabel(note.name)}</span>
+			{#if notesState.pinned.includes(note.name)}
+				<svg
+					class="ml-auto shrink-0 text-muted-foreground/60"
+					width="12"
+					height="12"
+					viewBox="0 0 24 24"
+					fill="none"
+					><path
+						fill="currentColor"
+						d="M16.735 2.835a2 2 0 0 0-2.615-.186l-2.913 2.185a9 9 0 0 1-4.127 1.71l-2.177.31c-.73.105-1.265.891-.913 1.662.331.723 1.385 2.629 4.36 5.72l-4.178 4.178a1 1 0 1 0 1.414 1.414l4.178-4.178c3.091 2.975 4.997 4.029 5.72 4.36.77.352 1.557-.183 1.661-.913l.311-2.177a9 9 0 0 1 1.71-4.127L21.35 9.88a2 2 0 0 0-.186-2.615z"
+					/></svg
 				>
-					<span
-						class="flex shrink-0 items-center {notesState.selectedPaths.has(note.path)
-							? ''
-							: 'hidden group-hover:flex'}"
-					>
-						<Checkbox
-							checked={notesState.selectedPaths.has(note.path)}
-							onclick={(e) => e.stopPropagation()}
-							onCheckedChange={() => notesState.toggleSelect(note.path, false)}
-						/>
-					</span>
-					<svg
-						class="shrink-0 text-muted-foreground"
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						><path
-							fill="currentColor"
-							d="M18 2a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm-6 11H9a1 1 0 1 0 0 2h3a1 1 0 1 0 0-2m3-5H9a1 1 0 0 0-.117 1.993L9 10h6a1 1 0 0 0 .117-1.993z"
-						/></svg
-					>
-					<span class="min-w-0 truncate">{noteLabel(note.name)}</span>
-					{#if notesState.pinned.includes(note.name)}
-						<svg
-							class="ml-auto shrink-0 text-muted-foreground/60"
-							width="12"
-							height="12"
-							viewBox="0 0 24 24"
-							fill="none"
-							><path
-								fill="currentColor"
-								d="M16.735 2.835a2 2 0 0 0-2.615-.186l-2.913 2.185a9 9 0 0 1-4.127 1.71l-2.177.31c-.73.105-1.265.891-.913 1.662.331.723 1.385 2.629 4.36 5.72l-4.178 4.178a1 1 0 1 0 1.414 1.414l4.178-4.178c3.091 2.975 4.997 4.029 5.72 4.36.77.352 1.557-.183 1.661-.913l.311-2.177a9 9 0 0 1 1.71-4.127L21.35 9.88a2 2 0 0 0-.186-2.615z"
-							/></svg
-						>
-					{/if}
-				</div>
-			</div>
-		</ContextMenu.Trigger>
-		<NoteContextMenu
-			{note}
-			pinned={notesState.pinned.includes(note.name)}
-			selected={notesState.selectedPaths.has(note.path)}
-			onRename={openRenameDialog}
-			onInfo={(n) =>
-				window.dispatchEvent(
-					new CustomEvent('open-note-info-dialog', { detail: { path: n.path } })
-				)}
-			onTogglePin={(n) => notesState.togglePin(n.name)}
-			onArchive={(n) => void notesState.archiveNote(n.path)}
-			onRestore={(n) => void notesState.restoreNote(n.path)}
-			onDelete={(n) => void notesState.deleteNote(n.path)}
-			onTags={(n) =>
-				window.dispatchEvent(
-					new CustomEvent('open-note-tags-dialog', { detail: { path: n.path } })
-				)}
-			onHistory={(n) =>
-				window.dispatchEvent(
-					new CustomEvent('open-note-history-dialog', { detail: { path: n.path } })
-				)}
-			onExport={(n, format) => void handleExport(n, format)}
-			onConvertToTask={(n) =>
-				window.dispatchEvent(new CustomEvent('convert-note-to-task', { detail: { path: n.path } }))}
-			onToggleSelect={(n) => notesState.toggleSelect(n.path, false)}
-		/>
-	</ContextMenu.Root>
+			{/if}
+		</div>
+	</div>
 {/snippet}
 
 {#snippet folderNode(rel: string)}
@@ -284,114 +281,53 @@
 			onDrop: (s: DragDropState<NoteDrag>) => handleFolderDrop(s, rel)
 		}}
 	>
-		<ContextMenu.Root>
-			<ContextMenu.Trigger class="contents">
-				<div
-					role="button"
-					tabindex="0"
-					class="flex w-full cursor-grab items-center gap-1.5 rounded-md py-1.5 pr-2 text-left text-[13px] text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-					onclick={() => notesState.toggleFolder(rel)}
-					onkeydown={(e) => {
-						if (e.key === 'Enter' || e.key === ' ') {
-							e.preventDefault();
-							notesState.toggleFolder(rel);
-						}
-					}}
-				>
-					<svg
-						class="shrink-0 text-muted-foreground transition-transform duration-150 {notesState.isExpanded(
-							rel
-						)
-							? 'rotate-90'
-							: ''}"
-						width="12"
-						height="12"
-						viewBox="0 0 24 24"
-						fill="none"
-						><path
-							fill="currentColor"
-							d="M16.06 10.94a1.5 1.5 0 0 1 0 2.12l-5.656 5.658a1.5 1.5 0 1 1-2.121-2.122L12.879 12 8.283 7.404a1.5 1.5 0 0 1 2.12-2.122l5.658 5.657Z"
-						/></svg
-					>
-					<svg
-						class="shrink-0 text-muted-foreground"
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						><path
-							fill="currentColor"
-							d="M21.328 10a.5.5 0 0 1 .496.563l-.017.08-2.89 9.644a1 1 0 0 1-.84.706L17.96 21H4a1.99 1.99 0 0 1-1.099-.328.494.494 0 0 1-.026-.234l.017-.082 2.894-9.643a1 1 0 0 1 .839-.706L6.744 10zM9.52 3a2 2 0 0 1 1.443.614l.12.137L12.48 5.5H19a2 2 0 0 1 1.995 1.85L21 7.5V8H6.744A3 3 0 0 0 3.93 9.96l-.06.178L2 16.37V5a2 2 0 0 1 1.85-1.995L4 3z"
-						/></svg
-					>
-					<span class="truncate">{rel.split('/').pop()}</span>
-					{#if !notesState.isExpanded(rel)}
-						<span class="ml-auto text-[11px] text-muted-foreground/50 tabular-nums">
-							{(notesState.folderNotes[rel] ?? []).length +
-								childFolders(rel).reduce(
-									(acc, f) => acc + (notesState.folderNotes[f] ?? []).length,
-									0
-								)}
-						</span>
-					{/if}
-				</div>
-			</ContextMenu.Trigger>
-			<ContextMenu.Content class="w-44">
-				<ContextMenu.Item onclick={() => openCreateDialog('note', rel)}>
-					<svg class="text-muted-foreground" width="16" height="16" viewBox="0 0 24 24" fill="none"
-						><path
-							fill="currentColor"
-							d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.17a2 2 0 0 0-.59-1.42l-4.58-4.58A2 2 0 0 0 13.41 2zm7.5 1.13L18.87 8H13.5z"
-						/></svg
-					>
-					New note
-				</ContextMenu.Item>
-				<ContextMenu.Item onclick={() => openCreateDialog('folder', rel)}>
-					<svg class="text-muted-foreground" width="16" height="16" viewBox="0 0 24 24" fill="none"
-						><path
-							fill="currentColor"
-							d="M21.328 10a.5.5 0 0 1 .496.563l-.017.08-2.89 9.644a1 1 0 0 1-.84.706L17.96 21H4a1.99 1.99 0 0 1-1.099-.328.494.494 0 0 1-.026-.234l.017-.082 2.894-9.643a1 1 0 0 1 .839-.706L6.744 10zM9.52 3a2 2 0 0 1 1.443.614l.12.137L12.48 5.5H19a2 2 0 0 1 1.995 1.85L21 7.5V8H6.744A3 3 0 0 0 3.93 9.96l-.06.178L2 16.37V5a2 2 0 0 1 1.85-1.995L4 3z"
-						/></svg
-					>
-					New subfolder
-				</ContextMenu.Item>
-				<ContextMenu.Item onclick={() => openFolderRenameDialog(rel)}>
-					<svg class="text-muted-foreground" width="16" height="16" viewBox="0 0 24 24" fill="none"
-						><path
-							fill="currentColor"
-							d="M20.131 3.16a3 3 0 0 0-4.242 0l-.707.708 4.95 4.95.706-.707a3 3 0 0 0 0-4.243l-.707-.707Zm-1.414 7.072-4.95-4.95-9.09 9.091a1.5 1.5 0 0 0-.401.724l-1.029 4.455a1 1 0 0 0 1.2 1.2l4.456-1.028a1.5 1.5 0 0 0 .723-.401z"
-						/></svg
-					>
-					Rename
-				</ContextMenu.Item>
-				<ContextMenu.Item
-					onclick={() =>
-						window.dispatchEvent(
-							new CustomEvent('open-note-info-dialog', {
-								detail: { path: `${notesState.folder}/${rel}` }
-							})
-						)}
-				>
-					<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-						><path
-							fill="currentColor"
-							d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2m-.01 8H11a1 1 0 0 0-.117 1.993L11 12v4.99c0 .52.394.95.9 1.004l.11.006h.49a1 1 0 0 0 .596-1.803L13 16.134V11.01c0-.52-.394-.95-.9-1.004zM12 7a1 1 0 1 0 0 2 1 1 0 0 0 0-2"
-						/></svg
-					>
-					Get info
-				</ContextMenu.Item>
-				<ContextMenu.Separator />
-				<ContextMenu.Item variant="destructive" onclick={() => void notesState.deleteFolder(rel)}>
-					<svg class="text-muted-foreground" width="16" height="16" viewBox="0 0 24 24" fill="none"
-						><path
-							fill="currentColor"
-							d="M14.28 2a2 2 0 0 1 1.897 1.368L16.72 5H20a1 1 0 1 1 0 2l-.003.071-.867 12.143A3 3 0 0 1 16.138 22H7.862a3 3 0 0 1-2.992-2.786L4.003 7.07A1.01 1.01 0 0 1 4 7a1 1 0 0 1 0-2h3.28l.543-1.632A2 2 0 0 1 9.721 2zM9 10a1 1 0 0 0-.993.883L8 11v6a1 1 0 0 0 1.993.117L10 17v-6a1 1 0 0 0-1-1m6 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0v-6a1 1 0 0 0-1-1m-.72-6H9.72l-.333 1h5.226z"
-						/></svg
-					>
-					Delete folder
-				</ContextMenu.Item>
-			</ContextMenu.Content>
-		</ContextMenu.Root>
+		<div
+			role="button"
+			tabindex="0"
+			oncontextmenu={(e) => openFolderMenu(e, rel)}
+			class="flex w-full cursor-grab items-center gap-1.5 rounded-md py-1.5 pr-2 text-left text-[13px] text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+			onclick={() => notesState.toggleFolder(rel)}
+			onkeydown={(e) => {
+				if (e.key === 'Enter' || e.key === ' ') {
+					e.preventDefault();
+					notesState.toggleFolder(rel);
+				}
+			}}
+		>
+			<svg
+				class="shrink-0 text-muted-foreground transition-transform duration-150 {notesState.isExpanded(
+					rel
+				)
+					? 'rotate-90'
+					: ''}"
+				width="12"
+				height="12"
+				viewBox="0 0 24 24"
+				fill="none"
+				><path
+					fill="currentColor"
+					d="M16.06 10.94a1.5 1.5 0 0 1 0 2.12l-5.656 5.658a1.5 1.5 0 1 1-2.121-2.122L12.879 12 8.283 7.404a1.5 1.5 0 0 1 2.12-2.122l5.658 5.657Z"
+				/></svg
+			>
+			<svg
+				class="shrink-0 text-muted-foreground"
+				width="14"
+				height="14"
+				viewBox="0 0 24 24"
+				fill="none"
+				><path
+					fill="currentColor"
+					d="M21.328 10a.5.5 0 0 1 .496.563l-.017.08-2.89 9.644a1 1 0 0 1-.84.706L17.96 21H4a1.99 1.99 0 0 1-1.099-.328.494.494 0 0 1-.026-.234l.017-.082 2.894-9.643a1 1 0 0 1 .839-.706L6.744 10zM9.52 3a2 2 0 0 1 1.443.614l.12.137L12.48 5.5H19a2 2 0 0 1 1.995 1.85L21 7.5V8H6.744A3 3 0 0 0 3.93 9.96l-.06.178L2 16.37V5a2 2 0 0 1 1.85-1.995L4 3z"
+				/></svg
+			>
+			<span class="truncate">{rel.split('/').pop()}</span>
+			{#if !notesState.isExpanded(rel)}
+				<span class="ml-auto text-[11px] text-muted-foreground/50 tabular-nums">
+					{(notesState.folderNotes[rel] ?? []).length +
+						childFolders(rel).reduce((acc, f) => acc + (notesState.folderNotes[f] ?? []).length, 0)}
+				</span>
+			{/if}
+		</div>
 	</div>
 	{#if notesState.isExpanded(rel)}
 		<!-- children indent with a subtle tree guide line, obsidian-style -->
@@ -623,6 +559,109 @@
 		</div>
 	{/if}
 {/if}
+
+<DropdownMenu.Root bind:open={noteMenuOpen}>
+	<DropdownMenu.Trigger
+		class="h-0 w-0 outline-none"
+		style="position: fixed; left: {noteMenuX}px; top: {noteMenuY}px"
+	/>
+	{#if noteMenuNote}
+		{@const note = noteMenuNote}
+		<NoteMenu
+			{note}
+			pinned={notesState.pinned.includes(note.name)}
+			selected={notesState.selectedPaths.has(note.path)}
+			onRename={openRenameDialog}
+			onInfo={(n) =>
+				window.dispatchEvent(
+					new CustomEvent('open-note-info-dialog', { detail: { path: n.path } })
+				)}
+			onTogglePin={(n) => notesState.togglePin(n.name)}
+			onArchive={(n) => void notesState.archiveNote(n.path)}
+			onRestore={(n) => void notesState.restoreNote(n.path)}
+			onDelete={(n) => void notesState.deleteNote(n.path)}
+			onTags={(n) =>
+				window.dispatchEvent(
+					new CustomEvent('open-note-tags-dialog', { detail: { path: n.path } })
+				)}
+			onHistory={(n) =>
+				window.dispatchEvent(
+					new CustomEvent('open-note-history-dialog', { detail: { path: n.path } })
+				)}
+			onExport={(n, format) => void handleExport(n, format)}
+			onConvertToTask={(n) =>
+				window.dispatchEvent(new CustomEvent('convert-note-to-task', { detail: { path: n.path } }))}
+			onToggleSelect={(n) => notesState.toggleSelect(n.path, false)}
+		/>
+	{/if}
+</DropdownMenu.Root>
+
+<DropdownMenu.Root bind:open={folderMenuOpen}>
+	<DropdownMenu.Trigger
+		class="h-0 w-0 outline-none"
+		style="position: fixed; left: {folderMenuX}px; top: {folderMenuY}px"
+	/>
+	<DropdownMenu.Content class="w-44">
+		{#if folderMenuRel}
+			<DropdownMenu.Item onclick={() => openCreateDialog('note', folderMenuRel!)}>
+				<svg class="text-muted-foreground" width="16" height="16" viewBox="0 0 24 24" fill="none"
+					><path
+						fill="currentColor"
+						d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.17a2 2 0 0 0-.59-1.42l-4.58-4.58A2 2 0 0 0 13.41 2zm7.5 1.13L18.87 8H13.5z"
+					/></svg
+				>
+				New note
+			</DropdownMenu.Item>
+			<DropdownMenu.Item onclick={() => openCreateDialog('folder', folderMenuRel!)}>
+				<svg class="text-muted-foreground" width="16" height="16" viewBox="0 0 24 24" fill="none"
+					><path
+						fill="currentColor"
+						d="M21.328 10a.5.5 0 0 1 .496.563l-.017.08-2.89 9.644a1 1 0 0 1-.84.706L17.96 21H4a1.99 1.99 0 0 1-1.099-.328.494.494 0 0 1-.026-.234l.017-.082 2.894-9.643a1 1 0 0 1 .839-.706L6.744 10zM9.52 3a2 2 0 0 1 1.443.614l.12.137L12.48 5.5H19a2 2 0 0 1 1.995 1.85L21 7.5V8H6.744A3 3 0 0 0 3.93 9.96l-.06.178L2 16.37V5a2 2 0 0 1 1.85-1.995L4 3z"
+					/></svg
+				>
+				New subfolder
+			</DropdownMenu.Item>
+			<DropdownMenu.Item onclick={() => openFolderRenameDialog(folderMenuRel!)}>
+				<svg class="text-muted-foreground" width="16" height="16" viewBox="0 0 24 24" fill="none"
+					><path
+						fill="currentColor"
+						d="M20.131 3.16a3 3 0 0 0-4.242 0l-.707.708 4.95 4.95.706-.707a3 3 0 0 0 0-4.243l-.707-.707Zm-1.414 7.072-4.95-4.95-9.09 9.091a1.5 1.5 0 0 0-.401.724l-1.029 4.455a1 1 0 0 0 1.2 1.2l4.456-1.028a1.5 1.5 0 0 0 .723-.401z"
+					/></svg
+				>
+				Rename
+			</DropdownMenu.Item>
+			<DropdownMenu.Item
+				onclick={() =>
+					window.dispatchEvent(
+						new CustomEvent('open-note-info-dialog', {
+							detail: { path: `${notesState.folder}/${folderMenuRel}` }
+						})
+					)}
+			>
+				<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+					><path
+						fill="currentColor"
+						d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2m-.01 8H11a1 1 0 0 0-.117 1.993L11 12v4.99c0 .52.394.95.9 1.004l.11.006h.49a1 1 0 0 0 .596-1.803L13 16.134V11.01c0-.52-.394-.95-.9-1.004zM12 7a1 1 0 1 0 0 2 1 1 0 0 0 0-2"
+					/></svg
+				>
+				Get info
+			</DropdownMenu.Item>
+			<DropdownMenu.Separator />
+			<DropdownMenu.Item
+				variant="destructive"
+				onclick={() => void notesState.deleteFolder(folderMenuRel!)}
+			>
+				<svg class="text-muted-foreground" width="16" height="16" viewBox="0 0 24 24" fill="none"
+					><path
+						fill="currentColor"
+						d="M14.28 2a2 2 0 0 1 1.897 1.368L16.72 5H20a1 1 0 1 1 0 2l-.003.071-.867 12.143A3 3 0 0 1 16.138 22H7.862a3 3 0 0 1-2.992-2.786L4.003 7.07A1.01 1.01 0 0 1 4 7a1 1 0 0 1 0-2h3.28l.543-1.632A2 2 0 0 1 9.721 2zM9 10a1 1 0 0 0-.993.883L8 11v6a1 1 0 0 0 1.993.117L10 17v-6a1 1 0 0 0-1-1m6 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0v-6a1 1 0 0 0-1-1m-.72-6H9.72l-.333 1h5.226z"
+					/></svg
+				>
+				Delete folder
+			</DropdownMenu.Item>
+		{/if}
+	</DropdownMenu.Content>
+</DropdownMenu.Root>
 
 <Dialog.Root bind:open={renameDialogOpen}>
 	<Dialog.Content class="w-[calc(100vw-2rem)] max-w-sm gap-0 p-0" showCloseButton={false}>

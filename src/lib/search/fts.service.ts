@@ -10,7 +10,8 @@ export function toFtsQuery(query: string, prefix = false): string {
 		.join(' ');
 }
 
-// returns ids of tasks whose title, description or subtasks match the query
+// returns ids of tasks matching the query: title, description, subtasks,
+// label names, project name and the issue number (padded or bare)
 export async function searchTaskIds(query: string): Promise<Set<string>> {
 	const db = await getDb();
 	const rows = await db.select<{ task_id: string }[]>(

@@ -3,7 +3,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
-	import * as ContextMenu from '$lib/components/ui/context-menu/index.js';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { notesState } from '$lib/notes/notesState.svelte';
 	import type { NoteInfo } from '$lib/notes/notesState.svelte';
 
@@ -42,6 +42,20 @@
 		notesState.activeTab = 'notes';
 		void notesState.openNote(path);
 		void goto('/');
+	}
+
+	// right-click on a note opens the dropdown at the pointer
+	let menuOpen = $state(false);
+	let menuX = $state(0);
+	let menuY = $state(0);
+	let menuNote = $state<NoteInfo | null>(null);
+
+	function openMenu(event: MouseEvent, note: NoteInfo) {
+		event.preventDefault();
+		menuNote = note;
+		menuX = event.clientX;
+		menuY = event.clientY;
+		menuOpen = true;
 	}
 </script>
 
@@ -151,72 +165,78 @@
 					<!-- archived note list -->
 					<div class="flex flex-col">
 						{#each filtered as note (note.path)}
-							<ContextMenu.Root>
-								<ContextMenu.Trigger class="contents">
-									<button
-										type="button"
-										class="group/note -mx-2 flex items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/40"
-										onclick={() => openNote(note.path)}
+							<button
+								type="button"
+								class="group/note -mx-2 flex items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/40"
+								onclick={() => openNote(note.path)}
+								oncontextmenu={(e) => openMenu(e, note)}
+							>
+								<!-- file icon -->
+								<span class="flex size-5 shrink-0 items-center justify-center">
+									<svg
+										class="text-muted-foreground"
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										><path
+											fill="currentColor"
+											d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.17a2 2 0 0 0-.59-1.42l-4.58-4.58A2 2 0 0 0 13.41 2zm7.5 1.13L18.87 8H13.5zM8 12h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2m0 4h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2"
+										/></svg
 									>
-										<!-- file icon -->
-										<span class="flex size-5 shrink-0 items-center justify-center">
-											<svg
-												class="text-muted-foreground"
-												width="14"
-												height="14"
-												viewBox="0 0 24 24"
-												fill="none"
-												><path
-													fill="currentColor"
-													d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.17a2 2 0 0 0-.59-1.42l-4.58-4.58A2 2 0 0 0 13.41 2zm7.5 1.13L18.87 8H13.5zM8 12h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2m0 4h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2"
-												/></svg
-											>
-										</span>
+								</span>
 
-										<!-- type badge -->
-										<span
-											class="shrink-0 font-mono text-[11px] font-medium text-muted-foreground/50"
-										>
-											NOTE
-										</span>
+								<!-- type badge -->
+								<span class="shrink-0 font-mono text-[11px] font-medium text-muted-foreground/50">
+									NOTE
+								</span>
 
-										<!-- title -->
-										<span class="min-w-0 flex-1 truncate text-[13px] text-foreground/70">
-											{note.name.replace(/\.md$/, '')}
-										</span>
+								<!-- title -->
+								<span class="min-w-0 flex-1 truncate text-[13px] text-foreground/70">
+									{note.name.replace(/\.md$/, '')}
+								</span>
 
-										<!-- archived date -->
-										<span
-											class="hidden w-16 shrink-0 text-right text-[11px] text-muted-foreground/40 sm:block"
-										>
-											{formatDate(note.modified)}
-										</span>
-									</button>
-								</ContextMenu.Trigger>
-								<ContextMenu.Content>
-									<ContextMenu.Item onclick={() => void handleRestore(note)}>
-										<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-											><path
-												fill="currentColor"
-												d="M2.614 5.426A1.5 1.5 0 0 1 4 4.5h10a7.5 7.5 0 1 1 0 15H5a1.5 1.5 0 0 1 0-3h9a4.5 4.5 0 1 0 0-9H7.621l.94.94a1.5 1.5 0 0 1-2.122 2.12l-3.5-3.5a1.5 1.5 0 0 1-.325-1.634Z"
-											/></svg
-										>
-										Restore
-									</ContextMenu.Item>
-									<ContextMenu.Separator />
-									<ContextMenu.Item variant="destructive" onclick={() => void handleDelete(note)}>
-										<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-											><path
-												fill="currentColor"
-												d="M14.28 2a2 2 0 0 1 1.897 1.368L16.72 5H20a1 1 0 1 1 0 2l-.003.071-.867 12.143A3 3 0 0 1 16.138 22H7.862a3 3 0 0 1-2.992-2.786L4.003 7.07A1.01 1.01 0 0 1 4 7a1 1 0 0 1 0-2h3.28l.543-1.632A2 2 0 0 1 9.721 2zM9 10a1 1 0 0 0-.993.883L8 11v6a1 1 0 0 0 1.993.117L10 17v-6a1 1 0 0 0-1-1m6 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0v-6a1 1 0 0 0-1-1m-.72-6H9.72l-.333 1h5.226z"
-											/></svg
-										>
-										Move to trash
-									</ContextMenu.Item>
-								</ContextMenu.Content>
-							</ContextMenu.Root>
+								<!-- archived date -->
+								<span
+									class="hidden w-16 shrink-0 text-right text-[11px] text-muted-foreground/40 sm:block"
+								>
+									{formatDate(note.modified)}
+								</span>
+							</button>
 						{/each}
 					</div>
+					<DropdownMenu.Root bind:open={menuOpen}>
+						<DropdownMenu.Trigger
+							class="h-0 w-0 outline-none"
+							style="position: fixed; left: {menuX}px; top: {menuY}px"
+						/>
+						<DropdownMenu.Content class="w-44">
+							{#if menuNote}
+								<DropdownMenu.Item onclick={() => void handleRestore(menuNote!)}>
+									<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+										><path
+											fill="currentColor"
+											d="M2.614 5.426A1.5 1.5 0 0 1 4 4.5h10a7.5 7.5 0 1 1 0 15H5a1.5 1.5 0 0 1 0-3h9a4.5 4.5 0 1 0 0-9H7.621l.94.94a1.5 1.5 0 0 1-2.122 2.12l-3.5-3.5a1.5 1.5 0 0 1-.325-1.634Z"
+										/></svg
+									>
+									Restore
+								</DropdownMenu.Item>
+								<DropdownMenu.Separator />
+								<DropdownMenu.Item
+									variant="destructive"
+									onclick={() => void handleDelete(menuNote!)}
+								>
+									<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+										><path
+											fill="currentColor"
+											d="M14.28 2a2 2 0 0 1 1.897 1.368L16.72 5H20a1 1 0 1 1 0 2l-.003.071-.867 12.143A3 3 0 0 1 16.138 22H7.862a3 3 0 0 1-2.992-2.786L4.003 7.07A1.01 1.01 0 0 1 4 7a1 1 0 0 1 0-2h3.28l.543-1.632A2 2 0 0 1 9.721 2zM9 10a1 1 0 0 0-.993.883L8 11v6a1 1 0 0 0 1.993.117L10 17v-6a1 1 0 0 0-1-1m6 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0v-6a1 1 0 0 0-1-1m-.72-6H9.72l-.333 1h5.226z"
+										/></svg
+									>
+									Move to trash
+								</DropdownMenu.Item>
+							{/if}
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
 				{/if}
 			{/if}
 		</div>

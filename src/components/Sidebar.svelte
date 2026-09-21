@@ -14,7 +14,7 @@
 	import PriorityIcon from './PriorityIcon.svelte';
 	import StatusIcon from './StatusIcon.svelte';
 	import { keyComboLabel } from '$lib/shortcuts/index.js';
-	import * as ContextMenu from '$lib/components/ui/context-menu/index.js';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
@@ -267,6 +267,20 @@
 		} catch {
 			return;
 		}
+	}
+
+	// right-click on a project opens the dropdown at the pointer
+	let projectMenuOpen = $state(false);
+	let projectMenuX = $state(0);
+	let projectMenuY = $state(0);
+	let projectMenuTarget = $state<Project | null>(null);
+
+	function openProjectMenu(event: MouseEvent, project: Project) {
+		event.preventDefault();
+		projectMenuTarget = project;
+		projectMenuX = event.clientX;
+		projectMenuY = event.clientY;
+		projectMenuOpen = true;
 	}
 
 	function dispatchFilter(eventName: string, filterKey: string, detail?: unknown) {
@@ -1055,34 +1069,42 @@
 							class="mt-0.5 ml-[13px] grid gap-px border-l border-sidebar-border/50 pl-1.5"
 						>
 							{#each projects as project (project.id)}
-								<ContextMenu.Root>
-									<ContextMenu.Trigger
-										class="flex w-full min-w-0 items-center rounded-md transition-colors hover:bg-sidebar-accent"
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<div
+									oncontextmenu={(e) => openProjectMenu(e, project)}
+									class="flex w-full min-w-0 items-center rounded-md transition-colors hover:bg-sidebar-accent"
+								>
+									<Button
+										variant="ghost"
+										class="flex h-auto min-w-0 flex-1 items-center gap-2 rounded-none px-2 py-1.5 text-left text-[13px] text-sidebar-foreground/90"
+										onclick={() => void goHomeThenDispatch('filter-by-project', project.id)}
 									>
-										<Button
-											variant="ghost"
-											class="flex h-auto min-w-0 flex-1 items-center gap-2 rounded-none px-2 py-1.5 text-left text-[13px] text-sidebar-foreground/90"
-											onclick={() => void goHomeThenDispatch('filter-by-project', project.id)}
+										<svg
+											class="shrink-0 text-muted-foreground"
+											width="14"
+											height="14"
+											viewBox="0 0 24 24"
+											fill="none"
+											><path
+												fill="currentColor"
+												d="M9.686 2.512a1.5 1.5 0 0 1 1.303 1.674L10.637 7h3.976l.399-3.186a1.5 1.5 0 0 1 2.977.372L17.637 7H20a1.5 1.5 0 0 1 0 3h-2.738l-.5 4H19.5a1.5 1.5 0 0 1 0 3h-3.113l-.398 3.186a1.5 1.5 0 0 1-2.977-.372L13.363 17H9.388l-.398 3.186a1.5 1.5 0 1 1-2.977-.372L6.363 17H4.5a1.5 1.5 0 1 1 0-3h2.238l.5-4H5a1.5 1.5 0 1 1 0-3h2.613l.399-3.186A1.5 1.5 0 0 1 9.686 2.51ZM13.74 14l.5-4h-3.977l-.5 4z"
+											/></svg
 										>
-											<svg
-												class="shrink-0 text-muted-foreground"
-												width="14"
-												height="14"
-												viewBox="0 0 24 24"
-												fill="none"
-												><path
-													fill="currentColor"
-													d="M9.686 2.512a1.5 1.5 0 0 1 1.303 1.674L10.637 7h3.976l.399-3.186a1.5 1.5 0 0 1 2.977.372L17.637 7H20a1.5 1.5 0 0 1 0 3h-2.738l-.5 4H19.5a1.5 1.5 0 0 1 0 3h-3.113l-.398 3.186a1.5 1.5 0 0 1-2.977-.372L13.363 17H9.388l-.398 3.186a1.5 1.5 0 1 1-2.977-.372L6.363 17H4.5a1.5 1.5 0 1 1 0-3h2.238l.5-4H5a1.5 1.5 0 1 1 0-3h2.613l.399-3.186A1.5 1.5 0 0 1 9.686 2.51ZM13.74 14l.5-4h-3.977l-.5 4z"
-												/></svg
-											>
-											<span class="truncate">{project.name}</span>
-											<span class="ml-auto shrink-0 text-[11px] text-muted-foreground/60"
-												>{project.prefix}</span
-											>
-										</Button>
-									</ContextMenu.Trigger>
-									<ContextMenu.Content>
-										<ContextMenu.Item onclick={() => editProject(project)}>
+										<span class="truncate">{project.name}</span>
+										<span class="ml-auto shrink-0 text-[11px] text-muted-foreground/60"
+											>{project.prefix}</span
+										>
+									</Button>
+								</div>
+							{/each}
+							<DropdownMenu.Root bind:open={projectMenuOpen}>
+								<DropdownMenu.Trigger
+									class="h-0 w-0 outline-none"
+									style="position: fixed; left: {projectMenuX}px; top: {projectMenuY}px"
+								/>
+								<DropdownMenu.Content class="w-44">
+									{#if projectMenuTarget}
+										<DropdownMenu.Item onclick={() => editProject(projectMenuTarget!)}>
 											<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 												><path
 													fill="currentColor"
@@ -1090,10 +1112,10 @@
 												/></svg
 											>
 											Edit project
-										</ContextMenu.Item>
-										<ContextMenu.Item
+										</DropdownMenu.Item>
+										<DropdownMenu.Item
 											variant="destructive"
-											onclick={() => void deleteProject(project)}
+											onclick={() => void deleteProject(projectMenuTarget!)}
 										>
 											<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 												><path
@@ -1102,10 +1124,10 @@
 												/></svg
 											>
 											Delete project
-										</ContextMenu.Item>
-									</ContextMenu.Content>
-								</ContextMenu.Root>
-							{/each}
+										</DropdownMenu.Item>
+									{/if}
+								</DropdownMenu.Content>
+							</DropdownMenu.Root>
 						</Collapsible.Content>
 					</Collapsible.Root>
 

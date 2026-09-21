@@ -14,11 +14,17 @@ import {
 
 type CreateTaskInput = Pick<Task, 'title'> &
 	Partial<
-		Pick<Task, 'id' | 'description' | 'status' | 'priority' | 'projectId' | 'dueDate' | 'endDate'>
+		Pick<
+			Task,
+			'id' | 'description' | 'status' | 'priority' | 'projectId' | 'dueDate' | 'endDate' | 'reminderAt'
+		>
 	>;
 
 type UpdateTaskInput = Partial<
-	Pick<Task, 'title' | 'description' | 'status' | 'priority' | 'dueDate' | 'endDate' | 'pinned'>
+	Pick<
+		Task,
+		'title' | 'description' | 'status' | 'priority' | 'dueDate' | 'endDate' | 'pinned' | 'reminderAt'
+	>
 >;
 
 // list columns: everything the list/board views render, minus the heavy description
@@ -31,6 +37,8 @@ const TASK_LIST_COLUMNS = `
 	priority,
 	due_date AS dueDate,
 	end_date AS endDate,
+	reminder_at AS reminderAt,
+	reminder_sent_at AS reminderSentAt,
 	sort_order AS sortOrder,
 	pinned,
 	created_at AS createdAt,
@@ -71,6 +79,7 @@ export async function create(input: CreateTaskInput): Promise<Task> {
 			priority: input.priority ?? 0,
 			dueDate: input.dueDate ?? null,
 			endDate: input.endDate ?? null,
+			reminderAt: input.reminderAt ?? null,
 			sortOrder: 0,
 			createdAt: now,
 			updatedAt: now,
@@ -78,8 +87,8 @@ export async function create(input: CreateTaskInput): Promise<Task> {
 		};
 
 		await db.execute(
-			`INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, sort_order, created_at, updated_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, $10, $11)`,
+			`INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, reminder_at, sort_order, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, $11, $12)`,
 			[
 				task.id,
 				task.number,
@@ -90,6 +99,7 @@ export async function create(input: CreateTaskInput): Promise<Task> {
 				task.priority,
 				task.dueDate,
 				task.endDate,
+				task.reminderAt,
 				task.createdAt,
 				task.updatedAt
 			]
@@ -198,6 +208,21 @@ export async function update(id: string, input: UpdateTaskInput): Promise<Task |
 				field: field as string,
 				oldValue: oldDisplay || null,
 				newValue: newDisplay || null
+			});
+		}
+
+		// reminders are a moment in time, so they compare against the task's
+		// own field instead of the column-name loop above
+		if (input.reminderAt !== undefined && (current.reminderAt ?? null) !== input.reminderAt) {
+			values.push(input.reminderAt);
+			assignments.push(`reminder_at = $${values.length}`);
+			// a new reminder time must be able to notify again
+			assignments.push('reminder_sent_at = NULL');
+			activityEntries.push({
+				action: 'reminder_changed',
+				field: 'reminder_at',
+				oldValue: current.reminderAt ? new Date(current.reminderAt).toLocaleString() : null,
+				newValue: input.reminderAt ? new Date(input.reminderAt).toLocaleString() : null
 			});
 		}
 
@@ -346,7 +371,8 @@ export async function duplicate(id: string): Promise<Task | null> {
 			priority: original.priority,
 			projectId: original.projectId,
 			dueDate: original.dueDate,
-			endDate: original.endDate
+			endDate: original.endDate,
+			reminderAt: original.reminderAt
 		});
 		if (original.labelIds && original.labelIds.length > 0) {
 			await setTaskLabels(copy.id, original.labelIds);
@@ -411,4 +437,39 @@ export async function emptyTrash(): Promise<void> {
 	} catch (error) {
 		throw new Error('Failed to empty trash', { cause: error });
 	}
+}
+
+// ---- reminders ----
+
+export type DueReminder = {
+	id: string;
+	number: number;
+	title: string;
+	prefix: string | null;
+	reminderAt: string;
+	dueDate: string | null;
+};
+
+// reminders that have come due and were not notified yet; done/canceled and
+// trashed tasks are skipped
+export async function findDueReminders(nowIso: string): Promise<DueReminder[]> {
+	const db = await getDb();
+	return await db.select<DueReminder[]>(
+		`SELECT t.id, t.number, t.title, p.prefix AS prefix, t.reminder_at AS reminderAt, t.due_date AS dueDate
+		 FROM tasks t
+		 LEFT JOIN projects p ON t.project_id = p.id
+		 WHERE t.reminder_at IS NOT NULL
+		   AND t.reminder_sent_at IS NULL
+		   AND t.deleted_at IS NULL
+		   AND t.status NOT IN ('done', 'canceled')
+		   AND t.reminder_at <= $1
+		 ORDER BY t.reminder_at ASC`,
+		[nowIso]
+	);
+}
+
+// mark a reminder as notified so it never fires twice
+export async function markReminderSent(id: string, sentAt: string): Promise<void> {
+	const db = await getDb();
+	await db.execute('UPDATE tasks SET reminder_sent_at = $1 WHERE id = $2', [sentAt, id]);
 }

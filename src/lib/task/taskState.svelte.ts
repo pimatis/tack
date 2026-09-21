@@ -156,7 +156,8 @@ export class TaskPageState {
 
 		const q = this.searchQuery.toLowerCase().trim();
 		if (q) {
-			// fts match (title, description, subtasks) with in-memory fallback while pending
+			// fts match (title, description, subtasks, labels, project, issue
+			// number) with an in-memory title fallback while results are pending
 			if (this.ftsIds) result = result.filter((t) => this.ftsIds?.has(t.id));
 			else result = result.filter((t) => t.title.toLowerCase().includes(q));
 		}

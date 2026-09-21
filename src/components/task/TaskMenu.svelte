@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as ContextMenu from '$lib/components/ui/context-menu/index.js';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import type { Task, TaskStatus } from '$lib/types/task';
 
 	let {
@@ -19,8 +19,8 @@
 	} = $props();
 </script>
 
-<ContextMenu.Content>
-	<ContextMenu.Item onclick={() => onEdit(task)}>
+<DropdownMenu.Content class="w-52">
+	<DropdownMenu.Item onclick={() => onEdit(task)}>
 		<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 			><path
 				fill="currentColor"
@@ -28,8 +28,8 @@
 			/></svg
 		>
 		Edit task
-	</ContextMenu.Item>
-	<ContextMenu.Item onclick={() => onTogglePin(task)}>
+	</DropdownMenu.Item>
+	<DropdownMenu.Item onclick={() => onTogglePin(task)}>
 		<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 			><path
 				fill="currentColor"
@@ -37,9 +37,9 @@
 			/></svg
 		>
 		{task.pinned ? 'Unpin' : 'Pin'}
-	</ContextMenu.Item>
-	<ContextMenu.Separator />
-	<ContextMenu.Item
+	</DropdownMenu.Item>
+	<DropdownMenu.Separator />
+	<DropdownMenu.Item
 		onclick={() => onChangeStatus(task, task.status === 'todo' ? 'in_progress' : 'todo')}
 	>
 		<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -49,8 +49,8 @@
 			/></svg
 		>
 		{task.status === 'todo' ? 'Mark as in progress' : 'Move to todo'}
-	</ContextMenu.Item>
-	<ContextMenu.Item onclick={() => onChangeStatus(task, 'done')}>
+	</DropdownMenu.Item>
+	<DropdownMenu.Item onclick={() => onChangeStatus(task, 'done')}>
 		<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 			><path
 				fill="currentColor"
@@ -58,9 +58,9 @@
 			/></svg
 		>
 		Mark as done
-	</ContextMenu.Item>
-	<ContextMenu.Separator />
-	<ContextMenu.Item onclick={() => onDuplicate(task.id)}>
+	</DropdownMenu.Item>
+	<DropdownMenu.Separator />
+	<DropdownMenu.Item onclick={() => onDuplicate(task.id)}>
 		<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 			><path
 				fill="currentColor"
@@ -68,8 +68,8 @@
 			/></svg
 		>
 		Duplicate
-	</ContextMenu.Item>
-	<ContextMenu.Item variant="destructive" onclick={() => onDelete(task.id)}>
+	</DropdownMenu.Item>
+	<DropdownMenu.Item variant="destructive" onclick={() => onDelete(task.id)}>
 		<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 			><path
 				fill="currentColor"
@@ -77,5 +77,5 @@
 			/></svg
 		>
 		Delete
-	</ContextMenu.Item>
-</ContextMenu.Content>
+	</DropdownMenu.Item>
+</DropdownMenu.Content>

@@ -154,6 +154,8 @@ enum TaskAction {
         due_date: Option<String>,
         #[arg(long, help = "End date (YYYY-MM-DD)")]
         end_date: Option<String>,
+        #[arg(long, help = "Reminder (ISO 8601, e.g. 2026-09-14T09:00)")]
+        reminder: Option<String>,
         #[arg(long)]
         description: Option<String>,
     },
@@ -172,6 +174,19 @@ enum TaskAction {
         #[arg(long, help = "Show tasks updated since timestamp (ISO 8601)")]
         since: Option<String>,
     },
+    /// Full-text search (title, description, subtasks, labels, project, issue number)
+    Search {
+        #[arg(long, help = "Search query")]
+        query: String,
+        #[arg(long, help = "Filter by project ID")]
+        project: Option<String>,
+        #[arg(long, help = "Filter by project prefix")]
+        project_prefix: Option<String>,
+        #[arg(long, help = "Filter by status")]
+        status: Option<String>,
+        #[arg(long, help = "Max results (default 50)")]
+        limit: Option<i64>,
+    },
     /// Show task details
     Show { id: String },
     /// Update a task
@@ -189,6 +204,11 @@ enum TaskAction {
         due_date: Option<String>,
         #[arg(long, help = "End date (YYYY-MM-DD), use empty string to clear")]
         end_date: Option<String>,
+        #[arg(
+            long,
+            help = "Reminder (ISO 8601); use empty string to clear"
+        )]
+        reminder: Option<String>,
     },
     /// Delete a task
     Delete { id: String },
@@ -692,6 +712,7 @@ fn main() {
                 priority,
                 due_date,
                 end_date,
+                reminder,
                 description,
             } => {
                 let dd = due_date.as_deref().filter(|s| !s.is_empty());
@@ -707,6 +728,7 @@ fn main() {
                     dd,
                     ed,
                     description.as_deref(),
+                    reminder.as_deref(),
                 )
             }
             TaskAction::List {
@@ -726,6 +748,21 @@ fn main() {
                 pinned,
                 since.as_deref(),
             ),
+            TaskAction::Search {
+                query,
+                project,
+                project_prefix,
+                status,
+                limit,
+            } => commands::task::search(
+                &conn,
+                json,
+                &query,
+                project.as_deref(),
+                project_prefix.as_deref(),
+                status.as_deref(),
+                limit.unwrap_or(50),
+            ),
             TaskAction::Show { id } => commands::task::show(&conn, json, &id),
             TaskAction::Update {
                 id,
@@ -735,6 +772,7 @@ fn main() {
                 priority,
                 due_date,
                 end_date,
+                reminder,
             } => commands::task::update(
                 &conn,
                 json,
@@ -745,6 +783,7 @@ fn main() {
                 priority,
                 due_date.as_deref(),
                 end_date.as_deref(),
+                reminder.as_deref(),
             ),
             TaskAction::Delete { id } => commands::task::delete(&conn, json, &id),
             TaskAction::Duplicate { id } => commands::task::duplicate(&conn, json, &id),

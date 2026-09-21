@@ -12,8 +12,6 @@
 		onMentionLeave?: () => void;
 		onOpenWiki?: (name: string) => void;
 		onOpenTag?: (tag: string) => void;
-		// right-click on a task-list row: line index + viewport coords
-		onTodoMenu?: (line: number, x: number, y: number) => void;
 		resolveAsset?: (rel: string) => string;
 		// markdown line to scroll to and flash (block link navigation)
 		highlight?: { line: number; nonce: number } | null;
@@ -28,7 +26,6 @@
 		onMentionLeave,
 		onOpenWiki,
 		onOpenTag,
-		onTodoMenu,
 		resolveAsset,
 		highlight
 	}: Props = $props();
@@ -89,16 +86,6 @@
 		}
 	}
 
-	// right-click on a task-list row: report the markdown line so the host can
-	// offer conversions (checkbox → real task)
-	function handleContextMenu(event: MouseEvent) {
-		const row = (event.target as HTMLElement).closest?.('li');
-		const todo = row?.querySelector('[data-todo]');
-		if (!(todo instanceof HTMLElement)) return;
-		event.preventDefault();
-		onTodoMenu?.(Number(todo.dataset.todo), event.clientX, event.clientY);
-	}
-
 	// hover delegation for mention previews; the anchor element lets the
 	// parent position the preview card next to the link
 	function handleMouseOver(event: MouseEvent) {
@@ -149,7 +136,6 @@
 	<div
 		bind:this={container}
 		onclick={handleClick}
-		oncontextmenu={handleContextMenu}
 		onmouseover={handleMouseOver}
 		onmouseout={handleMouseOut}
 		class="prose prose-sm max-w-none prose-invert {className}"

@@ -101,6 +101,26 @@ fn run_migrations(conn: &Connection) -> Result<()> {
             "add_end_date_to_tasks",
             include_str!("../../migrations/016_end_date.sql"),
         ),
+        (
+            17,
+            "create_notes_fts_index",
+            include_str!("../../migrations/017_notes_fts.sql"),
+        ),
+        (
+            18,
+            "create_task_notes_table",
+            include_str!("../../migrations/018_task_notes.sql"),
+        ),
+        (
+            19,
+            "add_task_reminders",
+            include_str!("../../migrations/019_reminders.sql"),
+        ),
+        (
+            20,
+            "expand_task_search_scope",
+            include_str!("../../migrations/020_task_search_scope.sql"),
+        ),
     ];
 
     let known: std::collections::HashSet<i64> =

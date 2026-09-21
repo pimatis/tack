@@ -24,7 +24,6 @@
 	import { create as createTaskRepo } from '$lib/repositories/task.repository';
 	import MentionPreviewCard from './MentionPreviewCard.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import * as ContextMenu from '$lib/components/ui/context-menu/index.js';
 	import { sortableItem, type DragDropState } from '$lib/dnd';
 
 	// flush pending edits when leaving the editor; Cmd/Ctrl+S saves immediately
@@ -412,18 +411,19 @@
 		{ label: 'Highlight', token: '==', icon: HighlighterIcon }
 	];
 
-	// effects dropdown opens at the right-click position
+	// right-click on the editor opens the formatting dropdown at the pointer
 	let effectsOpen = $state(false);
-	let effectsAnchor = $state({ x: 0, y: 0 });
+	let effectsX = $state(0);
+	let effectsY = $state(0);
 	// set when the right-clicked line is a checkbox; adds a convert action
 	let effectsTodoLine = $state<number | null>(null);
 
-	function handleEditorContextMenu(event: MouseEvent) {
+	function openEditorMenu(event: MouseEvent) {
 		event.preventDefault();
 		const textarea = editorEl;
-		const rect = textarea?.getBoundingClientRect();
-		if (!textarea || !rect) return;
-		effectsAnchor = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+		if (!textarea) return;
+		effectsX = event.clientX;
+		effectsY = event.clientY;
 		// the caret's todo line (if any) gets a convert action in the same menu
 		const caretLine = notesState.content.slice(0, textarea.selectionStart).split('\n').length - 1;
 		effectsTodoLine = /^(\s*)[-*+]\s+\[( |x|X)\]\s+\S/.test(
@@ -496,14 +496,25 @@
 		notesState.scheduleSave();
 	}
 
-	// right-click on a preview checkbox offers converting it into a real task
+	// right-click on a preview task row offers converting it into a real task;
+	// only those rows open the dropdown, right-clicks elsewhere are ignored
 	let todoMenuOpen = $state(false);
+	let todoMenuX = $state(0);
+	let todoMenuY = $state(0);
 	let todoMenuLine = $state(0);
-	let todoMenuAnchor = $state({ x: 0, y: 0 });
 
-	function openTodoMenu(line: number, x: number, y: number) {
-		todoMenuLine = line;
-		todoMenuAnchor = { x, y };
+	function openPreviewMenu(event: MouseEvent) {
+		const row = (event.target as HTMLElement).closest?.('li');
+		const todo = row?.querySelector('[data-todo]');
+		if (!(todo instanceof HTMLElement)) {
+			// veto the dropdown when the click is not on a task-list row
+			event.preventDefault();
+			return;
+		}
+		event.preventDefault();
+		todoMenuLine = Number(todo.dataset.todo);
+		todoMenuX = event.clientX;
+		todoMenuY = event.clientY;
 		todoMenuOpen = true;
 	}
 
@@ -832,6 +843,21 @@
 		const m = `linear-gradient(to right, ${left}, black 16px, black calc(100% - 16px), ${right})`;
 		return `mask-image:${m};-webkit-mask-image:${m}`;
 	});
+
+	// right-click on a tab opens its dropdown at the pointer
+	let tabMenuOpen = $state(false);
+	let tabMenuX = $state(0);
+	let tabMenuY = $state(0);
+	let tabMenuPath = $state<string | null>(null);
+
+	function openTabMenu(event: MouseEvent, tabPath: string) {
+		event.preventDefault();
+		tabMenuPath = tabPath;
+		tabMenuX = event.clientX;
+		tabMenuY = event.clientY;
+		tabMenuOpen = true;
+	}
+
 	let mentionPreviewTimer: ReturnType<typeof setTimeout> | undefined;
 	let mentionHideTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -916,87 +942,92 @@
 		>
 			{#each notesState.noteTabs as tabPath (tabPath)}
 				{@const tabName = tabPath.split('/').pop()?.replace(/\.md$/, '') ?? tabPath}
-				<ContextMenu.Root>
-					<ContextMenu.Trigger class="contents">
-						<div
-							role="listitem"
-							class="group flex h-8 max-w-[11rem] shrink-0 items-center gap-1.5 rounded-t-md border border-b-0 px-2.5 text-[12px] transition-colors {tabPath ===
-							notesState.selectedPath
-								? 'border-border bg-muted/40 text-foreground'
-								: 'border-transparent text-muted-foreground hover:bg-muted/20 hover:text-foreground'}"
-							use:sortableItem={{
-								dragData: { path: tabPath },
-								container: 'note-tabs',
-								direction: 'horizontal',
-								onDrop: (s: DragDropState<TabDrag>) => {
-									const dragged = s.draggedItem;
-									if (!dragged || !s.dropPosition) return;
-									notesState.reorderTabs(dragged.path, tabPath, s.dropPosition);
-								}
-							}}
-						>
-							<span
-								role="button"
-								tabindex="0"
-								class="min-w-0 cursor-pointer text-left"
-								onclick={() => void notesState.openNote(tabPath)}
-								onkeydown={(e) => {
-									if (e.key === 'Enter' || e.key === ' ') {
-										e.preventDefault();
-										void notesState.openNote(tabPath);
-									}
-								}}
-								onauxclick={(e) => {
-									if (e.button === 1) notesState.closeTab(tabPath);
-								}}
-							>
-								<span class="block truncate">{tabName}</span>
-							</span>
-							<span
-								role="button"
-								tabindex="-1"
-								aria-label="Close tab"
-								class="flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-opacity hover:bg-muted hover:text-foreground {tabPath ===
-								notesState.selectedPath
-									? 'opacity-100'
-									: 'opacity-0 group-hover:opacity-100'}"
-								onclick={(e) => {
-									e.stopPropagation();
-									notesState.closeTab(tabPath);
-								}}
-								onkeydown={(e) => {
-									if (e.key === 'Enter' || e.key === ' ') {
-										e.preventDefault();
-										notesState.closeTab(tabPath);
-									}
-								}}
-							>
-								<svg class="size-3" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-									<path
-										fill="currentColor"
-										d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
-									/>
-								</svg>
-							</span>
-						</div>
-					</ContextMenu.Trigger>
-					<ContextMenu.Content class="w-44">
-						<ContextMenu.Item onclick={() => notesState.closeTab(tabPath)}>
-							Close tab
-						</ContextMenu.Item>
-						<ContextMenu.Item onclick={() => notesState.closeOtherTabs(tabPath)}>
-							Close other tabs
-						</ContextMenu.Item>
-						<ContextMenu.Item
-							onclick={() => notesState.closeAllTabs()}
-							class="text-destructive data-[highlighted]:text-destructive"
-						>
-							Close all tabs
-						</ContextMenu.Item>
-					</ContextMenu.Content>
-				</ContextMenu.Root>
+				<div
+					role="listitem"
+					oncontextmenu={(e) => openTabMenu(e, tabPath)}
+					class="group flex h-8 max-w-[11rem] shrink-0 items-center gap-1.5 rounded-t-md border border-b-0 px-2.5 text-[12px] transition-colors {tabPath ===
+					notesState.selectedPath
+						? 'border-border bg-muted/40 text-foreground'
+						: 'border-transparent text-muted-foreground hover:bg-muted/20 hover:text-foreground'}"
+					use:sortableItem={{
+						dragData: { path: tabPath },
+						container: 'note-tabs',
+						direction: 'horizontal',
+						onDrop: (s: DragDropState<TabDrag>) => {
+							const dragged = s.draggedItem;
+							if (!dragged || !s.dropPosition) return;
+							notesState.reorderTabs(dragged.path, tabPath, s.dropPosition);
+						}
+					}}
+				>
+					<span
+						role="button"
+						tabindex="0"
+						class="min-w-0 cursor-pointer text-left"
+						onclick={() => void notesState.openNote(tabPath)}
+						onkeydown={(e) => {
+							if (e.key === 'Enter' || e.key === ' ') {
+								e.preventDefault();
+								void notesState.openNote(tabPath);
+							}
+						}}
+						onauxclick={(e) => {
+							if (e.button === 1) notesState.closeTab(tabPath);
+						}}
+					>
+						<span class="block truncate">{tabName}</span>
+					</span>
+					<span
+						role="button"
+						tabindex="-1"
+						aria-label="Close tab"
+						class="flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-opacity hover:bg-muted hover:text-foreground {tabPath ===
+						notesState.selectedPath
+							? 'opacity-100'
+							: 'opacity-0 group-hover:opacity-100'}"
+						onclick={(e) => {
+							e.stopPropagation();
+							notesState.closeTab(tabPath);
+						}}
+						onkeydown={(e) => {
+							if (e.key === 'Enter' || e.key === ' ') {
+								e.preventDefault();
+								notesState.closeTab(tabPath);
+							}
+						}}
+					>
+						<svg class="size-3" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+							<path
+								fill="currentColor"
+								d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
+							/>
+						</svg>
+					</span>
+				</div>
 			{/each}
 		</div>
+		<DropdownMenu.Root bind:open={tabMenuOpen}>
+			<DropdownMenu.Trigger
+				class="h-0 w-0 outline-none"
+				style="position: fixed; left: {tabMenuX}px; top: {tabMenuY}px"
+			/>
+			<DropdownMenu.Content class="w-44">
+				{#if tabMenuPath}
+					<DropdownMenu.Item onclick={() => notesState.closeTab(tabMenuPath!)}
+						>Close tab</DropdownMenu.Item
+					>
+					<DropdownMenu.Item onclick={() => notesState.closeOtherTabs(tabMenuPath!)}>
+						Close other tabs
+					</DropdownMenu.Item>
+					<DropdownMenu.Item
+						onclick={() => notesState.closeAllTabs()}
+						class="text-destructive data-[highlighted]:text-destructive"
+					>
+						Close all tabs
+					</DropdownMenu.Item>
+				{/if}
+			</DropdownMenu.Content>
+		</DropdownMenu.Root>
 	{/if}
 	<header class="flex flex-wrap items-center justify-between gap-2 pb-4 sm:pb-5">
 		<div class="flex min-w-0 flex-1 items-center gap-3">
@@ -1281,28 +1312,29 @@
 	{:else if notesState.preview}
 		<div class="flex min-h-0 flex-1 gap-4">
 			<div class="min-h-0 flex-1 overflow-auto pl-1">
-				<MarkdownRenderer
-					content={notesState.content}
-					onToggleLine={toggleTodoLine}
-					onOpenMention={(href) => void openMention(href)}
-					onMentionHover={handleMentionHover}
-					onMentionLeave={handleMentionLeave}
-					onOpenWiki={(name) => void openWiki(name)}
-					onOpenTag={(tag) => notesState.setActiveTag(tag)}
-					onTodoMenu={(line, x, y) => openTodoMenu(line, x, y)}
-					highlight={notesState.pendingLine &&
-					notesState.pendingLine.path === notesState.selectedPath
-						? notesState.pendingLine
-						: null}
-					{resolveAsset}
-				/>
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div class="contents" oncontextmenu={openPreviewMenu}>
+					<MarkdownRenderer
+						content={notesState.content}
+						onToggleLine={toggleTodoLine}
+						onOpenMention={(href) => void openMention(href)}
+						onMentionHover={handleMentionHover}
+						onMentionLeave={handleMentionLeave}
+						onOpenWiki={(name) => void openWiki(name)}
+						onOpenTag={(tag) => notesState.setActiveTag(tag)}
+						highlight={notesState.pendingLine &&
+						notesState.pendingLine.path === notesState.selectedPath
+							? notesState.pendingLine
+							: null}
+						{resolveAsset}
+					/>
+				</div>
 				<DropdownMenu.Root bind:open={todoMenuOpen}>
 					<DropdownMenu.Trigger
 						class="h-0 w-0 outline-none"
-						style="position: fixed; left: {todoMenuAnchor.x}px; top: {todoMenuAnchor.y}px"
-						aria-label="Task list options"
+						style="position: fixed; left: {todoMenuX}px; top: {todoMenuY}px"
 					/>
-					<DropdownMenu.Content class="w-52" collisionPadding={8}>
+					<DropdownMenu.Content class="w-52">
 						<DropdownMenu.Item class="gap-2.5" onclick={() => void convertTodoToTask(todoMenuLine)}>
 							<StatusIcon status="todo" size={14} />
 							Convert to task
@@ -1316,14 +1348,14 @@
 		</div>
 	{:else}
 		<!-- editor; typing "/" at line start opens the notion-style block menu,
-		     right-click on text opens the selection effects dropdown -->
+		     right-click on text opens the formatting dropdown -->
 		<div class="flex min-h-0 flex-1 gap-4">
 			<div class="relative min-h-0 flex-1">
 				<textarea
 					bind:this={editorEl}
 					bind:value={notesState.content}
 					oninput={handleEditorInput}
-					oncontextmenu={handleEditorContextMenu}
+					oncontextmenu={openEditorMenu}
 					onkeydown={handleFindTextareaKeydown}
 					onpaste={handlePaste}
 					ondrop={handleDropImage}
@@ -1331,6 +1363,35 @@
 					placeholder="Write in markdown…"
 					class="h-full w-full resize-none bg-transparent p-3 font-mono text-[13px] leading-[21px] text-foreground outline-none placeholder:text-muted-foreground/50"
 				></textarea>
+				<DropdownMenu.Root bind:open={effectsOpen}>
+					<DropdownMenu.Trigger
+						class="h-0 w-0 outline-none"
+						style="position: fixed; left: {effectsX}px; top: {effectsY}px"
+					/>
+					<DropdownMenu.Content align="start" class="w-44">
+						{#each EFFECTS as effect (effect.label)}
+							<DropdownMenu.Item class="gap-2.5" onclick={() => applyInlineEffect(effect.token)}>
+								<effect.icon class="size-4 shrink-0" />
+								{effect.label}
+							</DropdownMenu.Item>
+						{/each}
+						<DropdownMenu.Separator />
+						<DropdownMenu.Item class="gap-2.5" onclick={insertLink}>
+							<LinkIcon class="size-4 shrink-0" />
+							Link
+						</DropdownMenu.Item>
+						{#if effectsTodoLine !== null}
+							<DropdownMenu.Separator />
+							<DropdownMenu.Item
+								class="gap-2.5"
+								onclick={() => void convertTodoToTask(effectsTodoLine ?? 0)}
+							>
+								<StatusIcon status="todo" size={14} />
+								Convert to task
+							</DropdownMenu.Item>
+						{/if}
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
 				{#if findOpen}
 					<!-- find & replace widget, vs-code style top-right overlay -->
 					<div
@@ -1417,36 +1478,6 @@
 						</div>
 					</div>
 				{/if}
-				<DropdownMenu.Root bind:open={effectsOpen}>
-					<DropdownMenu.Trigger
-						class="absolute h-0 w-0 outline-none"
-						style="left: {effectsAnchor.x}px; top: {effectsAnchor.y}px"
-						aria-label="Text formatting"
-					/>
-					<DropdownMenu.Content align="start" class="w-44">
-						{#each EFFECTS as effect (effect.label)}
-							<DropdownMenu.Item class="gap-2.5" onclick={() => applyInlineEffect(effect.token)}>
-								<effect.icon class="size-4 shrink-0" />
-								{effect.label}
-							</DropdownMenu.Item>
-						{/each}
-						<DropdownMenu.Separator />
-						<DropdownMenu.Item class="gap-2.5" onclick={insertLink}>
-							<LinkIcon class="size-4 shrink-0" />
-							Link
-						</DropdownMenu.Item>
-						{#if effectsTodoLine !== null}
-							<DropdownMenu.Separator />
-							<DropdownMenu.Item
-								class="gap-2.5"
-								onclick={() => void convertTodoToTask(effectsTodoLine ?? 0)}
-							>
-								<StatusIcon status="todo" size={14} />
-								Convert to task
-							</DropdownMenu.Item>
-						{/if}
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
 				<DropdownMenu.Root bind:open={slashOpen}>
 					<DropdownMenu.Trigger
 						class="absolute h-0 w-0 outline-none"

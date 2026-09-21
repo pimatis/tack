@@ -14,6 +14,7 @@
 		loadSettingsFromDb
 	} from '$lib/stores/settings';
 	import { startBackupScheduler } from '$lib/backup/backup.service';
+	import { startReminderScheduler } from '$lib/reminders/reminder.service';
 	import { startLiveManager } from '$lib/live/live.service';
 	import { isLiveAuthRequired } from '$lib/live/auth.service';
 	import LiveAuthDialog from '../components/LiveAuthDialog.svelte';
@@ -62,6 +63,7 @@
 		const syncInterval = window.setInterval(() => void loadSettingsFromDb(), 30000);
 		const stopBackups = startBackupScheduler();
 		const stopLive = startLiveManager();
+		const stopReminders = startReminderScheduler();
 
 		const narrowQuery = window.matchMedia('(max-width: 1023px)');
 		const applyNarrow = () => (isNarrow = narrowQuery.matches);
@@ -105,6 +107,7 @@
 			window.clearInterval(syncInterval);
 			stopBackups();
 			stopLive();
+			stopReminders();
 			clearTimeout(notesSyncTimer);
 			unlistenNotes();
 			unlistenNotesDb();

@@ -11,6 +11,7 @@
 	import { getSettings } from '$lib/stores/settings';
 	import { notesState } from '$lib/notes/notesState.svelte';
 	import { searchNotes, type NoteSearchResult } from '$lib/notes/search';
+	import { searchTaskIds } from '$lib/search/fts.service';
 	import StatusIcon from './StatusIcon.svelte';
 
 	let open = $state(false);
@@ -18,17 +19,23 @@
 	let tasks = $state<Task[]>([]);
 	let projects = $state<Project[]>([]);
 	let noteResults = $state<NoteSearchResult[] | null>(null);
+	let taskResults = $state<Set<string> | null>(null);
 
 	const normalized = $derived(query.trim().toLowerCase());
 
-	// cmdk's built-in filter cannot mix with async fts results, so filter here
-	const shownTasks = $derived(
-		normalized
-			? tasks.filter((t) =>
-					`${issueId(t, projects, getSettings())} ${t.title}`.toLowerCase().includes(normalized)
-				)
-			: tasks
-	);
+	// cmdk's built-in filter cannot mix with async fts results, so filter here.
+	// fts hits add description, label, project and issue number matches; the
+	// in-memory title/issue substring keeps partial words working while the
+	// async results are still in flight
+	const shownTasks = $derived.by(() => {
+		if (!normalized) return tasks;
+		const ids = taskResults;
+		return tasks.filter(
+			(t) =>
+				(ids?.has(t.id) ?? false) ||
+				`${issueId(t, projects, getSettings())} ${t.title}`.toLowerCase().includes(normalized)
+		);
+	});
 
 	const shownProjects = $derived(
 		normalized
@@ -79,6 +86,19 @@
 		}
 		const timer = setTimeout(async () => {
 			noteResults = await searchNotes(q).catch(() => []);
+		}, 150);
+		return () => clearTimeout(timer);
+	});
+
+	// debounced full-text search over tasks
+	$effect(() => {
+		const q = normalized;
+		if (!open || !q) {
+			taskResults = null;
+			return;
+		}
+		const timer = setTimeout(async () => {
+			taskResults = await searchTaskIds(q).catch(() => null);
 		}, 150);
 		return () => clearTimeout(timer);
 	});

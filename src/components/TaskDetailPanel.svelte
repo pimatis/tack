@@ -45,6 +45,7 @@
 	import StatusIcon from './StatusIcon.svelte';
 	import MarkdownRenderer from './MarkdownRenderer.svelte';
 	import DueDatePicker from './DueDatePicker.svelte';
+	import ReminderPicker from './ReminderPicker.svelte';
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
 	import { getLinkingNotes } from '$lib/notes/search';
 	import { notesState } from '$lib/notes/notesState.svelte';
@@ -83,6 +84,7 @@
 	let priority = $state('0');
 	let dueDate = $state<string>('');
 	let endDate = $state<string>('');
+	let reminderAt = $state<string>('');
 	let error = $state<string | null>(null);
 	let submitting = $state(false);
 	let previewMode = $state(false);
@@ -115,6 +117,7 @@
 		priority: string;
 		dueDate: string;
 		endDate: string;
+		reminderAt: string;
 		labelIds: string[];
 		pendingCount: number;
 	} | null>(null);
@@ -126,6 +129,7 @@
 				original.priority !== priority ||
 				original.dueDate !== dueDate ||
 				original.endDate !== endDate ||
+				original.reminderAt !== reminderAt ||
 				original.pendingCount !== pendingAttachments.length ||
 				original.labelIds.length !== selectedLabelIds.length ||
 				selectedLabelIds.some((id) => !original!.labelIds.includes(id)))
@@ -171,6 +175,7 @@
 		priority = String(task.priority);
 		dueDate = task.dueDate ?? '';
 		endDate = task.endDate ?? '';
+		reminderAt = task.reminderAt ?? '';
 		error = null;
 		previewMode = false;
 		pendingAttachments = [];
@@ -188,6 +193,7 @@
 			priority: String(task.priority),
 			dueDate: task.dueDate ?? '',
 			endDate: task.endDate ?? '',
+			reminderAt: task.reminderAt ?? '',
 			labelIds: [],
 			pendingCount: 0
 		};
@@ -561,7 +567,8 @@
 				status,
 				priority: Number(priority) as TaskPriority,
 				dueDate: dueDate || null,
-				endDate: endDate || null
+				endDate: endDate || null,
+				reminderAt: reminderAt || null
 			});
 
 			for (const att of pendingAttachments) {
@@ -629,6 +636,8 @@
 				return entry.newValue ? `set due date to ${entry.newValue}` : 'removed the due date';
 			case 'end_date_changed':
 				return entry.newValue ? `set end date to ${entry.newValue}` : 'removed the end date';
+			case 'reminder_changed':
+				return entry.newValue ? `set a reminder for ${entry.newValue}` : 'removed the reminder';
 			case 'label_added':
 				return `added label ${entry.newValue}`;
 			case 'label_removed':
@@ -1392,6 +1401,16 @@
 								value={endDate}
 								onSelect={(d) => (endDate = d)}
 								onClear={() => (endDate = '')}
+							/>
+						</div>
+
+						<!-- reminder -->
+						<div class="flex flex-col gap-1 py-1.5">
+							<span class="text-[11px] font-medium text-muted-foreground/60">Reminder</span>
+							<ReminderPicker
+								value={reminderAt}
+								onSelect={(iso) => (reminderAt = iso)}
+								onClear={() => (reminderAt = '')}
 							/>
 						</div>
 

@@ -12,6 +12,10 @@ export type Task = {
 	priority: TaskPriority;
 	dueDate?: string | null;
 	endDate?: string | null;
+	// utc iso timestamp for the reminder notification, null when unset
+	reminderAt?: string | null;
+	// set once the reminder notification has fired
+	reminderSentAt?: string | null;
 	sortOrder?: number;
 	pinned?: boolean;
 	labelIds?: string[];

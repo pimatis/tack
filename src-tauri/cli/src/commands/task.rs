@@ -1,6 +1,135 @@
 use crate::db::*;
+use chrono::{Local, SecondsFormat, TimeZone, Utc};
 use rusqlite::{params, Connection};
 use serde_json::json;
+
+// accept an rfc3339 instant or a local "YYYY-MM-DDTHH:MM[:SS]"; stored as utc
+// iso so the app's string comparison against now works
+fn parse_reminder(value: &str) -> Result<Option<String>> {
+    let v = value.trim();
+    if v.is_empty() {
+        return Ok(None);
+    }
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(v) {
+        return Ok(Some(
+            dt.with_timezone(&Utc)
+                .to_rfc3339_opts(SecondsFormat::Millis, true),
+        ));
+    }
+    for fmt in ["%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S"] {
+        if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(v, fmt) {
+            if let chrono::LocalResult::Single(dt) = Local.from_local_datetime(&naive) {
+                return Ok(Some(
+                    dt.with_timezone(&Utc)
+                        .to_rfc3339_opts(SecondsFormat::Millis, true),
+                ));
+            }
+        }
+    }
+    Err(format!(
+        "Invalid reminder '{}': use ISO 8601 like 2026-09-14T09:00 or 2026-09-14T09:00:00Z",
+        value
+    ))
+}
+
+// columns shared by `list` and `search`, so both render identically
+struct TaskRow {
+    id: String,
+    number: i32,
+    title: String,
+    status: String,
+    priority: i32,
+    due_date: Option<String>,
+    end_date: Option<String>,
+    pinned: bool,
+    prefix: Option<String>,
+    updated_at: String,
+    created_at: String,
+}
+
+fn map_task_row(row: &rusqlite::Row) -> rusqlite::Result<TaskRow> {
+    Ok(TaskRow {
+        id: row.get(0)?,
+        number: row.get(1)?,
+        title: row.get(2)?,
+        status: row.get(3)?,
+        priority: row.get(4)?,
+        due_date: row.get(5)?,
+        end_date: row.get(6)?,
+        pinned: row.get::<_, i32>(7)? == 1,
+        prefix: row.get(8)?,
+        updated_at: row.get(9)?,
+        created_at: row.get(10)?,
+    })
+}
+
+// issue number as shown in the app: PREFIX-N, or #N without a project
+fn display_number(number: i32, prefix: Option<&str>) -> String {
+    match prefix {
+        Some(p) => format!("{}-{}", p, number),
+        None => format!("#{}", number),
+    }
+}
+
+fn render_task_rows(json: bool, rows: &[TaskRow]) -> Result<()> {
+    if json {
+        let items: Vec<serde_json::Value> = rows
+            .iter()
+            .map(|r| {
+                json!({
+                    "id": r.id,
+                    "number": r.number,
+                    "display_number": display_number(r.number, r.prefix.as_deref()),
+                    "title": r.title,
+                    "status": r.status,
+                    "priority": r.priority,
+                    "due_date": r.due_date,
+                    "end_date": r.end_date,
+                    "pinned": r.pinned,
+                    "project_prefix": r.prefix,
+                    "updated_at": r.updated_at,
+                    "created_at": r.created_at,
+                })
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({ "tasks": items })).map_err(|e| e.to_string())?
+        );
+    } else {
+        let table_rows: Vec<Vec<String>> = rows
+            .iter()
+            .map(|r| {
+                vec![
+                    r.id.clone(),
+                    display_number(r.number, r.prefix.as_deref()),
+                    r.title.clone(),
+                    status_label(&r.status).to_string(),
+                    priority_label(r.priority).to_string(),
+                    r.due_date.clone().unwrap_or("-".to_string()),
+                    if r.pinned { "yes" } else { "-" }.to_string(),
+                ]
+            })
+            .collect();
+        print_table(
+            &[
+                "ID", "NUMBER", "TITLE", "STATUS", "PRIORITY", "DUE DATE", "PINNED",
+            ],
+            &table_rows,
+        );
+    }
+    Ok(())
+}
+
+// wrap each term as an fts5 phrase so user input is matched literally and
+// cannot inject fts syntax; mirrors the app's toFtsQuery
+fn fts_query(query: &str) -> String {
+    query
+        .split_whitespace()
+        .map(|term| format!("\"{}\"", term.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
 
 pub fn create(
     conn: &Connection,
@@ -13,10 +142,15 @@ pub fn create(
     due_date: Option<&str>,
     end_date: Option<&str>,
     description: Option<&str>,
+    reminder: Option<&str>,
 ) -> Result<()> {
     let project_id = resolve_project_id(conn, project, project_prefix)?;
     let id = new_id();
     let now = now_iso();
+    let reminder_at = match reminder {
+        Some(value) => parse_reminder(value)?,
+        None => None,
+    };
 
     let final_status = status
         .map(|s| s.to_string())
@@ -39,9 +173,9 @@ pub fn create(
     .map_err(|e| format!("Failed to assign task number: {}", e))?;
 
     conn.execute(
-        "INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, sort_order, pinned, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, 0, ?10, ?11)",
-        params![id, number, project_id, title, description, final_status, final_priority, due_date, end_date, now, now],
+        "INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, reminder_at, sort_order, pinned, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0, 0, ?11, ?12)",
+        params![id, number, project_id, title, description, final_status, final_priority, due_date, end_date, reminder_at, now, now],
     ).map_err(|e| format!("Failed to create task: {}", e))?;
 
     log_activity(conn, &id, "created", None, None, None, "cli")?;
@@ -60,6 +194,7 @@ pub fn create(
                     "priority": final_priority,
                     "due_date": due_date,
                     "end_date": end_date,
+                    "reminder_at": reminder_at,
                     "project_id": project_id,
                     "created_at": now,
                 }
@@ -121,107 +256,70 @@ pub fn list(
         .map_err(|e| format!("Failed to query tasks: {}", e))?;
 
     let arg_refs: Vec<&dyn rusqlite::ToSql> = args.iter().map(|a| a.as_ref()).collect();
-    let rows: Vec<(
-        String,
-        i32,
-        String,
-        String,
-        i32,
-        Option<String>,
-        Option<String>,
-        i32,
-        Option<String>,
-        String,
-        String,
-    )> = stmt
-        .query_map(&arg_refs[..], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, i32>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, i32>(4)?,
-                row.get::<_, Option<String>>(5)?,
-                row.get::<_, Option<String>>(6)?,
-                row.get::<_, i32>(7)?,
-                row.get::<_, Option<String>>(8)?,
-                row.get::<_, String>(9)?,
-                row.get::<_, String>(10)?,
-            ))
-        })
+    let rows: Vec<TaskRow> = stmt
+        .query_map(&arg_refs[..], map_task_row)
         .map_err(|e| format!("Failed to query tasks: {}", e))?
         .filter_map(|r| r.ok())
         .collect();
 
-    if json {
-        let items: Vec<serde_json::Value> = rows
-            .iter()
-            .map(|r| {
-                let prefix = &r.8;
-                let number = r.1;
-                let display_number = match prefix {
-                    Some(p) => format!("{}-{}", p, number),
-                    None => format!("#{}", number),
-                };
-                json!({
-                    "id": r.0,
-                    "number": number,
-                    "display_number": display_number,
-                    "title": r.2,
-                    "status": r.3,
-                    "priority": r.4,
-                    "due_date": r.5,
-                    "end_date": r.6,
-                    "pinned": r.7 == 1,
-                    "project_prefix": prefix,
-                    "updated_at": r.9,
-                    "created_at": r.10,
-                })
-            })
-            .collect();
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({ "tasks": items })).map_err(|e| e.to_string())?
-        );
-    } else {
-        let table_rows: Vec<Vec<String>> = rows
-            .iter()
-            .map(|r| {
-                let prefix = &r.8;
-                let display_number = match prefix {
-                    Some(p) => format!("{}-{}", p, r.1),
-                    None => format!("#{}", r.1),
-                };
-                vec![
-                    r.0.clone(),
-                    display_number,
-                    r.2.clone(),
-                    status_label(&r.3).to_string(),
-                    priority_label(r.4).to_string(),
-                    r.5.clone().unwrap_or("-".to_string()),
-                    if r.7 == 1 {
-                        "yes".to_string()
-                    } else {
-                        "-".to_string()
-                    },
-                ]
-            })
-            .collect();
-        print_table(
-            &[
-                "ID", "NUMBER", "TITLE", "STATUS", "PRIORITY", "DUE DATE", "PINNED",
-            ],
-            &table_rows,
-        );
+    render_task_rows(json, &rows)
+}
+
+// full-text search over the task index: title, description, subtasks, label
+// names, project name and the issue number. trashed tasks are excluded.
+pub fn search(
+    conn: &Connection,
+    json: bool,
+    query: &str,
+    project: Option<&str>,
+    project_prefix: Option<&str>,
+    status: Option<&str>,
+    limit: i64,
+) -> Result<()> {
+    let match_query = fts_query(query);
+    if match_query.is_empty() {
+        return Err("Empty search query".to_string());
     }
-    Ok(())
+    let project_id = resolve_project_id(conn, project, project_prefix)?;
+
+    let mut sql = String::from(
+        "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at
+         FROM tasks_fts
+         JOIN tasks t ON t.id = tasks_fts.task_id
+         LEFT JOIN projects p ON t.project_id = p.id
+         WHERE tasks_fts MATCH ? AND t.deleted_at IS NULL",
+    );
+    let mut args: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(match_query)];
+
+    if let Some(ref pid) = project_id {
+        sql.push_str(" AND t.project_id = ?");
+        args.push(Box::new(pid.clone()));
+    }
+    if let Some(s) = status {
+        sql.push_str(" AND t.status = ?");
+        args.push(Box::new(s.to_string()));
+    }
+    sql.push_str(" ORDER BY rank LIMIT ?");
+    args.push(Box::new(limit));
+
+    let mut stmt = conn
+        .prepare(&sql)
+        .map_err(|e| format!("Failed to search tasks: {}", e))?;
+    let arg_refs: Vec<&dyn rusqlite::ToSql> = args.iter().map(|a| a.as_ref()).collect();
+    let rows: Vec<TaskRow> = stmt
+        .query_map(&arg_refs[..], map_task_row)
+        .map_err(|e| format!("Failed to search tasks: {}", e))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    render_task_rows(json, &rows)
 }
 
 pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
     let id = resolve_task_id(conn, id)?;
     let task = conn.query_row(
         "SELECT t.id, t.number, t.title, t.description, t.status, t.priority, t.due_date, t.end_date, t.pinned,
-                t.project_id, p.name, p.prefix, t.created_at, t.updated_at
+                t.project_id, p.name, p.prefix, t.created_at, t.updated_at, t.reminder_at
          FROM tasks t
          LEFT JOIN projects p ON t.project_id = p.id
          WHERE t.id = ?1",
@@ -242,6 +340,7 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
                 row.get::<_, Option<String>>(11)?,
                 row.get::<_, String>(12)?,
                 row.get::<_, String>(13)?,
+                row.get::<_, Option<String>>(14)?,
             ))
         },
     ).map_err(|_| format!("Task {} not found", id))?;
@@ -261,6 +360,7 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
         project_prefix,
         created,
         updated,
+        reminder,
     ) = task;
 
     let display_number = match &project_prefix {
@@ -332,6 +432,7 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
                     "priority": priority,
                     "due_date": due,
                     "end_date": end,
+                    "reminder_at": reminder,
                     "pinned": pinned == 1,
                     "project": {
                         "name": project_name,
@@ -363,6 +464,7 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
         println!("Priority:    {}", priority_label(priority));
         println!("Due date:    {}", due.unwrap_or("-".to_string()));
         println!("End date:    {}", end.unwrap_or("-".to_string()));
+        println!("Reminder:    {}", reminder.unwrap_or("-".to_string()));
         println!("Pinned:      {}", if pinned == 1 { "yes" } else { "no" });
         if let Some(pname) = project_name {
             println!(
@@ -433,10 +535,11 @@ pub fn update(
     priority: Option<i32>,
     due_date: Option<&str>,
     end_date: Option<&str>,
+    reminder: Option<&str>,
 ) -> Result<()> {
     let id = resolve_task_id(conn, id)?;
     let current = conn.query_row(
-        "SELECT title, description, status, priority, due_date, end_date FROM tasks WHERE id = ?1",
+        "SELECT title, description, status, priority, due_date, end_date, reminder_at FROM tasks WHERE id = ?1",
         params![id],
         |row| {
             Ok((
@@ -446,11 +549,12 @@ pub fn update(
                 row.get::<_, i32>(3)?,
                 row.get::<_, Option<String>>(4)?,
                 row.get::<_, Option<String>>(5)?,
+                row.get::<_, Option<String>>(6)?,
             ))
         },
     ).map_err(|_| format!("Task {} not found", id))?;
 
-    let (cur_title, cur_desc, cur_status, cur_priority, cur_due, cur_end) = current;
+    let (cur_title, cur_desc, cur_status, cur_priority, cur_due, cur_end, cur_reminder) = current;
 
     let new_title = title.unwrap_or(&cur_title);
     let new_desc = description.map(Some).unwrap_or(cur_desc.as_deref());
@@ -463,11 +567,17 @@ pub fn update(
     let new_end = end_date
         .map(|s| if s.is_empty() { None } else { Some(s) })
         .unwrap_or(cur_end.as_deref());
+    // empty string clears the reminder, None keeps the current value
+    let new_reminder = match reminder {
+        Some(value) => parse_reminder(value)?,
+        None => cur_reminder.clone(),
+    };
+    let reminder_changed = new_reminder != cur_reminder;
 
     let now = now_iso();
     let result = conn.execute(
-        "UPDATE tasks SET title = ?1, description = ?2, status = ?3, priority = ?4, due_date = ?5, end_date = ?6, updated_at = ?7 WHERE id = ?8",
-        params![new_title, new_desc, new_status, new_priority, new_due, new_end, now, id],
+        "UPDATE tasks SET title = ?1, description = ?2, status = ?3, priority = ?4, due_date = ?5, end_date = ?6, reminder_at = ?7, reminder_sent_at = CASE WHEN ?7 IS NOT ?8 THEN NULL ELSE reminder_sent_at END, updated_at = ?9 WHERE id = ?10",
+        params![new_title, new_desc, new_status, new_priority, new_due, new_end, new_reminder, cur_reminder, now, id],
     ).map_err(|e| format!("Failed to update task: {}", e))?;
 
     if result == 0 {
@@ -504,6 +614,18 @@ pub fn update(
             Some("title"),
             Some(&cur_title),
             Some(new_title),
+            "cli",
+        )?;
+    }
+
+    if reminder_changed {
+        log_activity(
+            conn,
+            &id,
+            "reminder_changed",
+            Some("reminder_at"),
+            cur_reminder.as_deref(),
+            new_reminder.as_deref(),
             "cli",
         )?;
     }
@@ -554,7 +676,7 @@ pub fn delete(conn: &Connection, json: bool, id: &str) -> Result<()> {
 pub fn duplicate(conn: &Connection, json: bool, id: &str) -> Result<()> {
     let id = resolve_task_id(conn, id)?;
     let original = conn.query_row(
-        "SELECT title, description, status, priority, project_id, due_date, end_date FROM tasks WHERE id = ?1",
+        "SELECT title, description, status, priority, project_id, due_date, end_date, reminder_at FROM tasks WHERE id = ?1",
         params![id],
         |row| {
             Ok((
@@ -565,11 +687,12 @@ pub fn duplicate(conn: &Connection, json: bool, id: &str) -> Result<()> {
                 row.get::<_, Option<String>>(4)?,
                 row.get::<_, Option<String>>(5)?,
                 row.get::<_, Option<String>>(6)?,
+                row.get::<_, Option<String>>(7)?,
             ))
         },
     ).map_err(|_| format!("Task {} not found", id))?;
 
-    let (title, desc, status, priority, project_id, due_date, end_date) = original;
+    let (title, desc, status, priority, project_id, due_date, end_date, reminder) = original;
     let copy_title = format!("{} (copy)", title);
 
     create(
@@ -583,6 +706,7 @@ pub fn duplicate(conn: &Connection, json: bool, id: &str) -> Result<()> {
         due_date.as_deref(),
         end_date.as_deref(),
         desc.as_deref(),
+        reminder.as_deref(),
     )?;
     Ok(())
 }

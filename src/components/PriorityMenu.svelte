@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { Button } from '$lib/components/ui/button/index.js';
-	import * as Popover from '$lib/components/ui/popover/index.js';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import PriorityIcon from './PriorityIcon.svelte';
 	import { priorityConfig } from '$lib/task/constants';
 
@@ -18,24 +17,30 @@
 		title?: string;
 		align?: 'start' | 'end' | 'center';
 	} = $props();
+
+	let open = $state(false);
+
+	// the trigger opens on right-click too, not just left-click; don't let the
+	// row's own context handler open a second menu underneath it
+	function openOnRightClick(event: MouseEvent) {
+		event.preventDefault();
+		event.stopPropagation();
+		open = true;
+	}
 </script>
 
-<Popover.Root>
-	<Popover.Trigger>
+<DropdownMenu.Root bind:open>
+	<DropdownMenu.Trigger>
 		{#snippet child({ props })}
-			{@render trigger(props)}
+			{@render trigger({ ...props, oncontextmenu: openOnRightClick })}
 		{/snippet}
-	</Popover.Trigger>
-	<Popover.Content class="w-[calc(100vw-2rem)] max-w-48 p-1.5" {align}>
+	</DropdownMenu.Trigger>
+	<DropdownMenu.Content class="w-48 p-1.5" {align}>
 		<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
 			{title}
 		</div>
 		{#each [0, 1, 2, 3, 4] as p (p)}
-			<Button
-				variant="ghost"
-				class="flex h-auto w-full items-center justify-start gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-foreground transition-colors hover:bg-muted"
-				onclick={() => onSelect(p)}
-			>
+			<DropdownMenu.Item class="gap-2.5 py-1.5 text-[13px]" onclick={() => onSelect(p)}>
 				<PriorityIcon priority={p} size={14} />
 				<span>{priorityConfig[p].label}</span>
 				{#if value === p}
@@ -51,7 +56,7 @@
 						/></svg
 					>
 				{/if}
-			</Button>
+			</DropdownMenu.Item>
 		{/each}
-	</Popover.Content>
-</Popover.Root>
+	</DropdownMenu.Content>
+</DropdownMenu.Root>

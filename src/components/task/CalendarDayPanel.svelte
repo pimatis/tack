@@ -2,11 +2,11 @@
 	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
-	import * as ContextMenu from '$lib/components/ui/context-menu/index.js';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import StatusIcon from '../StatusIcon.svelte';
 	import TaskLabels from './TaskLabels.svelte';
 	import DueDateBadge from './DueDateBadge.svelte';
-	import TaskContextMenu from './TaskContextMenu.svelte';
+	import TaskMenu from './TaskMenu.svelte';
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
 	import PriorityIcon from '../PriorityIcon.svelte';
 	import PriorityMenu from '../PriorityMenu.svelte';
@@ -88,6 +88,20 @@
 			unregisterClose();
 		};
 	});
+
+	// right-click on a row opens the dropdown at the pointer
+	let menuOpen = $state(false);
+	let menuX = $state(0);
+	let menuY = $state(0);
+	let menuTask = $state<Task | null>(null);
+
+	function openMenu(event: MouseEvent, task: Task) {
+		event.preventDefault();
+		menuTask = task;
+		menuX = event.clientX;
+		menuY = event.clientY;
+		menuOpen = true;
+	}
 </script>
 
 <Sheet.Root
@@ -151,99 +165,105 @@
 				{:else}
 					<div class="flex flex-col gap-0.5">
 						{#each sortedTasks as task (task.id)}
-							<ContextMenu.Root>
-								<ContextMenu.Trigger class="contents">
-									<div
-										class="group/row flex w-full cursor-default flex-col gap-1.5 rounded-lg px-2.5 py-2 transition-colors hover:bg-muted/60"
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div
+								oncontextmenu={(e) => openMenu(e, task)}
+								class="group/row flex w-full cursor-default flex-col gap-1.5 rounded-lg px-2.5 py-2 transition-colors hover:bg-muted/60"
+							>
+								<div class="flex items-center gap-1.5">
+									<!-- status popover -->
+									<StatusMenu value={task.status} onSelect={(s) => onChangeStatus(task, s)}>
+										{#snippet trigger(props)}
+											<Button
+												{...props}
+												variant="ghost"
+												size="icon-xs"
+												class="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted"
+												aria-label={`Change status for ${task.title}`}
+											>
+												<StatusIcon status={task.status} size={14} />
+											</Button>
+										{/snippet}
+									</StatusMenu>
+
+									<!-- priority popover -->
+									<PriorityMenu
+										value={task.priority}
+										onSelect={(p) => onChangePriority(task, p as TaskPriority)}
 									>
-										<div class="flex items-center gap-1.5">
-											<!-- status popover -->
-											<StatusMenu value={task.status} onSelect={(s) => onChangeStatus(task, s)}>
-												{#snippet trigger(props)}
-													<Button
-														{...props}
-														variant="ghost"
-														size="icon-xs"
-														class="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted"
-														aria-label={`Change status for ${task.title}`}
-													>
-														<StatusIcon status={task.status} size={14} />
-													</Button>
-												{/snippet}
-											</StatusMenu>
-
-											<!-- priority popover -->
-											<PriorityMenu
-												value={task.priority}
-												onSelect={(p) => onChangePriority(task, p as TaskPriority)}
+										{#snippet trigger(props)}
+											<Button
+												{...props}
+												variant="ghost"
+												size="icon-xs"
+												class="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
+												aria-label={`Set priority for ${task.title}`}
 											>
-												{#snippet trigger(props)}
-													<Button
-														{...props}
-														variant="ghost"
-														size="icon-xs"
-														class="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
-														aria-label={`Set priority for ${task.title}`}
-													>
-														{#if task.priority > 0}
-															<PriorityIcon priority={task.priority} size={13} />
-														{/if}
-													</Button>
-												{/snippet}
-											</PriorityMenu>
+												{#if task.priority > 0}
+													<PriorityIcon priority={task.priority} size={13} />
+												{/if}
+											</Button>
+										{/snippet}
+									</PriorityMenu>
 
-											<!-- title -->
-											<button
-												type="button"
-												class="min-w-0 flex-1 cursor-pointer truncate [mask-image:linear-gradient(to_right,black_95%,transparent_100%)] text-left text-[13px] [-webkit-mask-image:linear-gradient(to_right,black_95%,transparent_100%)] {isDone(
-													task
-												)
-													? 'text-muted-foreground/60 line-through'
-													: 'text-foreground'}"
-												onclick={() => {
-													close();
-													onEdit(task);
-												}}
+									<!-- title -->
+									<button
+										type="button"
+										class="min-w-0 flex-1 cursor-pointer truncate [mask-image:linear-gradient(to_right,black_95%,transparent_100%)] text-left text-[13px] [-webkit-mask-image:linear-gradient(to_right,black_95%,transparent_100%)] {isDone(
+											task
+										)
+											? 'text-muted-foreground/60 line-through'
+											: 'text-foreground'}"
+										onclick={() => {
+											close();
+											onEdit(task);
+										}}
+									>
+										{task.title}
+									</button>
+									<span class="shrink-0 font-mono text-[10px] text-muted-foreground/40">
+										{issueId(task, projects, appSettings)}
+									</span>
+								</div>
+								<div class="flex items-center gap-1.5 pl-6">
+									{#if (task.labelIds ?? []).length > 0}
+										<TaskLabels labelIds={task.labelIds ?? []} {labelMap} max={2} />
+									{/if}
+									{#if task.dueDate}
+										<DueDateBadge dueDate={task.dueDate} />
+									{/if}
+									{#if task.endDate}
+										<span
+											class="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground/70"
+										>
+											<svg width="9" height="9" viewBox="0 0 24 24" fill="none"
+												><path
+													fill="currentColor"
+													d="M6 3a2 2 0 0 0-2 2v16a1 1 0 1 0 2 0v-5h13.804a1.1 1.1 0 0 0 .89-1.747L17.236 9.5l3.456-4.753A1.1 1.1 0 0 0 19.803 3z"
+												/></svg
 											>
-												{task.title}
-											</button>
-											<span class="shrink-0 font-mono text-[10px] text-muted-foreground/40">
-												{issueId(task, projects, appSettings)}
-											</span>
-										</div>
-										<div class="flex items-center gap-1.5 pl-6">
-											{#if (task.labelIds ?? []).length > 0}
-												<TaskLabels labelIds={task.labelIds ?? []} {labelMap} max={2} />
-											{/if}
-											{#if task.dueDate}
-												<DueDateBadge dueDate={task.dueDate} />
-											{/if}
-											{#if task.endDate}
-												<span
-													class="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground/70"
-												>
-													<svg width="9" height="9" viewBox="0 0 24 24" fill="none"
-														><path
-															fill="currentColor"
-															d="M6 3a2 2 0 0 0-2 2v16a1 1 0 1 0 2 0v-5h13.804a1.1 1.1 0 0 0 .89-1.747L17.236 9.5l3.456-4.753A1.1 1.1 0 0 0 19.803 3z"
-														/></svg
-													>
-													{task.endDate.slice(5).replace('-', '/')}
-												</span>
-											{/if}
-										</div>
-									</div>
-								</ContextMenu.Trigger>
-								<TaskContextMenu
-									{task}
+											{task.endDate.slice(5).replace('-', '/')}
+										</span>
+									{/if}
+								</div>
+							</div>
+						{/each}
+						<DropdownMenu.Root bind:open={menuOpen}>
+							<DropdownMenu.Trigger
+								class="h-0 w-0 outline-none"
+								style="position: fixed; left: {menuX}px; top: {menuY}px"
+							/>
+							{#if menuTask}
+								<TaskMenu
+									task={menuTask}
 									{onEdit}
 									{onTogglePin}
 									{onChangeStatus}
 									{onDuplicate}
 									{onDelete}
 								/>
-							</ContextMenu.Root>
-						{/each}
+							{/if}
+						</DropdownMenu.Root>
 					</div>
 				{/if}
 			</div>

@@ -68,6 +68,24 @@ export function dueDateInfo(dateStr: string | null | undefined): {
 	};
 }
 
+export function reminderInfo(
+	reminderAt: string | null | undefined,
+	sentAt: string | null | undefined
+): { label: string; soon: boolean } | null {
+	if (!reminderAt) return null;
+	const when = new Date(reminderAt);
+	if (Number.isNaN(when.getTime())) return null;
+	const label = new Intl.DateTimeFormat('en-US', {
+		month: 'short',
+		day: 'numeric',
+		hour: '2-digit',
+		minute: '2-digit'
+	}).format(when);
+	// a pending reminder within the next day (or already due) is worth flagging
+	const soon = !sentAt && when.getTime() - Date.now() <= 24 * 60 * 60 * 1000;
+	return { label, soon };
+}
+
 export function issueId(task: Task, projects: Project[], appSettings: Settings): string {
 	const project = projects.find((p) => p.id === task.projectId);
 	const prefix = project?.prefix ?? 'TSK';

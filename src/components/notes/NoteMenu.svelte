@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as ContextMenu from '$lib/components/ui/context-menu/index.js';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import type { NoteInfo } from '$lib/notes/notesState.svelte';
 
 	let {
@@ -37,9 +37,9 @@
 	} = $props();
 </script>
 
-<ContextMenu.Content>
+<DropdownMenu.Content class="w-52">
 	{#if onToggleSelect}
-		<ContextMenu.Item onclick={() => onToggleSelect(note)}>
+		<DropdownMenu.Item onclick={() => onToggleSelect(note)}>
 			<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 				><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg
 			>
@@ -48,10 +48,10 @@
 			{:else}
 				Select
 			{/if}
-		</ContextMenu.Item>
+		</DropdownMenu.Item>
 	{/if}
 	{#if onTogglePin && !archived}
-		<ContextMenu.Item onclick={() => onTogglePin(note)}>
+		<DropdownMenu.Item onclick={() => onTogglePin(note)}>
 			<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 				><path
 					fill="currentColor"
@@ -63,9 +63,9 @@
 			{:else}
 				Pin
 			{/if}
-		</ContextMenu.Item>
+		</DropdownMenu.Item>
 	{/if}
-	<ContextMenu.Item onclick={() => onRename(note)}>
+	<DropdownMenu.Item onclick={() => onRename(note)}>
 		<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 			><path
 				fill="currentColor"
@@ -73,9 +73,9 @@
 			/></svg
 		>
 		Change title
-	</ContextMenu.Item>
+	</DropdownMenu.Item>
 	{#if !archived}
-		<ContextMenu.Item onclick={() => onTags(note)}>
+		<DropdownMenu.Item onclick={() => onTags(note)}>
 			<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 				><path
 					fill="currentColor"
@@ -83,10 +83,10 @@
 				/></svg
 			>
 			Tags…
-		</ContextMenu.Item>
+		</DropdownMenu.Item>
 	{/if}
 	{#if archived}
-		<ContextMenu.Item onclick={() => onRestore(note)}>
+		<DropdownMenu.Item onclick={() => onRestore(note)}>
 			<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 				><path
 					fill="currentColor"
@@ -94,9 +94,9 @@
 				/></svg
 			>
 			Restore
-		</ContextMenu.Item>
+		</DropdownMenu.Item>
 	{:else}
-		<ContextMenu.Item onclick={() => onArchive(note)}>
+		<DropdownMenu.Item onclick={() => onArchive(note)}>
 			<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 				><path
 					fill="currentColor"
@@ -104,9 +104,9 @@
 				/></svg
 			>
 			Archive
-		</ContextMenu.Item>
+		</DropdownMenu.Item>
 	{/if}
-	<ContextMenu.Item onclick={() => onInfo(note)}>
+	<DropdownMenu.Item onclick={() => onInfo(note)}>
 		<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 			><path
 				fill="currentColor"
@@ -114,9 +114,9 @@
 			/></svg
 		>
 		Get info
-	</ContextMenu.Item>
+	</DropdownMenu.Item>
 	{#if !archived}
-		<ContextMenu.Item onclick={() => onHistory(note)}>
+		<DropdownMenu.Item onclick={() => onHistory(note)}>
 			<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 				><path
 					fill="currentColor"
@@ -124,9 +124,9 @@
 				/></svg
 			>
 			Version history
-		</ContextMenu.Item>
-		<ContextMenu.Sub>
-			<ContextMenu.SubTrigger>
+		</DropdownMenu.Item>
+		<DropdownMenu.Sub>
+			<DropdownMenu.SubTrigger>
 				<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 					><path
 						fill="currentColor"
@@ -134,13 +134,13 @@
 					/></svg
 				>
 				Export
-			</ContextMenu.SubTrigger>
-			<ContextMenu.SubContent class="w-40">
-				<ContextMenu.Item onclick={() => onExport(note, 'md')}>Markdown (.md)</ContextMenu.Item>
-				<ContextMenu.Item onclick={() => onExport(note, 'html')}>HTML (.html)</ContextMenu.Item>
-			</ContextMenu.SubContent>
-		</ContextMenu.Sub>
-		<ContextMenu.Item onclick={() => onConvertToTask(note)}>
+			</DropdownMenu.SubTrigger>
+			<DropdownMenu.SubContent class="w-40">
+				<DropdownMenu.Item onclick={() => onExport(note, 'md')}>Markdown (.md)</DropdownMenu.Item>
+				<DropdownMenu.Item onclick={() => onExport(note, 'html')}>HTML (.html)</DropdownMenu.Item>
+			</DropdownMenu.SubContent>
+		</DropdownMenu.Sub>
+		<DropdownMenu.Item onclick={() => onConvertToTask(note)}>
 			<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 				><path
 					fill="currentColor"
@@ -148,10 +148,10 @@
 				/></svg
 			>
 			Convert to task
-		</ContextMenu.Item>
+		</DropdownMenu.Item>
 	{/if}
-	<ContextMenu.Separator />
-	<ContextMenu.Item variant="destructive" onclick={() => onDelete(note)}>
+	<DropdownMenu.Separator />
+	<DropdownMenu.Item variant="destructive" onclick={() => onDelete(note)}>
 		<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 			><path
 				fill="currentColor"
@@ -159,5 +159,5 @@
 			/></svg
 		>
 		Delete
-	</ContextMenu.Item>
-</ContextMenu.Content>
+	</DropdownMenu.Item>
+</DropdownMenu.Content>
