@@ -51,7 +51,7 @@ notify = "6"
 base64 = "0.22"
 tiny_http = "0.12"
 socket2 = "0.6"
-tauri-plugin-updater = "2.10.1"
+tauri-plugin-updater = "2.12.0"
 
 # native macos notifications: mac-notification-sys for the legacy path, and the
 # modern UNUserNotificationCenter for real permission + click handling
