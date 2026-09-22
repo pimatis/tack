@@ -81,8 +81,7 @@ pub(super) fn handle_request(request: Request, ctx: &Ctx) {
     let mut request = request;
     let mutating = is_mutation(&method, path);
     let response = match (method, path) {
-        (Method::Post, "/api/select") => run_query(&mut request, ctx, true),
-        (Method::Post, "/api/execute") => run_query(&mut request, ctx, false),
+        (Method::Post, "/api/select" | "/api/execute") => run_query(&mut request, ctx),
         (Method::Get, "/api/events") => poll_events(ctx),
         (Method::Get, "/api/presence") => presence_list(ctx),
         (Method::Get, p) if p.starts_with("/api/attachment/") => serve_attachment(p, query, ctx),

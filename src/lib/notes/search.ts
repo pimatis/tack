@@ -12,18 +12,10 @@ export type IndexedNote = {
 	size: number;
 };
 
-async function ensureTables(db: DbClient) {
-	await db.execute(
-		'CREATE TABLE IF NOT EXISTS notes_index_meta (path TEXT PRIMARY KEY, mtime INTEGER, size INTEGER)'
-	);
-	await db.execute('CREATE TABLE IF NOT EXISTS note_links (src TEXT, dst TEXT, kind TEXT)');
-}
-
 // incremental index rebuild: only notes whose mtime or size changed are
 // re-parsed, so large vaults stay cheap on every refresh
 export async function reindexNotes(notes: IndexedNote[]) {
 	const db = await getDb();
-	await ensureTables(db);
 	const meta = await db.select<{ path: string; mtime: number; size: number }[]>(
 		'SELECT path, mtime, size FROM notes_index_meta'
 	);
@@ -90,7 +82,6 @@ export async function indexNote(
 	modified = Date.now()
 ) {
 	const db = await getDb();
-	await ensureTables(db);
 	await db.execute('DELETE FROM notes_fts WHERE path = $1', [path]);
 	await db.execute('INSERT INTO notes_fts (path, name, content) VALUES ($1, $2, $3)', [
 		path,

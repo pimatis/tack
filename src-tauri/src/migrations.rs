@@ -107,6 +107,11 @@ pub(crate) fn run_migrations(conn: &Connection) -> Result<(), String> {
             "expand_task_search_scope",
             include_str!("../migrations/020_task_search_scope.sql"),
         ),
+        (
+            21,
+            "create_notes_index_tables",
+            include_str!("../migrations/021_notes_index_tables.sql"),
+        ),
     ];
     let known: std::collections::HashSet<i64> =
         migrations.iter().map(|(v, _, _)| *v as i64).collect();
