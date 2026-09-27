@@ -7,7 +7,7 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import StatusIcon from '../../components/StatusIcon.svelte';
+	import StatusIcon from '../../components/task/StatusIcon.svelte';
 	import {
 		findTrashed,
 		restore as restoreTask,

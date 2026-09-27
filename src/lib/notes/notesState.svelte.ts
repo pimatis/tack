@@ -4,7 +4,7 @@ import { isTauri, getDb } from '$lib/db/client';
 import { reorderArray } from '$lib/dnd';
 import { notesInvoke, notesRoot } from './liveNotes';
 import { reindexNotes, indexNote, type IndexedNote } from './search';
-import { splitFrontmatter, tagsOf, addTag, removeTag } from './frontmatter';
+import { splitFrontmatter, tagsOf, addTag, removeTag, iconOf } from './frontmatter';
 import { newId } from '$lib/utils';
 import { remapPaths as remapTaskNotePaths } from '$lib/repositories/noteLink.repository';
 import { toast } from 'svelte-sonner';
@@ -69,6 +69,9 @@ class NotesPageState {
 	nameWarning = $state<string | null>(null);
 	// tags per note path (frontmatter + inline), aggregated for the tag panel
 	noteTags = $state<Record<string, string[]>>({});
+	// custom icons: notes and folders both live in a persisted settings map
+	noteIcons = $state<Record<string, string>>({});
+	folderIcons = $state<Record<string, string>>({});
 	activeTag = $state<string | null>(null);
 	// saved notes folders (multi-vault); the active one is this.folder
 	vaults = $state<string[]>([]);
@@ -247,6 +250,8 @@ class NotesPageState {
 				() => []
 			);
 			void this.#loadPins();
+			void this.#loadFolderIcons();
+			await this.#loadNoteIcons();
 			this.#loadVisits();
 			this.#loadOrders();
 			// drop tabs for notes that no longer exist on disk
@@ -260,12 +265,22 @@ class NotesPageState {
 				const full = await notesInvoke<IndexedNote[]>('read_notes_deep', { dir: this.folder });
 				await reindexNotes(full);
 				const tags: Record<string, string[]> = {};
+				const icons: Record<string, string> = { ...this.noteIcons };
+				let iconsChanged = false;
 				for (const note of full) {
 					const { data, body } = splitFrontmatter(note.content);
+					// legacy frontmatter icons are adopted into the store once
+					const legacyIcon = iconOf(data);
+					if (legacyIcon && !icons[note.path]) {
+						icons[note.path] = legacyIcon;
+						iconsChanged = true;
+					}
 					const inline = [...body.matchAll(/(?<![\w#&])#([\p{L}\p{N}/_-]+)/gu)].map((m) => m[1]);
 					tags[note.path] = [...new Set([...tagsOf(data), ...inline])];
 				}
 				this.noteTags = tags;
+				this.noteIcons = icons;
+				if (iconsChanged) this.#persistNoteIcons();
 			} catch {
 				// search stays stale rather than breaking the notes list
 			}
@@ -336,6 +351,113 @@ class NotesPageState {
 	// re-read pins after a cli pin change (db-changed)
 	reloadPins() {
 		void this.#loadPins();
+	}
+
+	// note icons are stored like folder icons (settings db key
+	// notesNoteIcons:<folder>, localStorage mirror for dev) so nothing is
+	// written into the note file itself
+	async #loadNoteIcons() {
+		if (!this.folder) return;
+		let stored: unknown;
+		try {
+			const db = await getDb();
+			const rows = await db.select<{ value: string }[]>(
+				'SELECT value FROM settings WHERE key = ?1',
+				[`notesNoteIcons:${this.folder}`]
+			);
+			stored = JSON.parse(rows[0]?.value ?? 'null');
+		} catch {
+			try {
+				stored = JSON.parse(localStorage.getItem(`tack-notes-note-icons:${this.folder}`) ?? '{}');
+			} catch {
+				stored = null;
+			}
+		}
+		this.noteIcons =
+			stored && typeof stored === 'object' && !Array.isArray(stored)
+				? (stored as Record<string, string>)
+				: {};
+	}
+
+	#persistNoteIcons() {
+		if (!this.folder) return;
+		try {
+			localStorage.setItem(`tack-notes-note-icons:${this.folder}`, JSON.stringify(this.noteIcons));
+		} catch {
+			// ignore private-mode storage failures
+		}
+		if (!isTauri()) return;
+		void getDb()
+			.then((db) =>
+				db.execute(
+					'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $2',
+					[`notesNoteIcons:${this.folder}`, JSON.stringify(this.noteIcons)]
+				)
+			)
+			.catch(() => {});
+	}
+
+	// folder icons have no file of their own, so they persist like pins
+	// (settings db key notesFolderIcons:<folder>, localStorage mirror for dev)
+	async #loadFolderIcons() {
+		if (!this.folder) return;
+		let stored: unknown;
+		try {
+			const db = await getDb();
+			const rows = await db.select<{ value: string }[]>(
+				'SELECT value FROM settings WHERE key = ?1',
+				[`notesFolderIcons:${this.folder}`]
+			);
+			stored = JSON.parse(rows[0]?.value ?? 'null');
+		} catch {
+			try {
+				stored = JSON.parse(localStorage.getItem(`tack-notes-folder-icons:${this.folder}`) ?? '{}');
+			} catch {
+				stored = null;
+			}
+		}
+		this.folderIcons =
+			stored && typeof stored === 'object' && !Array.isArray(stored)
+				? (stored as Record<string, string>)
+				: {};
+	}
+
+	#persistFolderIcons() {
+		if (!this.folder) return;
+		try {
+			localStorage.setItem(
+				`tack-notes-folder-icons:${this.folder}`,
+				JSON.stringify(this.folderIcons)
+			);
+		} catch {
+			// ignore private-mode storage failures
+		}
+		if (!isTauri()) return;
+		void getDb()
+			.then((db) =>
+				db.execute(
+					'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $2',
+					[`notesFolderIcons:${this.folder}`, JSON.stringify(this.folderIcons)]
+				)
+			)
+			.catch(() => {});
+	}
+
+	// note icons persist like folder icons; nothing is written into the note
+	setNoteIcon(path: string, icon: string | null) {
+		const icons = { ...this.noteIcons };
+		if (icon) icons[path] = icon;
+		else delete icons[path];
+		this.noteIcons = icons;
+		this.#persistNoteIcons();
+	}
+
+	setFolderIcon(rel: string, icon: string | null) {
+		const icons = { ...this.folderIcons };
+		if (icon) icons[rel] = icon;
+		else delete icons[rel];
+		this.folderIcons = icons;
+		this.#persistFolderIcons();
 	}
 
 	#loadVisits() {
@@ -729,7 +851,7 @@ class NotesPageState {
 		if (this.#saveTimer === undefined) return;
 		clearTimeout(this.#saveTimer);
 		this.#saveTimer = undefined;
-		void this.#save();
+		return this.#save();
 	}
 
 	async #save() {
@@ -879,6 +1001,18 @@ class NotesPageState {
 			}
 			this.#persistTabs();
 		}
+		// note icons follow their note through a rename, move or archive
+		const icons: Record<string, string> = {};
+		let iconsChanged = false;
+		for (const [k, v] of Object.entries(this.noteIcons)) {
+			const mapped = remap.get(k) ?? k;
+			if (mapped !== k) iconsChanged = true;
+			icons[mapped] = v;
+		}
+		if (iconsChanged) {
+			this.noteIcons = icons;
+			this.#persistNoteIcons();
+		}
 	}
 
 	// remap for every note inside a moved/renamed folder
@@ -935,7 +1069,12 @@ class NotesPageState {
 
 	// create a note in the given folder (null = notes root); empty name becomes Untitled
 	// templateName picks a file from .tack/templates; its {{vars}} are filled in
-	async createNoteIn(parentRel: string | null, rawName?: string, templateName?: string) {
+	async createNoteIn(
+		parentRel: string | null,
+		rawName?: string,
+		templateName?: string,
+		body?: string
+	) {
 		if (!this.folder) return;
 		this.flushPendingSave();
 		const rootAbs = this.folder.replace(/\/+$/, '');
@@ -949,6 +1088,7 @@ class NotesPageState {
 			const template = await this.readTemplate(templateName);
 			if (template !== null) content = this.applyTemplate(template, base);
 		}
+		if (body) content = content ? `${content}\n\n${body}` : body;
 		try {
 			await notesInvoke('write_file', { path, content });
 		} catch (e) {
@@ -1094,6 +1234,15 @@ class NotesPageState {
 			this.error = 'Folder is not empty — move the notes out first';
 			return;
 		}
+		const icons: Record<string, string> = {};
+		for (const [k, v] of Object.entries(this.folderIcons)) {
+			if (k === rel || k.startsWith(`${rel}/`)) continue;
+			icons[k] = v;
+		}
+		if (Object.keys(icons).length !== Object.keys(this.folderIcons).length) {
+			this.folderIcons = icons;
+			this.#persistFolderIcons();
+		}
 		await this.refresh();
 	}
 
@@ -1112,6 +1261,18 @@ class NotesPageState {
 		const orders: Record<string, string[]> = {};
 		for (const [k, v] of Object.entries(this.#manualOrders)) orders[remap(k)] = v;
 		this.#manualOrders = orders;
+		// folder icons follow their folder through a move or rename
+		let iconsChanged = false;
+		const icons: Record<string, string> = {};
+		for (const [k, v] of Object.entries(this.folderIcons)) {
+			const mapped = remap(k);
+			if (mapped !== k) iconsChanged = true;
+			icons[mapped] = v;
+		}
+		if (iconsChanged) {
+			this.folderIcons = icons;
+			this.#persistFolderIcons();
+		}
 	}
 
 	async renameNote(path: string, rawTitle: string) {

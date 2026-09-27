@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
-	import StatusIcon from '../StatusIcon.svelte';
+	import StatusIcon from './StatusIcon.svelte';
 	import TaskCard from './TaskCard.svelte';
 	import { dropZone, type DragDropState } from '$lib/dnd';
 	import type { Task, TaskStatus, TaskPriority } from '$lib/types/task';

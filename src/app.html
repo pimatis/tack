@@ -43,6 +43,10 @@
 				} else {
 					document.documentElement.classList.add('dark');
 				}
+				// color preset (Settings -> Themes); `default` means no override
+				if (saved.themePreset && saved.themePreset !== 'default') {
+					document.documentElement.setAttribute('data-theme', saved.themePreset);
+				}
 			} catch (e) {}
 		</script>
 		%sveltekit.head%

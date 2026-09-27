@@ -6,6 +6,7 @@ import {
 	type SidebarItemId,
 	type Theme
 } from '$lib/types/settings';
+import { DEFAULT_COLOR_PRESET, isColorPresetId } from '$lib/theme/presets';
 import type { ShortcutKey } from '$lib/shortcuts/shortcuts';
 
 const STORAGE_KEY = 'tack-settings';
@@ -162,4 +163,13 @@ export function applyTheme(theme: Theme): void {
 		theme === 'dark' ||
 		(theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 	root.classList.toggle('dark', isDark);
+
+	// presets live in layout.css as [data-theme='<id>'] rules; `default` has no
+	// block, so drop the attribute and let :root/.dark stay the source of truth
+	const preset = current.themePreset;
+	if (preset !== DEFAULT_COLOR_PRESET && isColorPresetId(preset)) {
+		root.setAttribute('data-theme', preset);
+		return;
+	}
+	root.removeAttribute('data-theme');
 }

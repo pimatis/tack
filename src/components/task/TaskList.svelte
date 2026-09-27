@@ -1,5 +1,5 @@
 <script lang="ts">
-	import StatusIcon from '../StatusIcon.svelte';
+	import StatusIcon from './StatusIcon.svelte';
 	import TaskRow from './TaskRow.svelte';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import type { DragDropState } from '$lib/dnd';

@@ -19,7 +19,7 @@
 </svelte:head>
 
 {#if state.dialogOpen}
-	{#await import('../components/TaskCreateDialog.svelte') then { default: TaskCreateDialogComponent }}
+	{#await import('../components/task/TaskCreateDialog.svelte') then { default: TaskCreateDialogComponent }}
 		<TaskCreateDialogComponent
 			bind:open={state.dialogOpen}
 			projects={state.projects}
@@ -50,7 +50,7 @@
 	{/await}
 {/if}
 {#if state.editDialogOpen}
-	{#await import('../components/TaskDetailPanel.svelte') then { default: TaskDetailPanelComponent }}
+	{#await import('../components/task/TaskDetailPanel.svelte') then { default: TaskDetailPanelComponent }}
 		<TaskDetailPanelComponent
 			bind:open={state.editDialogOpen}
 			task={state.editingTask}

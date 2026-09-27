@@ -60,18 +60,14 @@
 	<div class="flex flex-wrap items-center justify-between gap-3">
 		<div class="min-w-0">
 			<p class="text-[13px] font-medium">Permissions</p>
-			<p class="text-xs text-muted-foreground">
-				System permissions are managed in the desktop app
-			</p>
+			<p class="text-xs text-muted-foreground">System permissions are managed in the desktop app</p>
 		</div>
 	</div>
 {:else}
 	<div class="flex flex-wrap items-center justify-between gap-3">
 		<div class="min-w-0">
 			<p class="text-[13px] font-medium">Notifications</p>
-			<p class="text-xs text-muted-foreground">
-				Show a system alert when a task reminder is due
-			</p>
+			<p class="text-xs text-muted-foreground">Show a system alert when a task reminder is due</p>
 		</div>
 		<div class="flex shrink-0 items-center gap-2">
 			{#if status === 'checking'}
@@ -110,8 +106,8 @@
 		{#if status === 'unsupported'}
 			Notifications need the installed app, not a dev build.
 		{:else}
-			Tack only asks for notifications, to fire task reminders. If no prompt appears the setting
-			was already decided, so open System Settings to change it.
+			Tack only asks for notifications, to fire task reminders. If no prompt appears the setting was
+			already decided, so open System Settings to change it.
 		{/if}
 	</p>
 {/if}

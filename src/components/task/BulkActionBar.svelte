@@ -4,9 +4,9 @@
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import * as Popover from '$lib/components/ui/popover/index.js';
-	import PriorityIcon from '../PriorityIcon.svelte';
-	import StatusMenu from '../StatusMenu.svelte';
-	import PriorityMenu from '../PriorityMenu.svelte';
+	import PriorityIcon from './PriorityIcon.svelte';
+	import StatusMenu from './StatusMenu.svelte';
+	import PriorityMenu from './PriorityMenu.svelte';
 	import type { TaskPriority, TaskStatus } from '$lib/types/task';
 	import type { Project } from '$lib/types/project';
 	import type { Label } from '$lib/types/label';

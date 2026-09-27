@@ -2,7 +2,7 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import PriorityIcon from '../PriorityIcon.svelte';
+	import PriorityIcon from '../task/PriorityIcon.svelte';
 	import type { Settings } from '$lib/types/settings';
 
 	let {

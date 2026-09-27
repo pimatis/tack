@@ -17,6 +17,22 @@ export async function findByTaskId(taskId: string): Promise<TaskNoteLink[]> {
 	}
 }
 
+// tasks explicitly linked to a note from the task panel, for the note side
+export async function findByNotePath(notePath: string): Promise<{ id: string; title: string }[]> {
+	try {
+		const db = await getDb();
+		return await db.select<{ id: string; title: string }[]>(
+			`SELECT t.id AS id, t.title AS title FROM task_notes tn
+			 JOIN tasks t ON t.id = tn.task_id
+			 WHERE tn.note_path = $1 AND t.deleted_at IS NULL
+			 ORDER BY tn.created_at ASC`,
+			[notePath]
+		);
+	} catch (error) {
+		throw new Error('Failed to load linked tasks', { cause: error });
+	}
+}
+
 export async function add(taskId: string, notePath: string): Promise<void> {
 	try {
 		const db = await getDb();

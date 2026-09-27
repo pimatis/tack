@@ -82,6 +82,13 @@ export function withTags(data: NoteFrontmatter, tags: string[]): NoteFrontmatter
 	return next;
 }
 
+// legacy note icons used to live in frontmatter; they are now stored in the
+// settings db instead, and this only reads old files once to adopt them
+export function iconOf(data: NoteFrontmatter): string | null {
+	const icon = data.icon;
+	return typeof icon === 'string' && icon ? icon : null;
+}
+
 // add or remove one tag in the note text, rewriting frontmatter around the body
 export function addTag(text: string, tag: string): string {
 	const { data, body } = splitFrontmatter(text);

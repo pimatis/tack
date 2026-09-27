@@ -2,10 +2,10 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import StatusIcon from '../StatusIcon.svelte';
-	import PriorityIcon from '../PriorityIcon.svelte';
-	import PriorityMenu from '../PriorityMenu.svelte';
-	import StatusMenu from '../StatusMenu.svelte';
+	import StatusIcon from './StatusIcon.svelte';
+	import PriorityIcon from './PriorityIcon.svelte';
+	import PriorityMenu from './PriorityMenu.svelte';
+	import StatusMenu from './StatusMenu.svelte';
 	import TaskLabels from './TaskLabels.svelte';
 	import DueDateBadge from './DueDateBadge.svelte';
 	import EndDateBadge from './EndDateBadge.svelte';

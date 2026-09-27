@@ -8,7 +8,7 @@
 	import type { ShortcutKey } from '$lib/shortcuts/index.js';
 	import { getSettings, setSettings } from '$lib/stores/settings';
 	import { defaultSettings } from '$lib/types/settings';
-	import ShortcutKeycap from '../ShortcutKeycap.svelte';
+	import ShortcutKeycap from './ShortcutKeycap.svelte';
 
 	let draft = $state<Record<string, ShortcutKey[]>>(
 		JSON.parse(JSON.stringify(getSettings().shortcuts))

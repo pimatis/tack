@@ -15,14 +15,16 @@
 	import CodeIcon from '@lucide/svelte/icons/code';
 	import HighlighterIcon from '@lucide/svelte/icons/highlighter';
 	import LinkIcon from '@lucide/svelte/icons/link';
-	import StatusIcon from '../StatusIcon.svelte';
+	import StatusIcon from '../task/StatusIcon.svelte';
 	import { TaskPageState } from '$lib/task/taskState.svelte';
 	import type { Task } from '$lib/types/task';
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
 	import { getLinkPanels, type Backlink } from '$lib/notes/backlinks';
 	import { wikiToFileName } from '$lib/notes/links';
 	import { create as createTaskRepo } from '$lib/repositories/task.repository';
+	import { findByNotePath as findLinkedTasks } from '$lib/repositories/noteLink.repository';
 	import MentionPreviewCard from './MentionPreviewCard.svelte';
+	import MingcuteIcon from './MingcuteIcon.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { sortableItem, type DragDropState } from '$lib/dnd';
 
@@ -570,6 +572,20 @@
 	// ---- backlinks + unlinked mentions for the open note ----
 	let backlinks = $state<Backlink[]>([]);
 	let unlinkedMentions = $state<Backlink[]>([]);
+	// tasks explicitly linked to the open note from the task panel
+	let linkedTasks = $state<{ id: string; title: string }[]>([]);
+	$effect(() => {
+		const path = notesState.selectedPath;
+		if (!path) {
+			linkedTasks = [];
+			return;
+		}
+		void findLinkedTasks(path)
+			.then((tasks) => {
+				if (notesState.selectedPath === path) linkedTasks = tasks;
+			})
+			.catch(() => (linkedTasks = []));
+	});
 	$effect(() => {
 		const path = notesState.selectedPath;
 		// content read keeps the scan debounced while typing
@@ -1013,16 +1029,19 @@
 			/>
 			<DropdownMenu.Content class="w-44">
 				{#if tabMenuPath}
-					<DropdownMenu.Item onclick={() => notesState.closeTab(tabMenuPath!)}
-						>Close tab</DropdownMenu.Item
-					>
+					<DropdownMenu.Item onclick={() => notesState.closeTab(tabMenuPath!)}>
+						<MingcuteIcon icon="close-fill" size={16} />
+						Close tab
+					</DropdownMenu.Item>
 					<DropdownMenu.Item onclick={() => notesState.closeOtherTabs(tabMenuPath!)}>
+						<MingcuteIcon icon="close-circle-fill" size={16} />
 						Close other tabs
 					</DropdownMenu.Item>
 					<DropdownMenu.Item
 						onclick={() => notesState.closeAllTabs()}
 						class="text-destructive data-[highlighted]:text-destructive"
 					>
+						<MingcuteIcon icon="close-square-fill" size={16} />
 						Close all tabs
 					</DropdownMenu.Item>
 				{/if}
@@ -1212,9 +1231,10 @@
 			</div>
 		{/if}
 	</header>
-	{#if noteTitle && (backlinks.length > 0 || unlinkedMentions.length > 0) && !notesState.focusMode}
+	{#if noteTitle && (backlinks.length > 0 || unlinkedMentions.length > 0 || linkedTasks.length > 0) && !notesState.focusMode}
 		<!-- backlinks: notes that link here via @-mentions; unlinked mentions
-		     contain the note title as plain text -->
+		     contain the note title as plain text; linked tasks come from
+		     explicit links added in the task panel -->
 		<div class="flex flex-wrap items-center gap-1.5 pb-3">
 			{#if backlinks.length > 0}
 				<span class="text-[11px] text-muted-foreground/70">Linked notes</span>
@@ -1225,6 +1245,18 @@
 						onclick={() => void notesState.openNote(backlink.path)}
 					>
 						{backlink.name.replace(/\.md$/, '')}
+					</button>
+				{/each}
+			{/if}
+			{#if linkedTasks.length > 0}
+				<span class="text-[11px] text-muted-foreground/70">Linked tasks</span>
+				{#each linkedTasks as task (task.id)}
+					<button
+						type="button"
+						class="max-w-52 truncate rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+						onclick={() => void openMention(`task:${task.id}`)}
+					>
+						{task.title}
 					</button>
 				{/each}
 			{/if}

@@ -1,13 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
+	import * as Empty from '$lib/components/ui/empty/index.js';
+	import * as InputGroup from '$lib/components/ui/input-group/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { getSettings, setSettings, applyTheme } from '$lib/stores/settings';
+	import { colorPresets } from '$lib/theme/presets';
 	import { onDbChanged } from '$lib/db/client';
 	import type { Settings, Theme } from '$lib/types/settings';
 	import { findAll as findAllProjects } from '$lib/repositories/project.repository';
@@ -15,6 +17,7 @@
 	import { findAll as findAllLabels } from '$lib/repositories/label.repository';
 	import { getAppVersion } from '$lib/updater/update.service';
 	import AppearanceSection from '../../components/settings/AppearanceSection.svelte';
+	import ThemesSection from '../../components/settings/ThemesSection.svelte';
 	import SidebarSection from '../../components/settings/SidebarSection.svelte';
 	import TasksSection from '../../components/settings/TasksSection.svelte';
 	import DataSection from '../../components/settings/DataSection.svelte';
@@ -25,12 +28,88 @@
 	import PermissionsSection from '../../components/settings/PermissionsSection.svelte';
 	import CliSection from '../../components/settings/CliSection.svelte';
 	import AboutSection from '../../components/settings/AboutSection.svelte';
+	import MingcuteIcon from '../../components/notes/MingcuteIcon.svelte';
+
+	type Section = {
+		value: string;
+		label: string;
+		description: string;
+		// mingcute icon name, resolved at runtime (see src/lib/notes/icons.ts)
+		icon: string;
+	};
+
+	// single source of truth for the nav, the mobile picker and search labels
+	const sections: Section[] = [
+		{
+			value: 'appearance',
+			label: 'Appearance',
+			description: 'Theme, color and layout basics',
+			icon: 'palette-fill'
+		},
+		{
+			value: 'themes',
+			label: 'Themes',
+			description: 'Pick a color palette for the whole app',
+			icon: 'brush-fill'
+		},
+		{
+			value: 'sidebar',
+			label: 'Sidebar',
+			description: 'Choose what shows in the sidebar',
+			icon: 'layout-left-fill'
+		},
+		{ value: 'tasks', label: 'Tasks', description: 'Defaults for new tasks', icon: 'task-fill' },
+		{
+			value: 'data',
+			label: 'Data',
+			description: 'Import, export and reset your data',
+			icon: 'storage-fill'
+		},
+		{
+			value: 'backup',
+			label: 'Backup',
+			description: 'Automatic snapshots and restore points',
+			icon: 'archive-fill'
+		},
+		{
+			value: 'shortcuts',
+			label: 'Shortcuts',
+			description: 'Keyboard shortcuts for common actions',
+			icon: 'keyboard-fill'
+		},
+		{
+			value: 'live',
+			label: 'Live',
+			description: 'Share your workspace in a browser',
+			icon: 'signal-fill'
+		},
+		{
+			value: 'permissions',
+			label: 'Permissions',
+			description: 'System permissions tack can use',
+			icon: 'notification-fill'
+		},
+		{
+			value: 'workspace',
+			label: 'Workspace',
+			description: 'Stats, CLI and about tack',
+			icon: 'dashboard-fill'
+		}
+	];
+
+	const tabLabels: Record<string, string> = Object.fromEntries(
+		sections.map((section) => [section.value, section.label])
+	);
 
 	let settings = $state<Settings>(getSettings());
 	let stats = $state({ projects: 0, tasks: 0, done: 0, labels: 0 });
 	let appVersion = $state('');
 	let activeTab = $state('appearance');
 	let searchQuery = $state('');
+
+	let activeSection = $derived(
+		sections.find((section) => section.value === activeTab) ?? sections[0]
+	);
 
 	type SettingsSearchItem = {
 		tab: string;
@@ -59,6 +138,20 @@
 					{ value: 'light', label: 'Light' },
 					{ value: 'system', label: 'System' }
 				]
+			},
+			{
+				tab: 'themes',
+				label: 'Color theme',
+				description: 'Pick a color palette for the whole app',
+				keywords: [
+					'preset',
+					'palette',
+					'color',
+					...colorPresets.map((preset) => preset.label.toLowerCase()),
+					s.themePreset
+				],
+				key: 'themePreset',
+				options: colorPresets.map((preset) => ({ value: preset.id, label: preset.label }))
 			},
 			{
 				tab: 'appearance',
@@ -214,18 +307,6 @@
 		];
 	});
 
-	const tabLabels: Record<string, string> = {
-		appearance: 'Appearance',
-		sidebar: 'Sidebar',
-		tasks: 'Tasks',
-		data: 'Data',
-		backup: 'Backup',
-		shortcuts: 'Shortcuts',
-		live: 'Live',
-		permissions: 'Permissions',
-		workspace: 'Workspace'
-	};
-
 	let searching = $derived(searchQuery.trim().length > 0);
 
 	let searchResults = $derived.by(() => {
@@ -314,7 +395,7 @@
 <section class="flex h-full flex-col">
 	<!-- header -->
 	<header
-		class="flex items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-6 sm:py-4"
+		class="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-6 sm:py-4"
 	>
 		<div class="min-w-0">
 			<h1 class="text-base font-semibold tracking-tight sm:text-lg">Settings</h1>
@@ -322,81 +403,57 @@
 				Manage your workspace and preferences
 			</p>
 		</div>
-		<Button variant="ghost" size="sm" href="/" class="shrink-0">
-			<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-				><path
-					fill="currentColor"
-					d="M16.06 10.94a1.5 1.5 0 0 1 0 2.12l-5.656 5.658a1.5 1.5 0 1 1-2.121-2.122L12.879 12 8.283 7.404a1.5 1.5 0 0 1 2.12-2.122l5.658 5.657Z"
-				/></svg
+		<div class="flex shrink-0 items-center gap-2">
+			<InputGroup.Root
+				class="h-8! w-40 rounded-lg! border-input/30 bg-input/30 shadow-none! *:data-[slot=input-group-addon]:pl-2! sm:w-56"
 			>
-			Back
-		</Button>
+				<InputGroup.Input
+					bind:value={searchQuery}
+					placeholder="Search settings"
+					class="text-[13px]"
+				/>
+				<InputGroup.Addon><MingcuteIcon icon="search-fill" size={15} /></InputGroup.Addon>
+				{#if searchQuery}
+					<InputGroup.Addon class="pr-1">
+						<Button
+							variant="ghost"
+							size="icon-xs"
+							onclick={() => (searchQuery = '')}
+							aria-label="Clear search"
+							class="text-muted-foreground hover:text-foreground"
+						>
+							<MingcuteIcon icon="close-fill" size={14} />
+						</Button>
+					</InputGroup.Addon>
+				{/if}
+			</InputGroup.Root>
+			<Button variant="ghost" size="sm" href="/">
+				<MingcuteIcon icon="left-fill" />
+				Back
+			</Button>
+		</div>
 	</header>
 
-	<!-- content -->
+	<!-- body -->
 	<div class="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
-		<div class="mx-auto max-w-2xl">
-			<!-- search -->
-			<div class="relative mb-5">
-				<svg
-					class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground/50"
-					width="14"
-					height="14"
-					viewBox="0 0 24 24"
-					fill="none"
-					><path
-						fill="currentColor"
-						d="M2 10.5a8.5 8.5 0 1 1 15.176 5.262l3.652 3.652a1 1 0 0 1-1.414 1.414l-3.652-3.652A8.5 8.5 0 0 1 2 10.5M10.5 6a1 1 0 0 0 0 2 2.5 2.5 0 0 1 2.5 2.5 1 1 0 1 0 2 0A4.5 4.5 0 0 0 10.5 6"
-					/></svg
-				>
-				<Input
-					bind:value={searchQuery}
-					placeholder="Search settings..."
-					class="h-8 w-full rounded-lg border border-input bg-transparent pr-8 pl-8 text-[13px] text-foreground transition-all outline-none placeholder:text-muted-foreground/50 dark:bg-input/30"
-				/>
-				{#if searchQuery}
-					<Button
-						variant="ghost"
-						size="icon-xs"
-						onclick={() => (searchQuery = '')}
-						class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground/50 transition-colors hover:text-foreground"
-						aria-label="Clear search"
-					>
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-							><path
-								fill="currentColor"
-								d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
-							/></svg
-						>
-					</Button>
-				{/if}
-			</div>
-
+		<div class="w-full">
 			{#if searching}
 				<!-- search results -->
 				{#if searchResults.length === 0}
-					<div class="flex flex-col items-center gap-3 py-20 text-center">
-						<div class="flex size-10 items-center justify-center rounded-xl bg-muted/50">
-							<svg
-								class="text-muted-foreground"
-								width="16"
-								height="16"
-								viewBox="0 0 24 24"
-								fill="none"
-								><path
-									fill="currentColor"
-									d="M2 10.5a8.5 8.5 0 1 1 15.176 5.262l3.652 3.652a1 1 0 0 1-1.414 1.414l-3.652-3.652A8.5 8.5 0 0 1 2 10.5M10.5 6a1 1 0 0 0 0 2 2.5 2.5 0 0 1 2.5 2.5 1 1 0 1 0 2 0A4.5 4.5 0 0 0 10.5 6"
-								/></svg
-							>
-						</div>
-						<div>
-							<p class="text-[13px] font-medium">No settings match</p>
-							<p class="text-xs text-muted-foreground">Try a different word, or clear the search</p>
-						</div>
-						<Button variant="outline" size="sm" onclick={() => (searchQuery = '')}>
-							clear search
-						</Button>
-					</div>
+					<Empty.Root class="border border-dashed border-border/70">
+						<Empty.Header>
+							<Empty.Media variant="icon">
+								<MingcuteIcon icon="search-fill" size={24} />
+							</Empty.Media>
+							<Empty.Title>No settings match</Empty.Title>
+							<Empty.Description>Try a different word, or clear the search.</Empty.Description>
+						</Empty.Header>
+						<Empty.Content>
+							<Button variant="outline" size="sm" onclick={() => (searchQuery = '')}>
+								Clear search
+							</Button>
+						</Empty.Content>
+					</Empty.Root>
 				{:else}
 					<div class="space-y-5">
 						{#each resultTabs as tab (tab)}
@@ -461,80 +518,101 @@
 					</div>
 				{/if}
 			{:else}
-				<Tabs.Root bind:value={activeTab} class="w-full">
-					<div class="overflow-x-auto pb-0.5">
-						<Tabs.List class="flex w-max gap-1 rounded-lg bg-muted/50 p-1 sm:w-full">
-							<Tabs.Trigger value="appearance" class="flex-1 shrink-0 whitespace-nowrap"
-								>Appearance</Tabs.Trigger
+				<Tabs.Root
+					bind:value={activeTab}
+					orientation="vertical"
+					class="flex flex-col gap-5 md:flex-row md:gap-8"
+				>
+					<!-- desktop nav -->
+					<Tabs.List class="hidden gap-1 md:flex md:w-48 md:shrink-0 md:flex-col">
+						{#each sections as section (section.value)}
+							<Tabs.Trigger
+								value={section.value}
+								class="h-8 justify-start gap-2.5 px-2.5 text-[13px]"
 							>
-							<Tabs.Trigger value="sidebar" class="flex-1 shrink-0 whitespace-nowrap"
-								>Sidebar</Tabs.Trigger
-							>
-							<Tabs.Trigger value="tasks" class="flex-1 shrink-0 whitespace-nowrap"
-								>Tasks</Tabs.Trigger
-							>
-							<Tabs.Trigger value="data" class="flex-1 shrink-0 whitespace-nowrap"
-								>Data</Tabs.Trigger
-							>
-							<Tabs.Trigger value="backup" class="flex-1 shrink-0 whitespace-nowrap"
-								>Backup</Tabs.Trigger
-							>
-							<Tabs.Trigger value="shortcuts" class="flex-1 shrink-0 whitespace-nowrap"
-								>Shortcuts</Tabs.Trigger
-							>
-							<Tabs.Trigger value="live" class="flex-1 shrink-0 whitespace-nowrap"
-								>Live</Tabs.Trigger
-							>
-							<Tabs.Trigger value="permissions" class="flex-1 shrink-0 whitespace-nowrap"
-								>Permissions</Tabs.Trigger
-							>
-							<Tabs.Trigger value="workspace" class="flex-1 shrink-0 whitespace-nowrap"
-								>Workspace</Tabs.Trigger
-							>
-						</Tabs.List>
+								<MingcuteIcon icon={section.icon} size={16} />
+								<span class="truncate">{section.label}</span>
+							</Tabs.Trigger>
+						{/each}
+					</Tabs.List>
+
+					<div class="max-w-3xl min-w-0 flex-1">
+						<!-- mobile picker -->
+						<div class="mb-4 md:hidden">
+							<Select.Root type="single" value={activeTab} onValueChange={(v) => (activeTab = v)}>
+								<Select.Trigger class="w-full">
+									<span data-slot="select-value">
+										{#if activeSection}
+											<MingcuteIcon icon={activeSection.icon} size={16} />
+											<span>{activeSection.label}</span>
+										{/if}
+									</span>
+								</Select.Trigger>
+								<Select.Content>
+									{#each sections as section (section.value)}
+										<Select.Item value={section.value} label={section.label}>
+											<MingcuteIcon icon={section.icon} size={16} />
+											<span>{section.label}</span>
+										</Select.Item>
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						</div>
+
+						<div class="mb-4">
+							<h2 class="text-sm font-semibold tracking-tight">{activeSection.label}</h2>
+							<p class="text-xs text-muted-foreground">{activeSection.description}</p>
+						</div>
+
+						<Tabs.Content value="appearance" class="flex flex-col gap-5">
+							<AppearanceSection {settings} update={updateSetting} />
+						</Tabs.Content>
+
+						<Tabs.Content value="themes" class="flex flex-col gap-5">
+							<ThemesSection {settings} update={updateSetting} />
+						</Tabs.Content>
+
+						<Tabs.Content value="sidebar" class="flex flex-col gap-5">
+							<SidebarSection {settings} update={updateSetting} />
+						</Tabs.Content>
+
+						<Tabs.Content value="tasks" class="flex flex-col gap-5">
+							<TasksSection {settings} update={updateSetting} />
+						</Tabs.Content>
+
+						<Tabs.Content value="data" class="flex flex-col gap-5">
+							<DataSection />
+						</Tabs.Content>
+
+						<Tabs.Content value="backup" class="flex flex-col gap-5">
+							<BackupSection />
+						</Tabs.Content>
+
+						<Tabs.Content value="shortcuts" class="flex flex-col gap-5">
+							<ShortcutsSection />
+						</Tabs.Content>
+
+						<Tabs.Content value="live" class="flex flex-col gap-5">
+							<LiveSection {settings} update={updateSetting} />
+						</Tabs.Content>
+
+						<Tabs.Content value="permissions" class="flex flex-col gap-5">
+							<PermissionsSection />
+						</Tabs.Content>
+
+						<Tabs.Content value="workspace" class="flex flex-col gap-5">
+							<WorkspaceSection {stats} />
+							<CliSection />
+							<Separator class="bg-border/40" />
+							<AboutSection {appVersion} />
+						</Tabs.Content>
 					</div>
-
-					<Tabs.Content value="appearance" class="mt-4 space-y-5 sm:mt-6 sm:space-y-6">
-						<AppearanceSection {settings} update={updateSetting} />
-					</Tabs.Content>
-
-					<Tabs.Content value="sidebar" class="mt-4 space-y-5 sm:mt-6 sm:space-y-6">
-						<SidebarSection {settings} update={updateSetting} />
-					</Tabs.Content>
-
-					<Tabs.Content value="tasks" class="mt-4 space-y-5 sm:mt-6 sm:space-y-6">
-						<TasksSection {settings} update={updateSetting} />
-					</Tabs.Content>
-
-					<Tabs.Content value="data" class="mt-4 space-y-5 sm:mt-6 sm:space-y-6">
-						<DataSection />
-					</Tabs.Content>
-
-					<Tabs.Content value="backup" class="mt-4 space-y-5 sm:mt-6 sm:space-y-6">
-						<BackupSection />
-					</Tabs.Content>
-
-					<Tabs.Content value="shortcuts" class="mt-4 space-y-4 sm:mt-6">
-						<ShortcutsSection />
-					</Tabs.Content>
-
-					<Tabs.Content value="live" class="mt-4 space-y-5 sm:mt-6 sm:space-y-6">
-						<LiveSection {settings} update={updateSetting} />
-					</Tabs.Content>
-
-					<Tabs.Content value="permissions" class="mt-4 space-y-5 sm:mt-6 sm:space-y-6">
-						<PermissionsSection />
-					</Tabs.Content>
-
-					<Tabs.Content value="workspace" class="mt-4 space-y-5 sm:mt-6 sm:space-y-6">
-						<WorkspaceSection {stats} />
-						<CliSection />
-						<Separator class="bg-border/40" />
-						<AboutSection {appVersion} />
-					</Tabs.Content>
 				</Tabs.Root>
 
-				<footer class="mt-8 flex items-center justify-between border-t border-border/60 pt-4">
+				<!-- footer spans the nav + content width so the two ends line up -->
+				<footer
+					class="mt-8 flex max-w-[62rem] items-center justify-between border-t border-border/60 pt-4"
+				>
 					<p class="text-xs text-muted-foreground">Tack</p>
 					<p class="text-xs text-muted-foreground">
 						{#if appVersion}Version {appVersion}{:else}Version ...{/if}

@@ -43,7 +43,7 @@
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import LabelSelector from './LabelSelector.svelte';
 	import StatusIcon from './StatusIcon.svelte';
-	import MarkdownRenderer from './MarkdownRenderer.svelte';
+	import MarkdownRenderer from '../MarkdownRenderer.svelte';
 	import DueDatePicker from './DueDatePicker.svelte';
 	import ReminderPicker from './ReminderPicker.svelte';
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
@@ -77,6 +77,19 @@
 		onLabelUpdated,
 		onLabelRemoved
 	}: Props = $props();
+
+	// the parent unmounts this panel as soon as `open` flips false, which would
+	// cut off the sheet exit animation; keep our own open state and only release
+	// the parent once the close animation has finished
+	let sheetOpen = $state(open);
+
+	$effect(() => {
+		if (open) sheetOpen = true;
+	});
+
+	function handleSheetOpenChangeComplete(isOpen: boolean) {
+		if (!isOpen) open = false;
+	}
 
 	let title = $state('');
 	let description = $state('');
@@ -518,7 +531,7 @@
 	}
 
 	function close() {
-		open = false;
+		sheetOpen = false;
 	}
 
 	onMount(() => {
@@ -592,7 +605,7 @@
 				updated.labelIds = selectedLabelIds;
 				onUpdated?.(updated);
 			}
-			open = false;
+			close();
 		} catch {
 			error = 'Failed to update task';
 		} finally {
@@ -665,7 +678,7 @@
 </script>
 
 <!-- backdrop + panel -->
-<Sheet.Root bind:open>
+<Sheet.Root bind:open={sheetOpen} onOpenChangeComplete={handleSheetOpenChangeComplete}>
 	<Sheet.Content
 		side="right"
 		showCloseButton={false}
@@ -684,11 +697,6 @@
 				<!-- header -->
 				<div class="flex items-center justify-between px-4 pt-4 pb-3 sm:px-5">
 					<div class="flex items-center gap-2">
-						<div
-							class="flex size-5 items-center justify-center rounded-[5px] bg-primary text-[10px] leading-none font-bold text-primary-foreground"
-						>
-							{prefix.charAt(0)}
-						</div>
 						<span class="font-mono text-[12px] text-muted-foreground">
 							{prefix}-{task.number}
 						</span>

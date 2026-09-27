@@ -1,5 +1,6 @@
 import { SHORTCUTS } from '$lib/shortcuts/shortcuts';
 import type { ShortcutKey } from '$lib/shortcuts/shortcuts';
+import { DEFAULT_COLOR_PRESET, type ColorPresetId } from '$lib/theme/presets';
 
 export type Theme = 'dark' | 'light' | 'system';
 
@@ -13,6 +14,8 @@ export type SidebarItemConfig = {
 
 export type Settings = {
 	theme: Theme;
+	// color palette preset; `default` is the built-in monochrome theme
+	themePreset: ColorPresetId;
 	sidebarCollapsed: boolean;
 	defaultViewMode: 'list' | 'board' | 'calendar';
 	defaultStatus: 'todo' | 'in_progress';
@@ -44,6 +47,7 @@ export const defaultSidebarItems: SidebarItemConfig[] = [
 
 export const defaultSettings: Settings = {
 	theme: 'dark',
+	themePreset: DEFAULT_COLOR_PRESET,
 	sidebarCollapsed: false,
 	defaultViewMode: 'list',
 	defaultStatus: 'todo',

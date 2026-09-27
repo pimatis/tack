@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import StatusIcon from '../StatusIcon.svelte';
+	import StatusIcon from './StatusIcon.svelte';
 	import TaskLabels from './TaskLabels.svelte';
 	import DueDateBadge from './DueDateBadge.svelte';
 	import EndDateBadge from './EndDateBadge.svelte';
@@ -13,9 +13,9 @@
 	import type { Label } from '$lib/types/label';
 	import type { Settings } from '$lib/types/settings';
 	import { issueId } from '$lib/task/utils';
-	import PriorityIcon from '../PriorityIcon.svelte';
-	import PriorityMenu from '../PriorityMenu.svelte';
-	import StatusMenu from '../StatusMenu.svelte';
+	import PriorityIcon from './PriorityIcon.svelte';
+	import PriorityMenu from './PriorityMenu.svelte';
+	import StatusMenu from './StatusMenu.svelte';
 
 	let {
 		task,

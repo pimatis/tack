@@ -18,7 +18,7 @@
 	import { Label as FormLabel } from '$lib/components/ui/label/index.js';
 	import { Spinner } from '$lib/components/ui/spinner/index.js';
 	import LabelSelector from './LabelSelector.svelte';
-	import MarkdownRenderer from './MarkdownRenderer.svelte';
+	import MarkdownRenderer from '../MarkdownRenderer.svelte';
 	import DueDatePicker from './DueDatePicker.svelte';
 	import { getSettings } from '$lib/stores/settings';
 

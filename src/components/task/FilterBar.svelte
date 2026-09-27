@@ -2,7 +2,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import StatusIcon from '../StatusIcon.svelte';
+	import StatusIcon from './StatusIcon.svelte';
 	import type { TaskStatus } from '$lib/types/task';
 	import type { Project } from '$lib/types/project';
 	import type { Label } from '$lib/types/label';

@@ -11,8 +11,8 @@
 	import { sortableItem, useDndActive, reorderArray, type DragDropState } from '$lib/dnd';
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import PriorityIcon from './PriorityIcon.svelte';
-	import StatusIcon from './StatusIcon.svelte';
+	import PriorityIcon from './task/PriorityIcon.svelte';
+	import StatusIcon from './task/StatusIcon.svelte';
 	import { keyComboLabel } from '$lib/shortcuts/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
@@ -27,6 +27,7 @@
 	import * as Collapsible from '$lib/components/ui/collapsible/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
 
 	let {
 		settings = null,
@@ -63,6 +64,43 @@
 	const pinnedCount = $derived(allTasks.filter((t) => t.pinned && !t.deletedAt).length);
 	let pinnedActive = $state(false);
 	let activeFilter = $state<string | null>(null);
+
+	// persist collapsed sidebar sections across page reloads
+	type CollapsibleSectionId = 'status' | 'priority' | 'projects';
+	const COLLAPSED_SECTIONS_KEY = 'tack-collapsed-sidebar-sections';
+	const collapsibleSectionIds: CollapsibleSectionId[] = ['status', 'priority', 'projects'];
+
+	function loadCollapsedSections(): Set<CollapsibleSectionId> {
+		try {
+			const raw = localStorage.getItem(COLLAPSED_SECTIONS_KEY);
+			if (!raw) return new Set();
+			const arr: unknown = JSON.parse(raw);
+			if (!Array.isArray(arr)) return new Set();
+			return new Set(
+				arr.filter((s): s is CollapsibleSectionId =>
+					collapsibleSectionIds.includes(s as CollapsibleSectionId)
+				)
+			);
+		} catch {
+			// localStorage unavailable (ssr) or corrupt - start fresh
+			return new Set();
+		}
+	}
+
+	let collapsedSections = $state<Set<CollapsibleSectionId>>(loadCollapsedSections());
+
+	function setSectionOpen(id: CollapsibleSectionId, open: boolean) {
+		const next = new Set(collapsedSections);
+		if (open) next.delete(id);
+		else next.add(id);
+		if (next.size === collapsedSections.size) return;
+		collapsedSections = next;
+		try {
+			localStorage.setItem(COLLAPSED_SECTIONS_KEY, JSON.stringify([...next]));
+		} catch {
+			// ignore quota errors
+		}
+	}
 
 	let updateAvailable = $state(false);
 	let updateVersion = $state('');
@@ -304,6 +342,7 @@
 	let noteCreateOpen = $state(false);
 	let noteCreateType = $state<'note' | 'folder'>('note');
 	let noteCreateName = $state('');
+	let noteCreateDescription = $state('');
 	let noteCreateParent = $state<string>('root');
 	let noteCreateTemplate = $state('none');
 	let noteCreateTemplates = $state<string[]>([]);
@@ -318,6 +357,7 @@
 		noteCreateType = type;
 		noteCreateParent = parent ?? 'root';
 		noteCreateName = '';
+		noteCreateDescription = '';
 		noteCreateTemplate = 'none';
 		noteCreateTemplates = (await notesState.loadTemplates()).map((t) =>
 			t.name.replace(/\.md$/i, '')
@@ -331,10 +371,12 @@
 		if (!name) return;
 		const parent = noteCreateParent === 'root' ? null : noteCreateParent;
 		if (noteCreateType === 'note') {
+			const description = noteCreateDescription.trim();
 			void notesState.createNoteIn(
 				parent,
 				name,
-				noteCreateTemplate === 'none' ? undefined : noteCreateTemplate
+				noteCreateTemplate === 'none' ? undefined : noteCreateTemplate,
+				description || undefined
 			);
 		} else void notesState.createFolder(parent, name);
 		noteCreateOpen = false;
@@ -460,7 +502,9 @@
 {/if}
 
 <aside
-	class="flex h-dvh flex-col transition-all duration-200 {collapsed ? 'w-12' : 'w-50'} {isMobile
+	class="flex h-dvh shrink-0 flex-col transition-all duration-200 {collapsed
+		? 'w-12'
+		: 'w-50'} {collapsed ? 'overflow-hidden' : ''} {isMobile
 		? 'fixed top-0 left-0 z-50 bg-sidebar shadow-xl shadow-black/10 max-md:w-60!'
 		: ''} {isMobile && !mobileOpen ? '-translate-x-full' : ''}"
 >
@@ -650,31 +694,48 @@
 	{:else}
 		<div class="flex flex-col items-center gap-1 pb-1">
 			<Tabs bind:value={notesState.activeTab} class="flex flex-col items-center gap-1">
-				<TabsList class="flex flex-col items-center gap-1">
-					<TabsTrigger
-						value="tasks"
-						class="h-7 w-7 rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground data-active:bg-sidebar-accent/70 data-active:text-sidebar-foreground"
-						aria-label="Tasks"
-					>
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-							><path
-								fill="currentColor"
-								d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2m4.7 7.3a1 1 0 0 0-1.4 0l-4.8 4.8-1.8-1.8a1 1 0 0 0-1.4 1.42l2.5 2.5a1 1 0 0 0 1.4 0l5.5-5.5a1 1 0 0 0 0-1.42"
-							/></svg
-						>
-					</TabsTrigger>
-					<TabsTrigger
-						value="notes"
-						class="h-7 w-7 rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground data-active:bg-sidebar-accent/70 data-active:text-sidebar-foreground"
-						aria-label="Notes"
-					>
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-							><path
-								fill="currentColor"
-								d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.17a2 2 0 0 0-.59-1.42l-4.58-4.58A2 2 0 0 0 13.41 2zm7.5 1.13L18.87 8H13.5zM8 12h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2m0 4h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2"
-							/></svg
-						>
-					</TabsTrigger>
+				<!-- line variant: no muted pill behind the icon rail, per icon-rail convention -->
+				<TabsList variant="line" class="flex flex-col items-center gap-1 bg-transparent">
+					<Tooltip.Root>
+						<Tooltip.Trigger>
+							{#snippet child({ props })}
+								<TabsTrigger
+									{...props}
+									value="tasks"
+									class="size-7 rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground data-active:bg-sidebar-accent/70 data-active:text-sidebar-foreground"
+									aria-label="Tasks"
+								>
+									<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+										><path
+											fill="currentColor"
+											d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2m4.7 7.3a1 1 0 0 0-1.4 0l-4.8 4.8-1.8-1.8a1 1 0 0 0-1.4 1.42l2.5 2.5a1 1 0 0 0 1.4 0l5.5-5.5a1 1 0 0 0 0-1.42"
+										/></svg
+									>
+								</TabsTrigger>
+							{/snippet}
+						</Tooltip.Trigger>
+						<Tooltip.Content side="right">Tasks</Tooltip.Content>
+					</Tooltip.Root>
+					<Tooltip.Root>
+						<Tooltip.Trigger>
+							{#snippet child({ props })}
+								<TabsTrigger
+									{...props}
+									value="notes"
+									class="size-7 rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground data-active:bg-sidebar-accent/70 data-active:text-sidebar-foreground"
+									aria-label="Notes"
+								>
+									<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+										><path
+											fill="currentColor"
+											d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.17a2 2 0 0 0-.59-1.42l-4.58-4.58A2 2 0 0 0 13.41 2zm7.5 1.13L18.87 8H13.5zM8 12h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2m0 4h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2"
+										/></svg
+									>
+								</TabsTrigger>
+							{/snippet}
+						</Tooltip.Trigger>
+						<Tooltip.Content side="right">Notes</Tooltip.Content>
+					</Tooltip.Root>
 				</TabsList>
 			</Tabs>
 		</div>
@@ -684,7 +745,7 @@
 
 	<ScrollArea class="min-h-0 flex-1" bind:viewportRef={listViewport}>
 		{#if notesState.activeTab === 'notes'}
-			<NotesSidebar />
+			<NotesSidebar {collapsed} />
 		{:else}
 			<!-- home -->
 			<div class={collapsed ? 'mb-1 flex justify-center px-0' : 'px-1.5'}>
@@ -888,7 +949,11 @@
 									handleSidebarReorder(state, item)
 							}}
 						>
-							<Collapsible.Root open class="group/status">
+							<Collapsible.Root
+								open={!collapsedSections.has('status')}
+								onOpenChange={(open) => setSectionOpen('status', open)}
+								class="group/status"
+							>
 								<Collapsible.Trigger
 									class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
 								>
@@ -942,7 +1007,11 @@
 									handleSidebarReorder(state, item)
 							}}
 						>
-							<Collapsible.Root open class="group/priority">
+							<Collapsible.Root
+								open={!collapsedSections.has('priority')}
+								onOpenChange={(open) => setSectionOpen('priority', open)}
+								class="group/priority"
+							>
 								<Collapsible.Trigger
 									class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
 								>
@@ -1019,7 +1088,11 @@
 			<!-- projects -->
 			{#if !collapsed}
 				<div class="px-1.5">
-					<Collapsible.Root open class="group/projects">
+					<Collapsible.Root
+						open={!collapsedSections.has('projects')}
+						onOpenChange={(open) => setSectionOpen('projects', open)}
+						class="group/projects"
+					>
 						<Collapsible.Trigger
 							class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
 						>
@@ -1359,6 +1432,9 @@
 					bind:value={noteCreateName}
 					placeholder={noteCreateType === 'note' ? 'Untitled' : 'New Folder'}
 				/>
+				{#if noteCreateType === 'note'}
+					<Textarea bind:value={noteCreateDescription} placeholder="Add a description..." />
+				{/if}
 				{#if noteCreateType === 'note' && noteCreateTemplates.length > 0}
 					<Select.Root
 						type="single"

@@ -3,19 +3,22 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Calendar } from '$lib/components/ui/calendar/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 
 	type Props = {
+		// utc iso timestamp, '' when unset
 		value: string;
 		title?: string;
-		onSelect: (date: string) => void;
-		onClear?: () => void;
+		onSelect: (iso: string) => void;
+		onClear: () => void;
 	};
 
-	let { value, title = 'Due date', onSelect, onClear }: Props = $props();
+	let { value, title = 'Reminder', onSelect, onClear }: Props = $props();
 	let open = $state(false);
 
 	let selectedDate = $state<DateValue | undefined>(undefined);
+	let selectedTime = $state('09:00');
 
 	// dialog width follows the field card that opens it
 	let triggerRef = $state<HTMLButtonElement | null>(null);
@@ -24,39 +27,59 @@
 	$effect(() => {
 		if (!open) return;
 		const measured = triggerRef?.offsetWidth ?? 0;
-		// keep the calendar usable: at least 280px, never wider than the viewport
-		contentWidth = measured ? Math.max(280, Math.min(measured, window.innerWidth - 32)) : null;
+		// the calendar needs room: at least 320px, never wider than the viewport
+		const max = window.innerWidth - 32;
+		contentWidth = Math.min(Math.max(320, measured), max);
 	});
 
+	// seed the picker from the current utc timestamp, shown in local time
 	$effect(() => {
-		if (open && value) {
-			try {
-				selectedDate = parseDate(value);
-			} catch {
-				selectedDate = undefined;
-			}
+		if (!open) return;
+		const d = value ? new Date(value) : null;
+		if (d && !Number.isNaN(d.getTime())) {
+			selectedDate = parseDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+			selectedTime = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+			return;
 		}
+		selectedDate = undefined;
+		selectedTime = '09:00';
 	});
 
-	function formatDueDate(dateStr: string): string {
-		const d = new Date(dateStr + 'T00:00:00');
-		return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(d);
+	function pad(n: number): string {
+		return String(n).padStart(2, '0');
+	}
+
+	function formatReminder(iso: string): string {
+		return new Intl.DateTimeFormat('en-US', {
+			month: 'short',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		}).format(new Date(iso));
 	}
 
 	function handleSelect(date: DateValue | undefined) {
-		if (!date) return;
-		selectedDate = date;
+		if (date) selectedDate = date;
 	}
 
 	function handleConfirm() {
-		if (selectedDate) {
-			onSelect(selectedDate.toString());
-		}
+		if (!selectedDate) return;
+		const [hh, mm] = selectedTime.split(':').map(Number);
+		// the picked date is local; store the combined value as utc
+		const dt = new Date(
+			selectedDate.year,
+			selectedDate.month - 1,
+			selectedDate.day,
+			hh || 0,
+			mm || 0
+		);
+		onSelect(dt.toISOString());
 		open = false;
 	}
 
 	function handleClear() {
-		onClear?.();
+		selectedDate = undefined;
+		onClear();
 		open = false;
 	}
 
@@ -79,11 +102,12 @@
 				<svg class="text-muted-foreground" width="13" height="13" viewBox="0 0 24 24" fill="none"
 					><path
 						fill="currentColor"
-						d="M16 3a1 1 0 0 1 1 1v1h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2V4a1 1 0 0 1 2 0v1h6V4a1 1 0 0 1 1-3M8.01 16H8a1 1 0 0 0-.117 1.993L8.01 18a1 1 0 1 0 0-2m4 0H12a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m4 0H16a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m-8-4H8a1 1 0 0 0-.117 1.993L8.01 14a1 1 0 1 0 0-2m4 0H12a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m4 0H16a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2M19 7H5v2h14z"
+						fill-rule="evenodd"
+						d="M6.972 3.777a1 1 0 1 0-1.258-1.554 10.038 10.038 0 0 0-2.602 3.19 1 1 0 1 0 1.776.919 8.038 8.038 0 0 1 2.084-2.555m11.314-1.554a1 1 0 1 0-1.258 1.554 8.038 8.038 0 0 1 2.09 2.568 1 1 0 1 0 1.778-.916 10.04 10.04 0 0 0-2.61-3.206M5 10a7 7 0 0 1 14 0v3.764l1.822 3.644A1.1 1.1 0 0 1 19.838 19H4.162a1.1 1.1 0 0 1-.984-1.592L5 13.764zm4 10h6a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2"
 					/></svg
 				>
 				{#if value}
-					<span>{formatDueDate(value)}</span>
+					<span>{formatReminder(value)}</span>
 					<span
 						role="button"
 						tabindex="0"
@@ -188,7 +212,21 @@
 				value={selectedDate}
 				onValueChange={handleSelect}
 				captionLayout="dropdown"
+				style="--cell-size: 2.5rem"
 				class="rounded-lg"
+			/>
+		</div>
+
+		<Separator />
+
+		<!-- time -->
+		<div class="flex items-center justify-between gap-2 px-4 py-3">
+			<span class="text-[12px] text-muted-foreground">Time</span>
+			<Input
+				type="time"
+				bind:value={selectedTime}
+				class="h-8 w-28 rounded-lg border-border bg-muted/30 px-2.5 text-[12px] text-foreground shadow-none"
+				aria-label="Reminder time"
 			/>
 		</div>
 
@@ -196,7 +234,13 @@
 
 		<!-- footer -->
 		<div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-			<Button type="button" variant="ghost" size="sm" onclick={handleClear} disabled={!value}>
+			<Button
+				type="button"
+				variant="ghost"
+				size="sm"
+				onclick={handleClear}
+				disabled={!value && !selectedDate}
+			>
 				Clear
 			</Button>
 			<Button type="button" size="sm" onclick={handleConfirm} disabled={!selectedDate}>

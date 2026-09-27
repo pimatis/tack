@@ -3,14 +3,14 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import StatusIcon from '../StatusIcon.svelte';
+	import StatusIcon from './StatusIcon.svelte';
 	import TaskLabels from './TaskLabels.svelte';
 	import DueDateBadge from './DueDateBadge.svelte';
 	import TaskMenu from './TaskMenu.svelte';
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
-	import PriorityIcon from '../PriorityIcon.svelte';
-	import PriorityMenu from '../PriorityMenu.svelte';
-	import StatusMenu from '../StatusMenu.svelte';
+	import PriorityIcon from './PriorityIcon.svelte';
+	import PriorityMenu from './PriorityMenu.svelte';
+	import StatusMenu from './StatusMenu.svelte';
 	import type { Task, TaskStatus, TaskPriority } from '$lib/types/task';
 	import type { Project } from '$lib/types/project';
 	import type { Label } from '$lib/types/label';

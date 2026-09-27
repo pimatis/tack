@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Card } from '$lib/components/ui/card/index.js';
-	import StatusIcon from '../StatusIcon.svelte';
-	import PriorityIcon from '../PriorityIcon.svelte';
+	import StatusIcon from '../task/StatusIcon.svelte';
+	import PriorityIcon from '../task/PriorityIcon.svelte';
 	import MarkdownRenderer from '../MarkdownRenderer.svelte';
 	import { TaskPageState } from '$lib/task/taskState.svelte';
 	import { statusConfig, priorityConfig } from '$lib/task/constants';

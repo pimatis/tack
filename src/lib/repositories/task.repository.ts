@@ -16,14 +16,28 @@ type CreateTaskInput = Pick<Task, 'title'> &
 	Partial<
 		Pick<
 			Task,
-			'id' | 'description' | 'status' | 'priority' | 'projectId' | 'dueDate' | 'endDate' | 'reminderAt'
+			| 'id'
+			| 'description'
+			| 'status'
+			| 'priority'
+			| 'projectId'
+			| 'dueDate'
+			| 'endDate'
+			| 'reminderAt'
 		>
 	>;
 
 type UpdateTaskInput = Partial<
 	Pick<
 		Task,
-		'title' | 'description' | 'status' | 'priority' | 'dueDate' | 'endDate' | 'pinned' | 'reminderAt'
+		| 'title'
+		| 'description'
+		| 'status'
+		| 'priority'
+		| 'dueDate'
+		| 'endDate'
+		| 'pinned'
+		| 'reminderAt'
 	>
 >;
 
