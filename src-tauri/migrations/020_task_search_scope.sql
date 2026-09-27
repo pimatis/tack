@@ -9,6 +9,15 @@ DROP TRIGGER IF EXISTS tasks_fts_ad;
 DROP TRIGGER IF EXISTS subtasks_fts_ai;
 DROP TRIGGER IF EXISTS subtasks_fts_au;
 DROP TRIGGER IF EXISTS subtasks_fts_ad;
+-- every trigger this migration owns is dropped first, so re-running it (the
+-- downgrade path clears tracking rows) is a no-op instead of "already exists"
+DROP TRIGGER IF EXISTS task_labels_fts_ai;
+DROP TRIGGER IF EXISTS task_labels_fts_ad;
+DROP TRIGGER IF EXISTS labels_fts_au;
+DROP TRIGGER IF EXISTS labels_fts_ad;
+DROP TRIGGER IF EXISTS projects_fts_au;
+DROP TRIGGER IF EXISTS settings_fts_ai;
+DROP TRIGGER IF EXISTS settings_fts_au;
 
 DROP VIEW IF EXISTS task_search_content;
 

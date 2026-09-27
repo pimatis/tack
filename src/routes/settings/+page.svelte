@@ -436,7 +436,7 @@
 
 	<!-- body -->
 	<div class="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
-		<div class="w-full">
+		<div class="mx-auto w-full max-w-[62rem]">
 			{#if searching}
 				<!-- search results -->
 				{#if searchResults.length === 0}

@@ -169,7 +169,11 @@ pub(crate) fn run_migrations(conn: &Connection) -> Result<(), String> {
         if applied.contains(&(*version as i64)) {
             continue;
         }
-        if let Err(e) = conn.execute_batch(sql) {
+        // apply the migration and its tracking row atomically: a crash or an
+        // error mid-migration must not leave stray schema behind, which the
+        // re-run below (any downgrade path) would otherwise trip over
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        if let Err(e) = tx.execute_batch(sql) {
             let msg = e.to_string();
             if !msg.contains("duplicate column name") {
                 return Err(format!("migration {} failed: {}", version, msg));
@@ -177,7 +181,7 @@ pub(crate) fn run_migrations(conn: &Connection) -> Result<(), String> {
         }
         // same schema sqlx creates; checksum matches sqlx's sha384 so older
         // binaries using tauri-plugin-sql can still verify it
-        conn.execute_batch(
+        tx.execute_batch(
             "CREATE TABLE IF NOT EXISTS _sqlx_migrations (
                 version BIGINT PRIMARY KEY,
                 description TEXT NOT NULL,
@@ -189,12 +193,13 @@ pub(crate) fn run_migrations(conn: &Connection) -> Result<(), String> {
         )
         .map_err(|e| e.to_string())?;
         let checksum: Vec<u8> = Sha384::digest(sql.as_bytes()).to_vec();
-        conn.execute(
+        tx.execute(
             "INSERT OR IGNORE INTO _sqlx_migrations (version, description, installed_on, success, checksum, execution_time)
              VALUES (?1, ?2, CURRENT_TIMESTAMP, 1, ?3, 0)",
             params![*version as i64, *description, checksum],
         )
         .map_err(|e| format!("failed to record migration {}: {}", version, e))?;
+        tx.commit().map_err(|e| e.to_string())?;
     }
     Ok(())
 }
