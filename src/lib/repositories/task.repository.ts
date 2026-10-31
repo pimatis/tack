@@ -11,7 +11,12 @@ import {
 	log as logActivity,
 	logBatch as logActivityBatch
 } from '$lib/repositories/activity.repository';
-import { nextOccurrence, addDaysIso, addDaysTimestamp, recurrenceLabel } from '$lib/task/recurrence';
+import {
+	nextOccurrence,
+	addDaysIso,
+	addDaysTimestamp,
+	recurrenceLabel
+} from '$lib/task/recurrence';
 
 type CreateTaskInput = Pick<Task, 'title'> &
 	Partial<
@@ -337,7 +342,13 @@ async function spawnNextOccurrence(parent: Task): Promise<Task | null> {
 		occurrence.labelIds = [...labelIds];
 	}
 
-	void logActivity(parent.id, 'recurrence_spawned', 'due_date', parent.dueDate ?? null, next.dueDate);
+	void logActivity(
+		parent.id,
+		'recurrence_spawned',
+		'due_date',
+		parent.dueDate ?? null,
+		next.dueDate
+	);
 	return occurrence;
 }
 

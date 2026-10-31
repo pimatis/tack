@@ -21,6 +21,7 @@
 	import MarkdownRenderer from '../MarkdownRenderer.svelte';
 	import DueDatePicker from './DueDatePicker.svelte';
 	import RecurrencePicker from './RecurrencePicker.svelte';
+	import ReminderPicker from './ReminderPicker.svelte';
 	import { getSettings } from '$lib/stores/settings';
 	import Icon from '$lib/components/Icon.svelte';
 
@@ -36,6 +37,7 @@
 		projects: Project[];
 		labels: Label[];
 		initialDueDate?: string | null;
+		initialTitle?: string | null;
 		onCreated?: (task: Task) => void;
 		onLabelCreated?: (label: Label) => void;
 		onLabelUpdated?: (label: Label) => void;
@@ -47,6 +49,7 @@
 		projects,
 		labels,
 		initialDueDate = null,
+		initialTitle = null,
 		onCreated,
 		onLabelCreated,
 		onLabelUpdated,
@@ -60,6 +63,7 @@
 	let projectId = $state('');
 	let dueDate = $state<string>('');
 	let endDate = $state<string>('');
+	let reminderAt = $state<string>('');
 	let recurrenceRule = $state('');
 	let selectedLabelIds = $state<string[]>([]);
 	let error = $state<string | null>(null);
@@ -102,7 +106,9 @@
 	});
 
 	$effect(() => {
-		if (open) dueDate = initialDueDate ?? '';
+		if (!open) return;
+		dueDate = initialDueDate ?? '';
+		title = initialTitle ?? '';
 	});
 
 	$effect(() => {
@@ -201,6 +207,7 @@
 				priority: Number(priority) as TaskPriority,
 				dueDate: dueDate || null,
 				endDate: endDate || null,
+				reminderAt: reminderAt || null,
 				recurrenceRule: recurrenceRule || null
 			});
 
@@ -450,6 +457,13 @@
 					anchorDate={dueDate || null}
 					onSelect={(rule) => (recurrenceRule = rule)}
 					onClear={() => (recurrenceRule = '')}
+				/>
+
+				<!-- reminder -->
+				<ReminderPicker
+					value={reminderAt}
+					onSelect={(iso) => (reminderAt = iso)}
+					onClear={() => (reminderAt = '')}
 				/>
 			</div>
 

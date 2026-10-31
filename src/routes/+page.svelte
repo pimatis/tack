@@ -25,6 +25,7 @@
 			projects={state.projects}
 			labels={state.labels}
 			initialDueDate={state.createDueDate}
+			initialTitle={state.createInitialTitle}
 			onCreated={(t) => state.handleCreated(t)}
 			onLabelCreated={(l) => state.handleLabelCreated(l)}
 			onLabelUpdated={(l) => state.handleLabelUpdated(l)}
@@ -101,9 +102,11 @@
 				projects={state.projects}
 				labels={state.labels}
 				hasFilters={state.hasFilters}
+				updatedSinceDays={state.updatedSinceDays}
 				onToggleStatusFilter={(s) => state.toggleStatusFilter(s)}
 				onToggleProjectFilter={(id) => state.toggleProjectFilter(id)}
 				onToggleLabelFilter={(id) => state.toggleLabelFilter(id)}
+				onSetUpdatedSince={(d) => (state.updatedSinceDays = d)}
 				onClearFilters={() => state.clearFilters()}
 			/>
 			<Separator class="mb-4" />

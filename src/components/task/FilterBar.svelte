@@ -18,9 +18,11 @@
 		projects,
 		labels,
 		hasFilters,
+		updatedSinceDays,
 		onToggleStatusFilter,
 		onToggleProjectFilter,
 		onToggleLabelFilter,
+		onSetUpdatedSince,
 		onClearFilters
 	}: {
 		searchQuery: string;
@@ -30,9 +32,11 @@
 		projects: Project[];
 		labels: Label[];
 		hasFilters: boolean;
+		updatedSinceDays: number | null;
 		onToggleStatusFilter: (status: TaskStatus) => void;
 		onToggleProjectFilter: (projectId: string) => void;
 		onToggleLabelFilter: (labelId: string) => void;
+		onSetUpdatedSince: (days: number | null) => void;
 		onClearFilters: () => void;
 	} = $props();
 
@@ -40,6 +44,13 @@
 	let statusOpen = $state(false);
 	let projectOpen = $state(false);
 	let labelOpen = $state(false);
+	let updatedOpen = $state(false);
+
+	const UPDATED_PRESETS: [number, string][] = [
+		[1, '24 hours'],
+		[7, '7 days'],
+		[30, '30 days']
+	];
 
 	function openStatus(event: MouseEvent) {
 		event.preventDefault();
@@ -54,6 +65,11 @@
 	function openLabel(event: MouseEvent) {
 		event.preventDefault();
 		labelOpen = true;
+	}
+
+	function openUpdated(event: MouseEvent) {
+		event.preventDefault();
+		updatedOpen = true;
 	}
 </script>
 
@@ -219,6 +235,43 @@
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
 	{/if}
+
+	<!-- updated-since filter -->
+	<DropdownMenu.Root bind:open={updatedOpen}>
+		<DropdownMenu.Trigger>
+			{#snippet child({ props })}
+				<Button
+					{...props}
+					oncontextmenu={openUpdated}
+					variant="outline"
+					size="sm"
+					class="flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium transition-colors {updatedSinceDays !==
+					null
+						? 'border-border bg-muted/50 text-foreground'
+						: 'border-input text-muted-foreground hover:bg-muted/30 hover:text-foreground'}"
+				>
+					<Icon icon="clock" size={13} />
+					<span>Updated</span>
+				</Button>
+			{/snippet}
+		</DropdownMenu.Trigger>
+		<DropdownMenu.Content class="w-52 p-1.5" align="end">
+			<div class="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
+				Updated in the last
+			</div>
+			{#each UPDATED_PRESETS as [days, label] (days)}
+				<DropdownMenu.Item
+					class="gap-2.5 py-1.5 text-[13px]"
+					onclick={() => onSetUpdatedSince(updatedSinceDays === days ? null : days)}
+				>
+					<span class="truncate">{label}</span>
+					{#if updatedSinceDays === days}
+						<Icon icon="check" size={14} class="ml-auto shrink-0 text-muted-foreground" />
+					{/if}
+				</DropdownMenu.Item>
+			{/each}
+		</DropdownMenu.Content>
+	</DropdownMenu.Root>
 
 	{#if hasFilters}
 		<Button

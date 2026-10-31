@@ -4,7 +4,7 @@
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
-	import { isTauri } from '$lib/db/client';
+	import { isTauri, onDbChanged } from '$lib/db/client';
 	import { invoke } from '@tauri-apps/api/core';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import {
@@ -122,6 +122,14 @@
 			window.open(status.url, '_blank');
 		}
 	}
+
+	// recent db-changed events, mirroring `tack live watch`
+	let recentEvents = $state<string[]>([]);
+	$effect(() => {
+		return onDbChanged(() => {
+			recentEvents = [new Date().toLocaleTimeString(), ...recentEvents].slice(0, 5);
+		});
+	});
 
 	async function copyText(text: string, target: 'url' | 'stream') {
 		try {
@@ -264,6 +272,25 @@
 					</Button>
 				{/if}
 			</div>
+		</div>
+
+		<Separator />
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<div class="min-w-0">
+				<p class="text-[13px] font-medium">Recent changes</p>
+				<p class="text-xs text-muted-foreground">
+					{recentEvents.length === 0
+						? 'No database changes while this page is open'
+						: `${recentEvents.length} latest events`}
+				</p>
+			</div>
+			{#if recentEvents.length > 0}
+				<div class="flex max-w-[60%] flex-col items-end gap-0.5">
+					{#each recentEvents as time, i (i)}
+						<span class="font-mono text-[11px] text-muted-foreground">{time} db-changed</span>
+					{/each}
+				</div>
+			{/if}
 		</div>
 
 		<Separator />

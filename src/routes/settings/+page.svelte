@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -29,74 +30,7 @@
 	import CliSection from '../../components/settings/CliSection.svelte';
 	import AboutSection from '../../components/settings/AboutSection.svelte';
 	import Icon from '$lib/components/Icon.svelte';
-	import type { IconName } from '$lib/icons';
-
-	type Section = {
-		value: string;
-		label: string;
-		description: string;
-		// semantic icon key, resolved via the registry (see src/lib/icons.ts)
-		icon: IconName;
-	};
-
-	// single source of truth for the nav, the mobile picker and search labels
-	const sections: Section[] = [
-		{
-			value: 'appearance',
-			label: 'Appearance',
-			description: 'Theme, color and layout basics',
-			icon: 'palette'
-		},
-		{
-			value: 'themes',
-			label: 'Themes',
-			description: 'Pick a color palette for the whole app',
-			icon: 'paint-brush'
-		},
-		{
-			value: 'sidebar',
-			label: 'Sidebar',
-			description: 'Choose what shows in the sidebar',
-			icon: 'panel-left'
-		},
-		{ value: 'tasks', label: 'Tasks', description: 'Defaults for new tasks', icon: 'checklist' },
-		{
-			value: 'data',
-			label: 'Data',
-			description: 'Import, export and reset your data',
-			icon: 'database'
-		},
-		{
-			value: 'backup',
-			label: 'Backup',
-			description: 'Automatic snapshots and restore points',
-			icon: 'archive'
-		},
-		{
-			value: 'shortcuts',
-			label: 'Shortcuts',
-			description: 'Keyboard shortcuts for common actions',
-			icon: 'keyboard'
-		},
-		{
-			value: 'live',
-			label: 'Live',
-			description: 'Share your workspace in a browser',
-			icon: 'share'
-		},
-		{
-			value: 'permissions',
-			label: 'Permissions',
-			description: 'System permissions tack can use',
-			icon: 'notification'
-		},
-		{
-			value: 'workspace',
-			label: 'Workspace',
-			description: 'Stats, CLI and about tack',
-			icon: 'widget'
-		}
-	];
+	import { settingsSections as sections } from '$lib/settings/sections';
 
 	const tabLabels: Record<string, string> = Object.fromEntries(
 		sections.map((section) => [section.value, section.label])
@@ -111,6 +45,12 @@
 	let activeSection = $derived(
 		sections.find((section) => section.value === activeTab) ?? sections[0]
 	);
+
+	// deep links from the command palette land on /settings?tab=<section>
+	$effect(() => {
+		const tab = page.url.searchParams.get('tab');
+		if (tab && sections.some((s) => s.value === tab)) activeTab = tab;
+	});
 
 	type SettingsSearchItem = {
 		tab: string;

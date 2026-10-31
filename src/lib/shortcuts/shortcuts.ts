@@ -20,6 +20,11 @@ export const SHORTCUTS: ShortcutDefinition[] = [
 		keys: [{ key: 'k', mod: metaOrCtrl }]
 	},
 	{
+		id: 'quick-open',
+		label: 'Quick open',
+		keys: [{ key: 'p', mod: metaOrCtrl }]
+	},
+	{
 		id: 'new-task',
 		label: 'Create new task',
 		keys: [{ key: 'c' }]

@@ -11,14 +11,7 @@
 	} = $props();
 </script>
 
-<div class="flex flex-col gap-0.5">
-	<p class="text-[13px] font-medium">Color theme</p>
-	<p class="text-xs text-muted-foreground">
-		Pick a palette. Every theme adapts to both dark and light.
-	</p>
-</div>
-
-<div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
 	{#each colorPresets as preset (preset.id)}
 		{@const active = settings.themePreset === preset.id}
 		<button

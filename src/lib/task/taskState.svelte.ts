@@ -76,6 +76,7 @@ export class TaskPageState {
 	searchQuery = $state('');
 	ftsIds = $state<Set<string> | null>(null);
 	createDueDate = $state<string | null>(null);
+	createInitialTitle = $state<string | null>(null);
 	statusFilters = $state<Set<TaskStatus>>(new Set());
 	projectFilters = $state<Set<string>>(new Set());
 	labelFilters = $state<Set<string>>(new Set());
@@ -90,10 +91,12 @@ export class TaskPageState {
 	upcomingFilter = $state(false);
 	overdueFilter = $state(false);
 	priorityFilter = $state<number | null>(null);
+	updatedSinceDays = $state<number | null>(null);
 
 	hasFilters = $derived(
 		this.searchQuery.trim().length > 0 ||
-			this.statusFilters.size + this.projectFilters.size + this.labelFilters.size > 0
+			this.statusFilters.size + this.projectFilters.size + this.labelFilters.size > 0 ||
+			this.updatedSinceDays !== null
 	);
 	selectedCount = $derived(this.selectedIds.size);
 	hasSelection = $derived(this.selectedCount > 0);
@@ -153,6 +156,11 @@ export class TaskPageState {
 
 		if (this.priorityFilter !== null)
 			result = result.filter((t) => t.priority === this.priorityFilter);
+
+		if (this.updatedSinceDays !== null) {
+			const cutoff = new Date(Date.now() - this.updatedSinceDays * 864e5).toISOString();
+			result = result.filter((t) => t.updatedAt.replace(' ', 'T') >= cutoff);
+		}
 
 		const q = this.searchQuery.toLowerCase().trim();
 		if (q) {
@@ -230,6 +238,7 @@ export class TaskPageState {
 		this.upcomingFilter = false;
 		this.overdueFilter = false;
 		this.priorityFilter = null;
+		this.updatedSinceDays = null;
 	}
 
 	// selection
@@ -573,6 +582,14 @@ export class TaskPageState {
 			const timer = setTimeout(() => void this.searchFts(query), 150);
 			return () => clearTimeout(timer);
 		});
+		$effect(() => {
+			// create-dialog inputs are one-shot: clear them on close so a dialog
+			// opened without the event (e.g. board "+") never sees stale values
+			if (!this.dialogOpen) {
+				this.createInitialTitle = null;
+				this.createDueDate = null;
+			}
+		});
 	}
 
 	// returns the shared instance, creating it on first call
@@ -594,7 +611,11 @@ export class TaskPageState {
 
 	// mount lifecycle
 	init() {
-		const openDialog = () => (this.dialogOpen = true);
+		const openDialog = (event: Event) => {
+			// the palette's "Create task '<query>'" item prefills the title
+			this.createInitialTitle = (event as CustomEvent<{ title?: string }>).detail?.title ?? null;
+			this.dialogOpen = true;
+		};
 		const openProjectDialog = () => (this.projectDialogOpen = true);
 		const openProjectEditDialog = (event: Event) => {
 			this.editingProject = (event as CustomEvent<Project>).detail;
@@ -615,6 +636,7 @@ export class TaskPageState {
 			this.upcomingFilter = false;
 			this.overdueFilter = false;
 			this.priorityFilter = null;
+			this.updatedSinceDays = null;
 			this.searchQuery = '';
 			this.statusFilters = new Set();
 			this.labelFilters = new Set();
@@ -626,6 +648,7 @@ export class TaskPageState {
 			this.upcomingFilter = false;
 			this.overdueFilter = false;
 			this.priorityFilter = null;
+			this.updatedSinceDays = null;
 			this.searchQuery = '';
 			this.statusFilters = new Set();
 			this.projectFilters = new Set();
@@ -638,6 +661,7 @@ export class TaskPageState {
 			this.upcomingFilter = false;
 			this.overdueFilter = false;
 			this.priorityFilter = null;
+			this.updatedSinceDays = null;
 			this.searchQuery = '';
 			this.projectFilters = new Set();
 			this.labelFilters = new Set();
@@ -662,6 +686,7 @@ export class TaskPageState {
 			this.upcomingFilter = false;
 			this.overdueFilter = false;
 			this.priorityFilter = null;
+			this.updatedSinceDays = null;
 			this.searchQuery = '';
 			this.statusFilters = new Set();
 			this.projectFilters = new Set();
@@ -673,6 +698,7 @@ export class TaskPageState {
 			this.upcomingFilter = false;
 			this.overdueFilter = false;
 			this.priorityFilter = null;
+			this.updatedSinceDays = null;
 			this.searchQuery = '';
 			this.statusFilters = new Set();
 			this.projectFilters = new Set();
@@ -684,6 +710,7 @@ export class TaskPageState {
 			this.upcomingFilter = true;
 			this.overdueFilter = false;
 			this.priorityFilter = null;
+			this.updatedSinceDays = null;
 			this.searchQuery = '';
 			this.statusFilters = new Set();
 			this.projectFilters = new Set();
@@ -695,12 +722,17 @@ export class TaskPageState {
 			this.upcomingFilter = false;
 			this.overdueFilter = true;
 			this.priorityFilter = null;
+			this.updatedSinceDays = null;
 			this.searchQuery = '';
 			this.statusFilters = new Set();
 			this.projectFilters = new Set();
 			this.labelFilters = new Set();
 		};
 		const clearFiltersHandler = () => this.clearFilters();
+		const setView = (event: Event) => {
+			const mode = (event as CustomEvent<string>).detail;
+			if (mode === 'list' || mode === 'board' || mode === 'calendar') this.viewMode = mode;
+		};
 		const registry = getShortcutRegistry();
 
 		const unregisterSelectAll = registry.register({
@@ -742,6 +774,7 @@ export class TaskPageState {
 		window.addEventListener('filter-upcoming', filterUpcoming);
 		window.addEventListener('filter-overdue', filterOverdue);
 		window.addEventListener('clear-filters', clearFiltersHandler);
+		window.addEventListener('set-view', setView);
 
 		let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 		const unlistenDbChanged = onDbChanged(() => {
@@ -766,6 +799,7 @@ export class TaskPageState {
 			window.removeEventListener('filter-upcoming', filterUpcoming);
 			window.removeEventListener('filter-overdue', filterOverdue);
 			window.removeEventListener('clear-filters', clearFiltersHandler);
+			window.removeEventListener('set-view', setView);
 			unregisterSelectAll();
 			unregisterToggleView();
 			unregisterClearSelection();

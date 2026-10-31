@@ -142,7 +142,18 @@
 			if (refreshTimer) clearTimeout(refreshTimer);
 			refreshTimer = setTimeout(() => void load(), 200);
 		});
-		return () => unlisten();
+		// the palette's "Empty trash" action lands here and opens the confirm;
+		// reload first - the initial fetch may still be in flight on arrival
+		const openConfirm = () => {
+			void load().then(() => {
+				if (totalCount > 0) emptyConfirmOpen = true;
+			});
+		};
+		window.addEventListener('open-empty-trash-confirm', openConfirm);
+		return () => {
+			unlisten();
+			window.removeEventListener('open-empty-trash-confirm', openConfirm);
+		};
 	});
 </script>
 

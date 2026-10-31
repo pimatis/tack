@@ -471,7 +471,7 @@
 
 <aside
 	class="flex h-dvh shrink-0 flex-col transition-all duration-200 {collapsed
-		? 'w-12'
+		? 'w-12 pl-2'
 		: 'w-56'} {collapsed ? 'overflow-hidden' : ''} {isMobile
 		? 'fixed top-0 left-0 z-50 bg-sidebar shadow-xl shadow-black/10 max-md:w-60!'
 		: ''} {isMobile && !mobileOpen ? '-translate-x-full' : ''}"
@@ -603,22 +603,30 @@
 	<ScrollArea class="min-h-0 flex-1" bind:viewportRef={listViewport}>
 		<!-- home -->
 		<div class={collapsed ? 'mb-1 flex justify-center px-0' : 'px-1.5'}>
-			<Button
-				variant="ghost"
-				href="/"
-				size={collapsed ? 'icon-sm' : 'default'}
-				class={collapsed
-					? iconBtnClass
-					: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] ' + navIdleClass}
-				onclick={(e) => {
-					e.preventDefault();
-					void goHomeThenDispatch('clear-filters');
-				}}
-				aria-label="Home"
-			>
-				<Icon icon="home" size={15} class="shrink-0 text-muted-foreground" />
-				{#if !collapsed}<span>Home</span>{/if}
-			</Button>
+			<Tooltip.Root>
+				<Tooltip.Trigger>
+					{#snippet child({ props })}
+						<Button
+							{...props}
+							variant="ghost"
+							href="/"
+							size={collapsed ? 'icon-sm' : 'default'}
+							class={collapsed
+								? iconBtnClass
+								: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] ' + navIdleClass}
+							onclick={(e) => {
+								e.preventDefault();
+								void goHomeThenDispatch('clear-filters');
+							}}
+							aria-label="Home"
+						>
+							<Icon icon="home" size={15} class="shrink-0 text-muted-foreground" />
+							{#if !collapsed}<span>Home</span>{/if}
+						</Button>
+					{/snippet}
+				</Tooltip.Trigger>
+				{#if collapsed}<Tooltip.Content side="right">Home</Tooltip.Content>{/if}
+			</Tooltip.Root>
 		</div>
 
 		<!-- dynamic filter items (reorderable via settings) -->
@@ -796,15 +804,23 @@
 			<!-- collapsed: show pinned only -->
 			{#if isItemVisible('pinned')}
 				<div class="flex justify-center px-0">
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						class="{iconBtnClass} {pinnedActive ? navActiveClass : ''}"
-						onclick={() => void goHomeThenDispatch('filter-pinned')}
-						aria-label="Pinned"
-					>
-						<Icon icon="pin" size={15} class="shrink-0 text-muted-foreground" />
-					</Button>
+					<Tooltip.Root>
+						<Tooltip.Trigger>
+							{#snippet child({ props })}
+								<Button
+									{...props}
+									variant="ghost"
+									size="icon-sm"
+									class="{iconBtnClass} {pinnedActive ? navActiveClass : ''}"
+									onclick={() => void goHomeThenDispatch('filter-pinned')}
+									aria-label="Pinned"
+								>
+									<Icon icon="pin" size={15} class="shrink-0 text-muted-foreground" />
+								</Button>
+							{/snippet}
+						</Tooltip.Trigger>
+						<Tooltip.Content side="right">Pinned</Tooltip.Content>
+					</Tooltip.Root>
 				</div>
 			{/if}
 		{/if}
@@ -971,38 +987,54 @@
 				<span class="truncate">Update to {updateVersion} is available</span>
 			</button>
 		{/if}
-		<Button
-			variant="ghost"
-			href="/trash"
-			size={collapsed ? 'icon-sm' : 'default'}
-			class={collapsed
-				? iconBtnClass
-				: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] ' + navIdleClass}
-			aria-label="Trash"
-			onclick={() => {
-				// keep the active tab so the trash opens on the same tab's items
-				closeMobile();
-			}}
-		>
-			<Icon icon="trash" size={15} class="shrink-0 text-muted-foreground" />
-			{#if !collapsed}<span>Trash</span>{/if}
-		</Button>
-		<Button
-			variant="ghost"
-			href="/settings"
-			size={collapsed ? 'icon-sm' : 'default'}
-			class={collapsed
-				? iconBtnClass
-				: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] ' + navIdleClass}
-			aria-label="Settings"
-			onclick={() => {
-				// keep the active tab; settings renders on its own route
-				closeMobile();
-			}}
-		>
-			<Icon icon="settings" size={15} class="shrink-0 text-muted-foreground" />
-			{#if !collapsed}<span>Settings</span>{/if}
-		</Button>
+		<Tooltip.Root>
+			<Tooltip.Trigger>
+				{#snippet child({ props })}
+					<Button
+						{...props}
+						variant="ghost"
+						href="/trash"
+						size={collapsed ? 'icon-sm' : 'default'}
+						class={collapsed
+							? iconBtnClass
+							: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] ' + navIdleClass}
+						aria-label="Trash"
+						onclick={() => {
+							// keep the active tab so the trash opens on the same tab's items
+							closeMobile();
+						}}
+					>
+						<Icon icon="trash" size={15} class="shrink-0 text-muted-foreground" />
+						{#if !collapsed}<span>Trash</span>{/if}
+					</Button>
+				{/snippet}
+			</Tooltip.Trigger>
+			{#if collapsed}<Tooltip.Content side="right">Trash</Tooltip.Content>{/if}
+		</Tooltip.Root>
+		<Tooltip.Root>
+			<Tooltip.Trigger>
+				{#snippet child({ props })}
+					<Button
+						{...props}
+						variant="ghost"
+						href="/settings"
+						size={collapsed ? 'icon-sm' : 'default'}
+						class={collapsed
+							? iconBtnClass
+							: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] ' + navIdleClass}
+						aria-label="Settings"
+						onclick={() => {
+							// keep the active tab; settings renders on its own route
+							closeMobile();
+						}}
+					>
+						<Icon icon="settings" size={15} class="shrink-0 text-muted-foreground" />
+						{#if !collapsed}<span>Settings</span>{/if}
+					</Button>
+				{/snippet}
+			</Tooltip.Trigger>
+			{#if collapsed}<Tooltip.Content side="right">Settings</Tooltip.Content>{/if}
+		</Tooltip.Root>
 	</div>
 </aside>
 

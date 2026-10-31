@@ -7,37 +7,23 @@
 	const completionRate = $derived(
 		stats.tasks > 0 ? Math.round((stats.done / stats.tasks) * 100) : 0
 	);
+
+	const items = $derived([
+		{ label: 'Projects', value: stats.projects },
+		{ label: 'Tasks', value: stats.tasks },
+		{ label: 'Completed', value: stats.done },
+		{ label: 'Completion rate', value: `${completionRate}%` },
+		{ label: 'Labels', value: stats.labels }
+	]);
 </script>
 
 <div class="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 sm:gap-4">
-	<Card.Root size="sm">
-		<Card.Content class="py-1">
-			<p class="text-xs text-muted-foreground">Projects</p>
-			<p class="mt-1 text-2xl font-semibold tabular-nums">{stats.projects}</p>
-		</Card.Content>
-	</Card.Root>
-	<Card.Root size="sm">
-		<Card.Content class="py-1">
-			<p class="text-xs text-muted-foreground">Tasks</p>
-			<p class="mt-1 text-2xl font-semibold tabular-nums">{stats.tasks}</p>
-		</Card.Content>
-	</Card.Root>
-	<Card.Root size="sm">
-		<Card.Content class="py-1">
-			<p class="text-xs text-muted-foreground">Completed</p>
-			<p class="mt-1 text-2xl font-semibold tabular-nums">{stats.done}</p>
-		</Card.Content>
-	</Card.Root>
-	<Card.Root size="sm">
-		<Card.Content class="py-1">
-			<p class="text-xs text-muted-foreground">Completion rate</p>
-			<p class="mt-1 text-2xl font-semibold tabular-nums">{completionRate}%</p>
-		</Card.Content>
-	</Card.Root>
-	<Card.Root size="sm">
-		<Card.Content class="py-1">
-			<p class="text-xs text-muted-foreground">Labels</p>
-			<p class="mt-1 text-2xl font-semibold tabular-nums">{stats.labels}</p>
-		</Card.Content>
-	</Card.Root>
+	{#each items as item (item.label)}
+		<Card.Root size="sm">
+			<Card.Header>
+				<Card.Description class="text-xs">{item.label}</Card.Description>
+				<Card.Title class="text-2xl font-semibold tabular-nums">{item.value}</Card.Title>
+			</Card.Header>
+		</Card.Root>
+	{/each}
 </div>
