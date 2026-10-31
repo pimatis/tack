@@ -16,6 +16,10 @@ struct ExportData {
     subtasks: Vec<HashMap<String, serde_json::Value>>,
     attachments: Vec<HashMap<String, serde_json::Value>>,
     activityLog: Vec<HashMap<String, serde_json::Value>>,
+    #[serde(default)]
+    taskRelations: Vec<HashMap<String, serde_json::Value>>,
+    #[serde(default)]
+    savedViews: Vec<HashMap<String, serde_json::Value>>,
     exportedAt: String,
 }
 
@@ -77,6 +81,9 @@ pub fn export(conn: &Connection, json: bool, output_path: &str, format: &str) ->
             "id, task_id, file_name, mime_type, file_size, created_at",
         )?,
         activityLog: query_all(conn, "activity_log", "*")?,
+        // tolerant: older dbs may lack these tables
+        taskRelations: query_all(conn, "task_relations", "*").unwrap_or_default(),
+        savedViews: query_all(conn, "saved_views", "*").unwrap_or_default(),
         exportedAt: now_iso(),
     };
 
@@ -97,7 +104,9 @@ pub fn export(conn: &Connection, json: bool, output_path: &str, format: &str) ->
             + data.labels.len()
             + data.subtasks.len()
             + data.attachments.len()
-            + data.activityLog.len();
+            + data.activityLog.len()
+            + data.taskRelations.len()
+            + data.savedViews.len();
         println!("Exported {} records to {}", total, path);
     }
     Ok(())
@@ -204,7 +213,9 @@ pub fn import(conn: &Connection, json: bool, file_path: &str) -> Result<()> {
         + data.labels.len()
         + data.subtasks.len()
         + data.attachments.len()
-        + data.activityLog.len();
+        + data.activityLog.len()
+        + data.taskRelations.len()
+        + data.savedViews.len();
     if json {
         println!(
             "{}",

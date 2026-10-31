@@ -108,6 +108,24 @@ enum UiAction {
         #[arg(long)]
         right: bool,
     },
+    /// Double-click an element: --ref N or --x X --y Y
+    Dblclick {
+        #[arg(long, alias = "ref")]
+        reference: Option<u64>,
+        #[arg(long)]
+        x: Option<f64>,
+        #[arg(long)]
+        y: Option<f64>,
+    },
+    /// Right-click an element: --ref N or --x X --y Y
+    Rightclick {
+        #[arg(long, alias = "ref")]
+        reference: Option<u64>,
+        #[arg(long)]
+        x: Option<f64>,
+        #[arg(long)]
+        y: Option<f64>,
+    },
     /// Hover an element: --ref N or --x X --y Y
     Hover {
         #[arg(long, alias = "ref")]
@@ -809,6 +827,12 @@ fn main() {
                 double,
                 right,
             } => commands::ui::click(&conn, json, reference, x, y, double, right),
+            UiAction::Dblclick { reference, x, y } => {
+                commands::ui::click(&conn, json, reference, x, y, true, false)
+            }
+            UiAction::Rightclick { reference, x, y } => {
+                commands::ui::click(&conn, json, reference, x, y, false, true)
+            }
             UiAction::Hover { reference, x, y } => {
                 commands::ui::hover(&conn, json, reference, x, y)
             }
