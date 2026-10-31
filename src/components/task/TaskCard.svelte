@@ -6,6 +6,7 @@
 	import DueDateBadge from './DueDateBadge.svelte';
 	import EndDateBadge from './EndDateBadge.svelte';
 	import ReminderBadge from './ReminderBadge.svelte';
+	import RecurrenceBadge from './RecurrenceBadge.svelte';
 	import TaskMenu from './TaskMenu.svelte';
 	import { sortableItem, type DragDropState } from '$lib/dnd';
 	import type { Task, TaskStatus, TaskPriority } from '$lib/types/task';
@@ -16,6 +17,7 @@
 	import PriorityIcon from './PriorityIcon.svelte';
 	import PriorityMenu from './PriorityMenu.svelte';
 	import StatusMenu from './StatusMenu.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 
 	let {
 		task,
@@ -78,20 +80,10 @@
 				{issueId(task, projects, appSettings)}
 			</span>
 			{#if task.pinned}
-				<svg
-					class="shrink-0 text-foreground"
-					width="13"
-					height="13"
-					viewBox="0 0 24 24"
-					fill="none"
-				>
-					<path
-						fill="currentColor"
-						d="M16.735 2.835a2 2 0 0 0-2.615-.186l-2.913 2.185a9 9 0 0 1-4.127 1.71l-2.177.31c-.73.105-1.265.891-.913 1.662.331.723 1.385 2.629 4.36 5.72l-4.178 4.178a1 1 0 1 0 1.414 1.414l4.178-4.178c3.091 2.975 4.997 4.029 5.72 4.36.77.352 1.557-.183 1.661-.913l.311-2.177a9 9 0 0 1 1.71-4.127L21.35 9.88a2 2 0 0 0-.186-2.615z"
-					/>
-				</svg>
+				<Icon icon="pin" size={13} class="shrink-0 text-foreground" />
 			{/if}
 			<ReminderBadge reminderAt={task.reminderAt} sentAt={task.reminderSentAt} />
+			<RecurrenceBadge rule={task.recurrenceRule} />
 			<div class="flex-1"></div>
 			<!-- priority -->
 			<PriorityMenu

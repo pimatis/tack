@@ -6,6 +6,7 @@
 	import DialogPortal from './dialog-portal.svelte';
 	import type { Snippet } from 'svelte';
 	import type { ComponentProps } from 'svelte';
+	import Icon from '$lib/components/Icon.svelte';
 
 	let {
 		ref = $bindable(null),
@@ -37,15 +38,7 @@
 			<DialogPrimitive.Close data-slot="dialog-close">
 				{#snippet child({ props })}
 					<Button variant="ghost" class="absolute top-4 right-4" size="icon-sm" {...props}>
-						<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-							<path
-								fill="none"
-								stroke="currentColor"
-								stroke-linecap="round"
-								stroke-width="2"
-								d="m5.636 5.637l12.728 12.728m-12.728 0L18.364 5.637"
-							/>
-						</svg>
+						<Icon icon="close" size={24} />
 						<span class="sr-only">Close</span>
 					</Button>
 				{/snippet}

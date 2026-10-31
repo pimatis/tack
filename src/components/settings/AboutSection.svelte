@@ -4,6 +4,7 @@
 	import { checkForUpdate, downloadAndInstall, relaunchApp } from '$lib/updater/update.service';
 	import type { Update } from '$lib/updater/update.service';
 	import { isTauri } from '$lib/db/client';
+	import Icon from '$lib/components/Icon.svelte';
 
 	let { appVersion = '' }: { appVersion?: string } = $props();
 
@@ -85,17 +86,7 @@
 		{:else if checkState.status === 'up-to-date'}
 			<div class="flex flex-wrap items-center justify-between gap-2">
 				<div class="flex items-center gap-2 text-[13px] text-muted-foreground">
-					<svg
-						width="15"
-						height="15"
-						viewBox="0 0 24 24"
-						fill="currentColor"
-						class="text-emerald-500"
-						><path
-							fill="currentColor"
-							d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2m3.535 6.381-4.95 4.95-2.12-2.121a1 1 0 0 0-1.415 1.414l2.758 2.758a1.1 1.1 0 0 0 1.556 0l5.586-5.586a1 1 0 0 0-1.415-1.415"
-						/></svg
-					>
+					<Icon icon="check-circle" size={15} class="text-emerald-500" />
 					<span>You're on the latest version</span>
 				</div>
 				<Button variant="ghost" size="sm" class="h-7 text-xs" onclick={() => void handleCheck()}>
@@ -145,12 +136,7 @@
 		{:else if checkState.status === 'error'}
 			<div class="flex flex-wrap items-center justify-between gap-2">
 				<div class="flex items-center gap-2 text-[13px] text-destructive">
-					<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"
-						><path
-							fill="currentColor"
-							d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2m0 13a1 1 0 1 0 0 2 1 1 0 0 0 0-2m0-9a1 1 0 0 0-.993.883L11 7v6a1 1 0 0 0 1.993.117L13 13V7a1 1 0 0 0-1-1"
-						/></svg
-					>
+					<Icon icon="close-circle" size={15} />
 					<span>{checkState.message}</span>
 				</div>
 				<Button variant="ghost" size="sm" class="h-7 text-xs" onclick={() => void handleCheck()}>

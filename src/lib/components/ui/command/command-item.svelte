@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Command as CommandPrimitive } from 'bits-ui';
 	import { cn } from '$lib/utils.js';
+	import Icon from '$lib/components/Icon.svelte';
 
 	let {
 		ref = $bindable(null),
@@ -20,20 +21,9 @@
 	{...restProps}
 >
 	{@render children?.()}
-	<svg
+	<Icon
+		icon="check"
+		size={24}
 		class="cn-command-item-indicator ml-auto opacity-0 group-has-[[data-slot=command-shortcut]]/command-item:hidden group-data-[checked=true]/command-item:opacity-100"
-		width="24"
-		height="24"
-		viewBox="0 0 24 24"
-		fill="none"
-	>
-		<path
-			fill="none"
-			stroke="currentColor"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			stroke-width="2"
-			d="m3.514 11.83l5.657 5.656L20.485 6.172"
-		/>
-	</svg>
+	/>
 </CommandPrimitive.Item>

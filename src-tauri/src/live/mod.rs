@@ -8,7 +8,6 @@ mod query;
 mod server;
 
 pub use hub::{LiveHub, PresenceClient};
-mod notes;
 pub use server::{LiveState, LiveStatus};
 
 use std::path::PathBuf;

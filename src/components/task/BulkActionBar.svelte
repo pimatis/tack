@@ -12,6 +12,7 @@
 	import type { Label } from '$lib/types/label';
 	import { labelColorMap } from '$lib/types/label';
 	import type { Task } from '$lib/types/task';
+	import Icon from '$lib/components/Icon.svelte';
 
 	let {
 		selectedCount,
@@ -114,12 +115,7 @@
 						size="sm"
 						class="flex h-8 items-center gap-1.5 rounded-lg border border-input px-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
 					>
-						<svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-							><path
-								fill="currentColor"
-								d="M2 5a2 2 0 0 1 2-2h5.52a2 2 0 0 1 1.561.75l1.4 1.75H20a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"
-							/></svg
-						>
+						<Icon icon="hashtag" size={13} />
 						<span>Move</span>
 					</Button>
 				{/snippet}
@@ -151,12 +147,7 @@
 						size="sm"
 						class="flex h-8 items-center gap-1.5 rounded-lg border border-input px-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
 					>
-						<svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-							><path
-								fill="currentColor"
-								d="M12 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-.59 1.42l-8 8a2 2 0 0 1-2.82 0l-8-8a2 2 0 0 1 0-2.82l8-8A2 2 0 0 1 12 2m0 3.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3"
-							/></svg
-						>
+						<Icon icon="tag" size={13} />
 						<span>Labels</span>
 					</Button>
 				{/snippet}
@@ -178,14 +169,11 @@
 						></span>
 						<span class="truncate">{label.name}</span>
 						{#if state !== 'none'}
-							<svg
+							<Icon
+								icon="check"
+								size={13}
 								class="ml-auto shrink-0 {state === 'some' ? 'opacity-40' : ''}"
-								width="13"
-								height="13"
-								viewBox="0 0 24 24"
-								fill="none"
-								><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg
-							>
+							/>
 						{/if}
 					</Button>
 				{/each}
@@ -209,12 +197,7 @@
 						aria-label="Duplicate selected"
 						onclick={() => onBulkDuplicate()}
 					>
-						<svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-							><path
-								fill="currentColor"
-								d="M9 2a2 2 0 0 0-2 2v2h2V4h11v11h-2v2h2a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM4 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"
-							/></svg
-						>
+						<Icon icon="copy" size={15} />
 					</Button>
 				{/snippet}
 			</Tooltip.Trigger>
@@ -233,12 +216,7 @@
 						aria-label="Delete selected"
 						onclick={() => onBulkDelete()}
 					>
-						<svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-							><path
-								fill="currentColor"
-								d="M14.28 2a2 2 0 0 1 1.897 1.368L16.72 5H20a1 1 0 1 1 0 2l-.003.071-.867 12.143A3 3 0 0 1 16.138 22H7.862a3 3 0 0 1-2.992-2.786L4.003 7.07A1.01 1.01 0 0 1 4 7a1 1 0 0 1 0-2h3.28l.543-1.632A2 2 0 0 1 9.721 2zM9 10a1 1 0 0 0-.993.883L8 11v6a1 1 0 0 0 1.993.117L10 17v-6a1 1 0 0 0-1-1m6 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0v-6a1 1 0 0 0-1-1m-.72-6H9.72l-.333 1h5.226z"
-							/></svg
-						>
+						<Icon icon="trash" size={15} />
 					</Button>
 				{/snippet}
 			</Tooltip.Trigger>
@@ -257,12 +235,7 @@
 						aria-label="Clear selection"
 						onclick={() => onClearSelection()}
 					>
-						<svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-							><path
-								fill="currentColor"
-								d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
-							/></svg
-						>
+						<Icon icon="close" size={15} />
 					</Button>
 				{/snippet}
 			</Tooltip.Trigger>

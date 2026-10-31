@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Select as SelectPrimitive } from 'bits-ui';
 	import { cn, type WithoutChildrenOrChild } from '$lib/utils.js';
+	import Icon from '$lib/components/Icon.svelte';
 
 	let {
 		ref = $bindable(null),
@@ -18,14 +19,5 @@
 	)}
 	{...restProps}
 >
-	<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-		<path
-			fill="none"
-			stroke="currentColor"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			stroke-width="2"
-			d="M14.828 11L12 13.828L9.172 11"
-		/>
-	</svg>
+	<Icon icon="arrow-down" size={24} />
 </SelectPrimitive.ScrollDownButton>

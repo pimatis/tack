@@ -9,6 +9,7 @@
 	import { Spinner } from '$lib/components/ui/spinner/index.js';
 	import * as Collapsible from '$lib/components/ui/collapsible/index.js';
 	import { getSettings, setSettings } from '$lib/stores/settings';
+	import Icon from '$lib/components/Icon.svelte';
 	import {
 		listBackups,
 		createBackup,
@@ -237,17 +238,11 @@
 			<Collapsible.Trigger
 				class="flex min-w-0 flex-1 cursor-pointer list-none items-center gap-1.5 text-left text-[13px] font-medium"
 			>
-				<svg
+				<Icon
+					icon="arrow-right"
+					size={14}
 					class="shrink-0 text-muted-foreground transition-transform duration-150 group-data-[state=open]/snapshots:rotate-90"
-					width="14"
-					height="14"
-					viewBox="0 0 24 24"
-					fill="none"
-					><path
-						fill="currentColor"
-						d="M16.06 10.94a1.5 1.5 0 0 1 0 2.12l-5.656 5.658a1.5 1.5 0 1 1-2.121-2.122L12.879 12 8.283 7.404a1.5 1.5 0 0 1 2.12-2.122l5.658 5.657Z"
-					/></svg
-				>
+				/>
 				<span>Snapshots</span>
 				{#if !loading && backups.length > 0}
 					<span class="text-xs font-normal text-muted-foreground">{backups.length}</span>
@@ -336,12 +331,7 @@
 									aria-label="Delete snapshot"
 									onclick={() => (deleteTarget = backup)}
 								>
-									<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-										><path
-											fill="currentColor"
-											d="M14.28 2a2 2 0 0 1 1.897 1.368L16.72 5H20a1 1 0 1 1 0 2l-.003.071-.867 12.143A3 3 0 0 1 16.138 22H7.862a3 3 0 0 1-2.992-2.786L4.003 7.07A1.01 1.01 0 0 1 4 7a1 1 0 0 1 0-2h3.28l.543-1.632A2 2 0 0 1 9.721 2zM9 10a1 1 0 0 0-.993.883L8 11v6a1 1 0 0 0 1.993.117L10 17v-6a1 1 0 0 0-1-1m6 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0v-6a1 1 0 0 0-1-1m-.72-6H9.72l-.333 1h5.226z"
-										/></svg
-									>
+									<Icon icon="trash" size={14} />
 								</Button>
 							</div>
 						</div>

@@ -4,6 +4,7 @@
 	import { Calendar } from '$lib/components/ui/calendar/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
+	import Icon from '$lib/components/Icon.svelte';
 
 	type Props = {
 		value: string;
@@ -78,12 +79,7 @@
 				size="sm"
 				class="flex h-8 w-full items-center justify-start gap-1.5 rounded-lg border-border bg-muted/30 px-2.5 text-[12px] font-normal shadow-none transition-colors hover:bg-muted/50"
 			>
-				<svg class="text-muted-foreground" width="13" height="13" viewBox="0 0 24 24" fill="none"
-					><path
-						fill="currentColor"
-						d="M16 3a1 1 0 0 1 1 1v1h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2V4a1 1 0 0 1 2 0v1h6V4a1 1 0 0 1 1-3M8.01 16H8a1 1 0 0 0-.117 1.993L8.01 18a1 1 0 1 0 0-2m4 0H12a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m4 0H16a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m-8-4H8a1 1 0 0 0-.117 1.993L8.01 14a1 1 0 1 0 0-2m4 0H12a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m4 0H16a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2M19 7H5v2h14z"
-					/></svg
-				>
+				<Icon icon="calendar" size={13} class="text-muted-foreground" />
 				{#if value}
 					<span>{formatDueDate(value)}</span>
 					<span
@@ -103,12 +99,7 @@
 						}}
 						aria-label="Clear {title.toLowerCase()}"
 					>
-						<svg width="11" height="11" viewBox="0 0 24 24" fill="none"
-							><path
-								fill="currentColor"
-								d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
-							/></svg
-						>
+						<Icon icon="close" size={11} />
 					</span>
 				{:else}
 					<span>{title}</span>
@@ -134,12 +125,7 @@
 						size="icon-sm"
 						class="text-muted-foreground hover:text-foreground"
 					>
-						<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-							><path
-								fill="currentColor"
-								d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
-							/></svg
-						>
+						<Icon icon="close" size={16} />
 					</Button>
 				{/snippet}
 			</Dialog.Close>

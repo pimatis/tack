@@ -45,16 +45,10 @@
 	import StatusIcon from './StatusIcon.svelte';
 	import MarkdownRenderer from '../MarkdownRenderer.svelte';
 	import DueDatePicker from './DueDatePicker.svelte';
+	import RecurrencePicker from './RecurrencePicker.svelte';
 	import ReminderPicker from './ReminderPicker.svelte';
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
-	import { getLinkingNotes } from '$lib/notes/search';
-	import { notesState } from '$lib/notes/notesState.svelte';
-	import {
-		findByTaskId as findNoteLinks,
-		add as addNoteLink,
-		remove as removeNoteLink,
-		type TaskNoteLink
-	} from '$lib/repositories/noteLink.repository';
+	import Icon from '$lib/components/Icon.svelte';
 
 	type Props = {
 		open?: boolean;
@@ -98,6 +92,7 @@
 	let dueDate = $state<string>('');
 	let endDate = $state<string>('');
 	let reminderAt = $state<string>('');
+	let recurrenceRule = $state<string>('');
 	let error = $state<string | null>(null);
 	let submitting = $state(false);
 	let previewMode = $state(false);
@@ -131,6 +126,7 @@
 		dueDate: string;
 		endDate: string;
 		reminderAt: string;
+		recurrenceRule: string;
 		labelIds: string[];
 		pendingCount: number;
 	} | null>(null);
@@ -143,6 +139,7 @@
 				original.dueDate !== dueDate ||
 				original.endDate !== endDate ||
 				original.reminderAt !== reminderAt ||
+				original.recurrenceRule !== recurrenceRule ||
 				original.pendingCount !== pendingAttachments.length ||
 				original.labelIds.length !== selectedLabelIds.length ||
 				selectedLabelIds.some((id) => !original!.labelIds.includes(id)))
@@ -150,14 +147,6 @@
 
 	// activity
 	let activities = $state<ActivityLog[]>([]);
-
-	// notes that mention this task; loaded with the panel content
-	let mentioningNotes = $state<{ path: string; name: string }[]>([]);
-
-	// explicit task -> note links added from this panel
-	let linkedNotes = $state<TaskNoteLink[]>([]);
-	let notePickerOpen = $state(false);
-	let noteQuery = $state('');
 
 	const statusLabels: Record<TaskStatus, string> = {
 		todo: 'Todo',
@@ -189,6 +178,7 @@
 		dueDate = task.dueDate ?? '';
 		endDate = task.endDate ?? '';
 		reminderAt = task.reminderAt ?? '';
+		recurrenceRule = task.recurrenceRule ?? '';
 		error = null;
 		previewMode = false;
 		pendingAttachments = [];
@@ -196,9 +186,6 @@
 		attachmentUrls = {};
 		selectedLabelIds = [];
 		newSubtaskTitle = '';
-		linkedNotes = [];
-		notePickerOpen = false;
-		noteQuery = '';
 		original = {
 			title: task.title,
 			description: task.description ?? '',
@@ -207,6 +194,7 @@
 			dueDate: task.dueDate ?? '',
 			endDate: task.endDate ?? '',
 			reminderAt: task.reminderAt ?? '',
+			recurrenceRule: task.recurrenceRule ?? '',
 			labelIds: [],
 			pendingCount: 0
 		};
@@ -214,10 +202,8 @@
 		void loadTaskLabels(task.id);
 		void loadSubtasks(task.id);
 		void loadActivity(task.id);
-		void loadMentioningNotes(task.id);
-		void loadLinkedNotes(task.id);
 		// the list view omits the description column; fetch the full task so
-		// existing descriptions (e.g. from a note conversion) show up
+		// existing descriptions show up
 		void loadFullTask(task.id);
 	});
 
@@ -229,66 +215,6 @@
 		if (!description) {
 			description = full.description ?? '';
 			if (original && !original.description) original.description = full.description ?? '';
-		}
-	}
-
-	// jump from a task to a note: switch to the notes tab first so the notes
-	// view is mounted when the note opens
-	async function openNote(path: string) {
-		notesState.activeTab = 'notes';
-		await notesState.openNote(path);
-	}
-
-	async function loadMentioningNotes(taskId: string) {
-		mentioningNotes = [];
-		try {
-			mentioningNotes = await getLinkingNotes(`task:${taskId}`);
-		} catch {
-			// the links index may not exist yet
-		}
-	}
-
-	async function loadLinkedNotes(taskId: string) {
-		try {
-			linkedNotes = await findNoteLinks(taskId);
-		} catch {
-			linkedNotes = [];
-		}
-	}
-
-	// notes that can be linked: everything in the vault, minus already linked
-	const noteCandidates = $derived.by(() => {
-		const query = noteQuery.trim().toLowerCase();
-		const linked = new Set(linkedNotes.map((link) => link.notePath));
-		return notesState.allNotes
-			.filter((note) => !linked.has(note.path))
-			.filter((note) => !query || note.name.toLowerCase().includes(query))
-			.slice(0, 8);
-	});
-
-	function noteLabel(path: string): string {
-		return path.split('/').pop()?.replace(/\.md$/i, '') ?? path;
-	}
-
-	async function addLinkedNote(path: string) {
-		if (!task) return;
-		try {
-			await addNoteLink(task.id, path);
-			linkedNotes = await findNoteLinks(task.id);
-			noteQuery = '';
-			notePickerOpen = false;
-		} catch {
-			error = 'Failed to link note';
-		}
-	}
-
-	async function removeLinkedNote(path: string) {
-		if (!task) return;
-		try {
-			await removeNoteLink(task.id, path);
-			linkedNotes = linkedNotes.filter((link) => link.notePath !== path);
-		} catch {
-			error = 'Failed to unlink note';
 		}
 	}
 
@@ -581,7 +507,8 @@
 				priority: Number(priority) as TaskPriority,
 				dueDate: dueDate || null,
 				endDate: endDate || null,
-				reminderAt: reminderAt || null
+				reminderAt: reminderAt || null,
+				recurrenceRule: recurrenceRule || null
 			});
 
 			for (const att of pendingAttachments) {
@@ -651,6 +578,12 @@
 				return entry.newValue ? `set end date to ${entry.newValue}` : 'removed the end date';
 			case 'reminder_changed':
 				return entry.newValue ? `set a reminder for ${entry.newValue}` : 'removed the reminder';
+			case 'recurrence_changed':
+				return entry.newValue
+					? `set the task to repeat ${entry.newValue.toLowerCase()}`
+					: 'removed the repeat schedule';
+			case 'recurrence_spawned':
+				return `scheduled the next occurrence for ${entry.newValue}`;
 			case 'label_added':
 				return `added label ${entry.newValue}`;
 			case 'label_removed':
@@ -715,23 +648,7 @@
 										aria-label={task.pinned ? 'Unpin task' : 'Pin task'}
 										onclick={() => void handleTogglePin()}
 									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											width="15"
-											height="15"
-											viewBox="0 0 24 24"
-										>
-											<title>pin_fill</title>
-											<g id="pin_fill" fill="none">
-												<path
-													d="M24 0v24H0V0zM12.593 23.258l-.011.002-.071.035-.02.004-.014-.004-.071-.035c-.01-.004-.019-.001-.024.005l-.004.01-.017.428.005.02.01.013.104.074.015.004.012-.004.104-.074.012-.016.004-.017-.017-.427c-.002-.01-.009-.017-.017-.018m.265-.113-.013.002-.185.093-.01.01-.003.011.018.43.005.012.008.007.201.093c.012.004.023 0 .029-.008l.004-.014-.034-.614c-.003-.012-.01-.02-.02-.022m-.715.002a.023.023 0 0 0-.027.006l-.006.014-.034.614c0 .012.007.02.017.024l.015-.002.201-.093.01-.008.004-.011.017-.43-.003-.012-.01-.01z"
-												/>
-												<path
-													fill="currentColor"
-													d="M16.735 2.835a2 2 0 0 0-2.615-.186l-2.913 2.185a9 9 0 0 1-4.127 1.71l-2.177.31c-.73.105-1.265.891-.913 1.662.331.723 1.385 2.629 4.36 5.72l-4.178 4.178a1 1 0 1 0 1.414 1.414l4.178-4.178c3.091 2.975 4.997 4.029 5.72 4.36.77.352 1.557-.183 1.661-.913l.311-2.177a9 9 0 0 1 1.71-4.127L21.35 9.88a2 2 0 0 0-.186-2.615z"
-												/>
-											</g>
-										</svg>
+										<Icon icon="pin" size={15} />
 									</Button>
 								{/snippet}
 							</Tooltip.Trigger>
@@ -753,12 +670,7 @@
 											close();
 										}}
 									>
-										<svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-											><path
-												fill="currentColor"
-												d="M14.28 2a2 2 0 0 1 1.897 1.368L16.72 5H20a1 1 0 1 1 0 2l-.003.071-.867 12.143A3 3 0 0 1 16.138 22H7.862a3 3 0 0 1-2.992-2.786L4.003 7.07A1.01 1.01 0 0 1 4 7a1 1 0 0 1 0-2h3.28l.543-1.632A2 2 0 0 1 9.721 2zM9 10a1 1 0 0 0-.993.883L8 11v6a1 1 0 0 0 1.993.117L10 17v-6a1 1 0 0 0-1-1m6 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0v-6a1 1 0 0 0-1-1m-.72-6H9.72l-.333 1h5.226z"
-											/></svg
-										>
+										<Icon icon="trash" size={15} />
 									</Button>
 								{/snippet}
 							</Tooltip.Trigger>
@@ -775,12 +687,7 @@
 										aria-label="Close panel"
 										onclick={close}
 									>
-										<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-											><path
-												fill="currentColor"
-												d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
-											/></svg
-										>
+										<Icon icon="close" size={16} />
 									</Button>
 								{/snippet}
 							</Tooltip.Trigger>
@@ -811,20 +718,10 @@
 										onclick={() => (previewMode = !previewMode)}
 									>
 										{#if previewMode}
-											<svg width="11" height="11" viewBox="0 0 24 24" fill="none"
-												><path
-													fill="currentColor"
-													d="M7.06 16.836a1.25 1.25 0 0 1 1.86 1.666l-.091.102-2.298 2.298a1.5 1.5 0 0 1-2.008.103l-.114-.103-1.237-1.238a1.25 1.25 0 0 1 1.666-1.859l.102.091.53.53zM20 17.5a1.5 1.5 0 0 1 0 3h-8a1.5 1.5 0 1 1 0-3zM8.83 9.836a1.25 1.25 0 0 1 0 1.768l-2.3 2.298a1.5 1.5 0 0 1-2.122 0l-1.237-1.238a1.25 1.25 0 1 1 1.768-1.768l.53.53 1.59-1.59a1.25 1.25 0 0 1 1.769 0ZM20 10.5a1.5 1.5 0 0 1 .145 2.993L20 13.5h-8a1.5 1.5 0 0 1-.144-2.993L12 10.5zM7.06 2.836a1.25 1.25 0 0 1 1.86 1.666l-.091.101L6.53 6.902a1.5 1.5 0 0 1-2.008.103l-.114-.103-1.237-1.238a1.25 1.25 0 0 1 1.666-1.859l.102.091.53.53zM20 3.5a1.5 1.5 0 0 1 .145 2.993L20 6.5h-8a1.5 1.5 0 0 1-.144-2.993L12 3.5z"
-												/></svg
-											>
+											<Icon icon="checklist" size={11} />
 											<span>Edit</span>
 										{:else}
-											<svg width="11" height="11" viewBox="0 0 24 24" fill="none"
-												><path
-													fill="currentColor"
-													d="M12 5c3.679 0 8.162 2.417 9.73 5.901.146.328.27.71.27 1.099 0 .388-.123.771-.27 1.099C20.161 16.583 15.678 19 12 19c-3.679 0-8.162-2.417-9.73-5.901C2.124 12.77 2 12.389 2 12c0-.388.123-.771.27-1.099C3.839 7.417 8.322 5 12 5m0 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4"
-												/></svg
-											>
+											<Icon icon="eye" size={11} />
 											<span>Preview</span>
 										{/if}
 									</Button>
@@ -853,17 +750,7 @@
 						<!-- subtasks / checklist -->
 						<div class="pt-4">
 							<div class="flex items-center gap-2 pb-2">
-								<svg
-									class="text-muted-foreground/60"
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									><path
-										fill="currentColor"
-										d="M7 13a2 2 0 0 1 1.995 1.85L9 15v3a2 2 0 0 1-1.85 1.995L7 20H4a2 2 0 0 1-1.995-1.85L2 18v-3a2 2 0 0 1 1.85-1.995L4 13zm9 4a1 1 0 0 1 .117 1.993L16 19h-4a1 1 0 0 1-.117-1.993L12 17zm4-4a1 1 0 1 1 0 2h-8a1 1 0 1 1 0-2zM7 3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm9 4a1 1 0 0 1 .117 1.993L16 9h-4a1 1 0 0 1-.117-1.993L12 7zm4-4a1 1 0 0 1 .117 1.993L20 5h-8a1 1 0 0 1-.117-1.993L12 3z"
-									/></svg
-								>
+								<Icon icon="checklist" size={14} class="text-muted-foreground/60" />
 								<span class="text-[12px] font-medium text-foreground">Subtasks</span>
 								{#if subtasks.length > 0}
 									<span class="text-[11px] text-muted-foreground/50"
@@ -934,12 +821,7 @@
 														onclick={() => startEditSubtask(subtask)}
 														aria-label="Rename subtask"
 													>
-														<svg width="11" height="11" viewBox="0 0 24 24" fill="none"
-															><path
-																fill="currentColor"
-																d="M20.131 3.16a3 3 0 0 0-4.242 0l-.707.708 4.95 4.95.706-.707a3 3 0 0 0 0-4.243l-.707-.707Zm-1.414 7.072-4.95-4.95-9.09 9.091a1.5 1.5 0 0 0-.401.724l-1.029 4.455a1 1 0 0 0 1.2 1.2l4.456-1.028a1.5 1.5 0 0 0 .723-.401z"
-															/></svg
-														>
+														<Icon icon="pencil" size={11} />
 													</Button>
 													<Button
 														variant="ghost"
@@ -948,12 +830,7 @@
 														onclick={() => void handleRemoveSubtask(subtask.id)}
 														aria-label="Remove subtask"
 													>
-														<svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-															><path
-																fill="currentColor"
-																d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
-															/></svg
-														>
+														<Icon icon="close" size={12} />
 													</Button>
 												{/if}
 											</div>
@@ -963,17 +840,7 @@
 
 								<!-- add subtask -->
 								<div class="flex items-center gap-2 pt-1">
-									<svg
-										class="text-muted-foreground/30"
-										width="14"
-										height="14"
-										viewBox="0 0 24 24"
-										fill="none"
-										><path
-											fill="currentColor"
-											d="M10.5 20a1.5 1.5 0 0 0 3 0v-6.5H20a1.5 1.5 0 0 0 0-3h-6.5V4a1.5 1.5 0 0 0-3 0v6.5H4a1.5 1.5 0 0 0 0 3h6.5z"
-										/></svg
-									>
+									<Icon icon="add" size={14} class="text-muted-foreground/30" />
 									<Input
 										bind:value={newSubtaskTitle}
 										placeholder="Add a subtask..."
@@ -1010,12 +877,7 @@
 								<div
 									class="flex items-center gap-1.5 pb-2 text-[11px] font-medium text-muted-foreground/60"
 								>
-									<svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-										><path
-											fill="currentColor"
-											d="M15.889 9.525a1.5 1.5 0 0 1 2.007-.103l.114.103 2.122 2.121a6 6 0 0 1-8.303 8.661l-.183-.175-2.121-2.122a1.5 1.5 0 0 1 2.007-2.224l.114.103 2.122 2.121a3 3 0 0 0 4.377-4.098l-.135-.144-2.121-2.122a1.5 1.5 0 0 1 0-2.121m-7.071-.707a1.5 1.5 0 0 1 2.007-.103l.114.103 4.243 4.243a1.5 1.5 0 0 1-2.008 2.224l-.114-.103-4.242-4.243a1.5 1.5 0 0 1 0-2.121m-4.95-4.95a6 6 0 0 1 8.302-.175l.184.175 2.12 2.122a1.5 1.5 0 0 1-2.007 2.224l-.114-.103-2.12-2.121a3 3 0 0 0-4.378 4.098l.135.144 2.12 2.122a1.5 1.5 0 0 1-2.007 2.224l-.113-.103-2.122-2.121a6 6 0 0 1 0-8.486"
-										/></svg
-									>
+									<Icon icon="paperclip" size={12} />
 									<span>Attachments</span>
 								</div>
 								<div class="flex flex-wrap gap-2">
@@ -1051,17 +913,7 @@
 												<div
 													class="flex size-full flex-col items-center justify-center gap-1 p-1 text-center"
 												>
-													<svg
-														class="text-muted-foreground"
-														width="20"
-														height="20"
-														viewBox="0 0 24 24"
-														fill="none"
-														><path
-															fill="currentColor"
-															d="M4.5 15V9a1.5 1.5 0 1 1 3 0v6a4.5 4.5 0 1 0 9 0V7a2.5 2.5 0 0 0-5 0v8a.5.5 0 0 0 1 0V9a1.5 1.5 0 0 1 3 0v6a3.5 3.5 0 1 1-7 0V7a5.5 5.5 0 1 1 11 0v8a7.5 7.5 0 0 1-15 0"
-														/></svg
-													>
+													<Icon icon="paperclip" size={20} class="text-muted-foreground" />
 													<span class="line-clamp-1 text-[9px] text-muted-foreground"
 														>{att.fileName}</span
 													>
@@ -1074,12 +926,7 @@
 												onclick={() => void deleteExisting(att.id)}
 												aria-label="Remove attachment"
 											>
-												<svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-													><path
-														fill="currentColor"
-														d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
-													/></svg
-												>
+												<Icon icon="close" size={10} />
 											</Button>
 											<Button
 												variant="ghost"
@@ -1088,12 +935,7 @@
 												onclick={() => void handleDownloadAttachment(att)}
 												aria-label="Download attachment"
 											>
-												<svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-													><path
-														fill="currentColor"
-														d="M12 2a1 1 0 0 1 1 1v10.586l3.293-3.293a1 1 0 0 1 1.414 1.414l-5 5a1 1 0 0 1-1.414 0l-5-5a1 1 0 0 1 1.414-1.414L11 13.586V3a1 1 0 0 1 1-1M5 19a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1"
-													/></svg
-												>
+												<Icon icon="download" size={10} />
 											</Button>
 										</div>
 									{/each}
@@ -1123,17 +965,7 @@
 												<div
 													class="flex size-full flex-col items-center justify-center gap-1 p-1 text-center"
 												>
-													<svg
-														class="text-muted-foreground"
-														width="20"
-														height="20"
-														viewBox="0 0 24 24"
-														fill="none"
-														><path
-															fill="currentColor"
-															d="M4.5 15V9a1.5 1.5 0 1 1 3 0v6a4.5 4.5 0 1 0 9 0V7a2.5 2.5 0 0 0-5 0v8a.5.5 0 0 0 1 0V9a1.5 1.5 0 0 1 3 0v6a3.5 3.5 0 1 1-7 0V7a5.5 5.5 0 1 1 11 0v8a7.5 7.5 0 0 1-15 0"
-														/></svg
-													>
+													<Icon icon="paperclip" size={20} class="text-muted-foreground" />
 													<span class="line-clamp-1 text-[9px] text-muted-foreground"
 														>{att.fileName}</span
 													>
@@ -1146,12 +978,7 @@
 												onclick={() => removePending(i)}
 												aria-label="Remove attachment"
 											>
-												<svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-													><path
-														fill="currentColor"
-														d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
-													/></svg
-												>
+												<Icon icon="close" size={10} />
 											</Button>
 										</div>
 									{/each}
@@ -1163,135 +990,13 @@
 							<p class="pt-3 text-[12px] text-destructive" role="alert">{error}</p>
 						{/if}
 
-						<!-- explicit note links added from this panel -->
-						<div class="pt-5">
-							<div
-								class="flex items-center gap-1.5 pb-2 text-[11px] font-medium text-muted-foreground/60"
-							>
-								<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-									<path
-										fill="currentColor"
-										d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.17a2 2 0 0 0-.59-1.42l-4.58-4.58A2 2 0 0 0 13.41 2zm7.5 1.13L18.87 8H13.5zM8 12h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2m0 4h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2"
-									/>
-								</svg>
-								<span>Linked notes</span>
-								<div class="flex-1"></div>
-								<button
-									type="button"
-									class="text-[11px] text-muted-foreground/60 transition-colors hover:text-foreground"
-									onclick={() => (notePickerOpen = !notePickerOpen)}
-								>
-									{notePickerOpen ? 'Cancel' : '+ Link note'}
-								</button>
-							</div>
-
-							{#if linkedNotes.length > 0}
-								<div class="flex flex-wrap gap-1.5">
-									{#each linkedNotes as link (link.notePath)}
-										<span
-											class="flex max-w-52 items-center gap-1 rounded-full border border-border bg-muted/30 py-0.5 pr-1 pl-2 text-[11px]"
-										>
-											<button
-												type="button"
-												class="truncate text-muted-foreground transition-colors hover:text-foreground"
-												onclick={() => void openNote(link.notePath)}
-											>
-												{noteLabel(link.notePath)}
-											</button>
-											<button
-												type="button"
-												class="flex size-3.5 shrink-0 items-center justify-center rounded-full text-muted-foreground/50 transition-colors hover:bg-muted/60 hover:text-destructive"
-												aria-label="Unlink note"
-												onclick={() => void removeLinkedNote(link.notePath)}
-											>
-												<svg width="8" height="8" viewBox="0 0 24 24" fill="none"
-													><path
-														fill="currentColor"
-														d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
-													/></svg
-												>
-											</button>
-										</span>
-									{/each}
-								</div>
-							{/if}
-
-							{#if notePickerOpen}
-								<div class="mt-1.5 rounded-lg border border-border bg-muted/20 p-2">
-									<Input
-										bind:value={noteQuery}
-										placeholder="Search notes..."
-										class="h-7 text-[12px]"
-									/>
-									<div class="mt-1 max-h-40 overflow-y-auto">
-										{#if !notesState.folder}
-											<p class="px-1 py-1.5 text-[12px] text-muted-foreground/50">
-												Choose a notes folder first.
-											</p>
-										{:else if noteCandidates.length === 0}
-											<p class="px-1 py-1.5 text-[12px] text-muted-foreground/50">
-												No notes found.
-											</p>
-										{:else}
-											{#each noteCandidates as candidate (candidate.path)}
-												<button
-													type="button"
-													class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[12px] text-foreground/90 transition-colors hover:bg-muted/50"
-													onclick={() => void addLinkedNote(candidate.path)}
-												>
-													<span class="truncate">{candidate.name.replace(/\.md$/, '')}</span>
-												</button>
-											{/each}
-										{/if}
-									</div>
-								</div>
-							{/if}
-						</div>
-
-						<!-- notes that mention this task via @-links -->
-						{#if mentioningNotes.length > 0}
-							<div class="pt-5">
-								<div
-									class="flex items-center gap-1.5 pb-2 text-[11px] font-medium text-muted-foreground/60"
-								>
-									<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-										<path
-											fill="currentColor"
-											d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.17a2 2 0 0 0-.59-1.42l-4.58-4.58A2 2 0 0 0 13.41 2zm7.5 1.13L18.87 8H13.5zM8 12h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2m0 4h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2"
-										/>
-									</svg>
-									<span>Notes mentioning this task</span>
-								</div>
-								<div class="flex flex-wrap gap-1.5">
-									{#each mentioningNotes as note (note.path)}
-										<button
-											type="button"
-											class="max-w-52 truncate rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-											onclick={() => void openNote(note.path)}
-										>
-											{note.name.replace(/\.md$/, '')}
-										</button>
-									{/each}
-								</div>
-							</div>
-						{/if}
-
 						<!-- activity history -->
 						{#if activities.length > 0}
 							<div class="pt-5">
 								<div
 									class="flex items-center gap-1.5 pb-2 text-[11px] font-medium text-muted-foreground/60"
 								>
-									<svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-										<path
-											fill="none"
-											stroke="currentColor"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M12 6v6l4 2M12 2a10 10 0 1 0 0 20a10 10 0 0 0 0-20"
-										/>
-									</svg>
+									<Icon icon="clock" size={12} />
 									<span>Activity</span>
 								</div>
 								<div class="flex flex-col">
@@ -1315,16 +1020,7 @@
 															variant="outline"
 															class="h-4 gap-0.5 border-muted-foreground/20 px-1.5 text-[10px] font-medium text-muted-foreground/60"
 														>
-															<svg width="9" height="9" viewBox="0 0 24 24" fill="none">
-																<path
-																	fill="none"
-																	stroke="currentColor"
-																	stroke-linecap="round"
-																	stroke-linejoin="round"
-																	stroke-width="2.5"
-																	d="M7 9l-3 3 3 3M17 9l3 3-3 3M14 5l-4 14"
-																/>
-															</svg>
+															<Icon icon="code" size={9} />
 															CLI
 														</Badge>
 													{/if}
@@ -1412,6 +1108,17 @@
 							/>
 						</div>
 
+						<!-- repeat -->
+						<div class="flex flex-col gap-1 py-1.5">
+							<span class="text-[11px] font-medium text-muted-foreground/60">Repeat</span>
+							<RecurrencePicker
+								value={recurrenceRule}
+								anchorDate={dueDate || null}
+								onSelect={(rule) => (recurrenceRule = rule)}
+								onClear={() => (recurrenceRule = '')}
+							/>
+						</div>
+
 						<!-- reminder -->
 						<div class="flex flex-col gap-1 py-1.5">
 							<span class="text-[11px] font-medium text-muted-foreground/60">Reminder</span>
@@ -1463,12 +1170,7 @@
 										{#if uploading}
 											<Spinner class="size-4" />
 										{:else}
-											<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-												><path
-													fill="currentColor"
-													d="M15.889 9.525a1.5 1.5 0 0 1 2.007-.103l.114.103 2.122 2.121a6 6 0 0 1-8.303 8.661l-.183-.175-2.121-2.122a1.5 1.5 0 0 1 2.007-2.224l.114.103 2.122 2.121a3 3 0 0 0 4.377-4.098l-.135-.144-2.121-2.122a1.5 1.5 0 0 1 0-2.121m-7.071-.707a1.5 1.5 0 0 1 2.007-.103l.114.103 4.243 4.243a1.5 1.5 0 0 1-2.008 2.224l-.114-.103-4.242-4.243a1.5 1.5 0 0 1 0-2.121m-4.95-4.95a6 6 0 0 1 8.302-.175l.184.175 2.12 2.122a1.5 1.5 0 0 1-2.007 2.224l-.114-.103-2.12-2.121a3 3 0 0 0-4.378 4.098l.135.144 2.12 2.122a1.5 1.5 0 0 1-2.007 2.224l-.113-.103-2.122-2.121a6 6 0 0 1 0-8.486"
-												/></svg
-											>
+											<Icon icon="paperclip" size={16} />
 										{/if}
 									</Button>
 								{/snippet}

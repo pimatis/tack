@@ -2,7 +2,6 @@ use super::attachments::{delete_attachment, put_attachment, serve_attachment};
 use super::auth::{authorized, handle_auth, load_auth};
 use super::backups::{create_backup_http, delete_backup_http, restore_backup_http, serve_backups};
 use super::events::{poll_events, stream_events};
-use super::notes;
 use super::query::run_query;
 use super::Ctx;
 use serde::Serialize;
@@ -90,16 +89,6 @@ pub(super) fn handle_request(request: Request, ctx: &Ctx) {
         }
         (Method::Delete, p) if p.starts_with("/api/attachment/") => delete_attachment(p, ctx),
         (Method::Get, "/api/backups") => serve_backups(ctx),
-        (Method::Get, "/api/notes/deep") => notes::serve_deep(ctx),
-        (Method::Get, "/api/notes/root") => notes::serve_root(ctx),
-        (Method::Get, "/api/notes/folders") => notes::serve_folders(ctx, query),
-        (Method::Get, "/api/notes/list") => notes::serve_list(ctx, query),
-        (Method::Get, "/api/notes/file") => notes::serve_file(ctx, query),
-        (Method::Get, "/api/notes/info") => notes::serve_info(ctx, query),
-        (Method::Get, "/api/notes/asset") => notes::serve_asset(ctx, query),
-        (Method::Post, p) if p.starts_with("/api/notes/") => {
-            notes::post_notes(&mut request, p, ctx)
-        }
         (Method::Post, "/api/backups") => create_backup_http(&mut request, ctx),
         (Method::Post, p) if p.starts_with("/api/backups/") && p.ends_with("/restore") => {
             restore_backup_http(p, ctx)
@@ -123,14 +112,11 @@ pub(super) fn handle_request(request: Request, ctx: &Ctx) {
 fn is_mutation(method: &Method, path: &str) -> bool {
     match method {
         Method::Post => {
-            path.starts_with("/api/notes/")
-                || path == "/api/backups"
+            path == "/api/backups"
                 || (path.starts_with("/api/backups/") && path.ends_with("/restore"))
         }
         Method::Put => path.starts_with("/api/attachment/"),
-        Method::Delete => {
-            path.starts_with("/api/attachment/") || path.starts_with("/api/backups/")
-        }
+        Method::Delete => path.starts_with("/api/attachment/") || path.starts_with("/api/backups/"),
         _ => false,
     }
 }

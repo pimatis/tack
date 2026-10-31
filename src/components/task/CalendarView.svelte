@@ -7,6 +7,7 @@
 	import { labelColorMap } from '$lib/types/label';
 	import { issueId } from '$lib/task/utils';
 	import CalendarDayPanel from './CalendarDayPanel.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 
 	type Props = {
 		tasks: Task[];
@@ -177,12 +178,7 @@
 					onclick={() => shiftMonth(-1)}
 					aria-label="Previous month"
 				>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-						><path
-							fill="currentColor"
-							d="M14.06 6.94a1.5 1.5 0 0 1 0 2.12L10.12 13l3.94 3.94a1.5 1.5 0 0 1-2.12 2.12l-5-5a1.5 1.5 0 0 1 0-2.12l5-5a1.5 1.5 0 0 1 2.12 0"
-						/></svg
-					>
+					<Icon icon="arrow-left" size={14} />
 				</Button>
 				<Button
 					variant="ghost"
@@ -191,12 +187,7 @@
 					onclick={() => shiftMonth(1)}
 					aria-label="Next month"
 				>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-						><path
-							fill="currentColor"
-							d="M9.94 6.94a1.5 1.5 0 0 0 0 2.12L13.88 13l-3.94 3.94a1.5 1.5 0 0 0 2.12 2.12l5-5a1.5 1.5 0 0 0 0-2.12l-5-5a1.5 1.5 0 0 0-2.12 0"
-						/></svg
-					>
+					<Icon icon="arrow-right" size={14} />
 				</Button>
 			</div>
 		</div>
@@ -254,12 +245,7 @@
 							onAddTask(dayKey(day));
 						}}
 					>
-						<svg width="11" height="11" viewBox="0 0 24 24" fill="none"
-							><path
-								fill="currentColor"
-								d="M10.5 20a1.5 1.5 0 0 0 3 0v-6.5H20a1.5 1.5 0 0 0 0-3h-6.5V4a1.5 1.5 0 0 0-3 0v6.5H4a1.5 1.5 0 0 0 0 3h6.5z"
-							/></svg
-						>
+						<Icon icon="add" size={11} />
 					</button>
 				</div>
 
@@ -302,17 +288,11 @@
 										{bar.task.title}
 									</span>
 									{#if !isEnd}
-										<svg
+										<Icon
+											icon="arrow-right"
+											size={10}
 											class="hidden shrink-0 text-muted-foreground/60 sm:block"
-											width="10"
-											height="10"
-											viewBox="0 0 24 24"
-											fill="none"
-											><path
-												fill="currentColor"
-												d="M9.94 6.94a1.5 1.5 0 0 0 0 2.12L13.88 13l-3.94 3.94a1.5 1.5 0 0 0 2.12 2.12l5-5a1.5 1.5 0 0 0 0-2.12l-5-5a1.5 1.5 0 0 0-2.12 0"
-											/></svg
-										>
+										/>
 									{/if}
 								</button>
 							{:else}
@@ -324,17 +304,11 @@
 									style="top: {bar.lane * LANE_HEIGHT + 9}px"
 								>
 									{#if isEnd}
-										<svg
+										<Icon
+											icon="arrow-right"
+											size={9}
 											class="absolute right-0 -translate-y-[6px] text-primary/50"
-											width="9"
-											height="9"
-											viewBox="0 0 24 24"
-											fill="none"
-											><path
-												fill="currentColor"
-												d="M9.94 6.94a1.5 1.5 0 0 0 0 2.12L13.88 13l-3.94 3.94a1.5 1.5 0 0 0 2.12 2.12l5-5a1.5 1.5 0 0 0 0-2.12l-5-5a1.5 1.5 0 0 0-2.12 0"
-											/></svg
-										>
+										/>
 									{/if}
 								</div>
 							{/if}

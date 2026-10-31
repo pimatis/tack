@@ -334,7 +334,7 @@ function renderInline(text: string, opts?: RenderOptions): string {
 	// heading markers out
 	result = result.replace(
 		/(?<![\w#&])#(?=[\p{L}\p{N}/_-]*\p{L})([\p{L}\p{N}/_-]+)/gu,
-		'<span data-tag="$1" class="note-tag rounded-sm bg-primary/10 px-1 text-primary">#$1</span>'
+		'<span data-tag="$1" class="md-tag rounded-sm bg-primary/10 px-1 text-primary">#$1</span>'
 	);
 
 	// bold
@@ -437,7 +437,7 @@ export function renderMarkdown(md: string, opts?: RenderOptions): string {
 			i++;
 			const inner = highlightCode(code.join('\n'), lang);
 			html.push(
-				`<pre class="group relative"><button type="button" class="copy-code-btn absolute right-2 flex h-7 w-7 items-center justify-center rounded-md border border-border bg-popover/90 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground" style="top: min(calc(50% - 14px), 2rem)" aria-label="Copy code"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path fill="currentColor" d="M9 2a2 2 0 0 0-2 2v2h2V4h11v11h-2v2h2a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM4 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg></button><code${lang ? ` class="language-${escapeHtml(lang)}"` : ''}>${inner}</code></pre>`
+				`<pre class="group relative"><button type="button" class="copy-code-btn absolute right-2 flex h-7 w-7 items-center justify-center rounded-md border border-border bg-popover/90 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground" style="top: min(calc(50% - 14px), 2rem)" aria-label="Copy code"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><g fill="currentColor"><path d="M15.2402 5.61426C17.9551 5.61426 19.3127 5.61431 20.1562 6.46094C20.9998 7.30786 21 8.67127 21 11.3975V16.2168C21 18.9429 20.9998 20.3064 20.1562 21.1533C19.3127 21.9998 17.955 22 15.2402 22H12.3604C9.64515 22 8.2869 22.0002 7.44336 21.1533C6.59984 20.3064 6.60059 18.9429 6.60059 16.2168V11.3975C6.60059 8.67128 6.59984 7.30786 7.44336 6.46094C8.28689 5.61402 9.64506 5.61426 12.3604 5.61426H15.2402Z"/><path d="M15.2402 2C16.7616 2.0001 18.0629 2.94764 18.5898 4.28711C17.7091 4.16822 16.6114 4.16887 15.335 4.16895H12.2656C10.9891 4.16887 9.8886 4.16821 9.00781 4.28711C8.06393 4.41454 7.15966 4.70266 6.42578 5.43945C5.69187 6.17631 5.40523 7.08449 5.27832 8.03223C5.15992 8.91654 5.16008 10.0211 5.16016 11.3027V16.3125C5.1601 17.374 5.16027 18.6502 5.22754 19.5596C3.92032 19.0177 3 17.7249 3 16.2168V10.3789C2.99999 8.60799 3.00049 7.20531 3.14746 6.10742C3.29878 4.97738 3.61751 4.06213 4.33594 3.34082C5.05433 2.61968 5.96542 2.29937 7.09082 2.14746C8.18439 1.99988 9.58168 1.99999 11.3457 2H15.2402Z"/></g></svg></button><code${lang ? ` class="language-${escapeHtml(lang)}"` : ''}>${inner}</code></pre>`
 			);
 			continue;
 		}

@@ -6,6 +6,7 @@
 	import StatusIcon from './StatusIcon.svelte';
 	import TaskLabels from './TaskLabels.svelte';
 	import DueDateBadge from './DueDateBadge.svelte';
+	import RecurrenceBadge from './RecurrenceBadge.svelte';
 	import TaskMenu from './TaskMenu.svelte';
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
 	import PriorityIcon from './PriorityIcon.svelte';
@@ -16,6 +17,7 @@
 	import type { Label } from '$lib/types/label';
 	import type { Settings } from '$lib/types/settings';
 	import { issueId } from '$lib/task/utils';
+	import Icon from '$lib/components/Icon.svelte';
 
 	type Props = {
 		day?: Date | null;
@@ -133,12 +135,7 @@
 					onclick={close}
 					aria-label="Close panel"
 				>
-					<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-						><path
-							fill="currentColor"
-							d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
-						/></svg
-					>
+					<Icon icon="close" size={16} />
 				</Button>
 			</div>
 
@@ -146,17 +143,7 @@
 			<div class="flex-1 overflow-y-auto px-3 pb-4">
 				{#if sortedTasks.length === 0}
 					<div class="flex flex-col items-center gap-2 px-4 py-14 text-center">
-						<svg
-							class="text-muted-foreground/30"
-							width="28"
-							height="28"
-							viewBox="0 0 24 24"
-							fill="none"
-							><path
-								fill="currentColor"
-								d="M16 3a1 1 0 0 1 1 1v1h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2V4a1 1 0 0 1 2 0v1h6V4a1 1 0 0 1 1-1M8.01 16H8a1 1 0 0 0-.117 1.993L8.01 18a1 1 0 1 0 0-2m4 0H12a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m4 0H16a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m-8-4H8a1 1 0 0 0-.117 1.993L8.01 14a1 1 0 1 0 0-2m4 0H12a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m4 0H16a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2M19 7H5v2h14z"
-							/></svg
-						>
+						<Icon icon="calendar" size={28} class="text-muted-foreground/30" />
 						<span class="text-[13px] font-medium text-foreground">No tasks on this day</span>
 						<span class="text-[12px] text-muted-foreground">
 							Pick a date to plan something new
@@ -236,15 +223,11 @@
 										<span
 											class="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground/70"
 										>
-											<svg width="9" height="9" viewBox="0 0 24 24" fill="none"
-												><path
-													fill="currentColor"
-													d="M6 3a2 2 0 0 0-2 2v16a1 1 0 1 0 2 0v-5h13.804a1.1 1.1 0 0 0 .89-1.747L17.236 9.5l3.456-4.753A1.1 1.1 0 0 0 19.803 3z"
-												/></svg
-											>
+											<Icon icon="flag" size={9} />
 											{task.endDate.slice(5).replace('-', '/')}
 										</span>
 									{/if}
+									<RecurrenceBadge rule={task.recurrenceRule} size={10} />
 								</div>
 							</div>
 						{/each}
@@ -280,12 +263,7 @@
 						close();
 					}}
 				>
-					<svg class="mr-1" width="12" height="12" viewBox="0 0 24 24" fill="none"
-						><path
-							fill="currentColor"
-							d="M10.5 20a1.5 1.5 0 0 0 3 0v-6.5H20a1.5 1.5 0 0 0 0-3h-6.5V4a1.5 1.5 0 0 0-3 0v6.5H4a1.5 1.5 0 0 0 0 3h6.5z"
-						/></svg
-					>
+					<Icon icon="add" size={12} class="mr-1" />
 					New task
 				</Button>
 			</div>

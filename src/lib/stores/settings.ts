@@ -46,8 +46,12 @@ function load(): Settings {
 			...defaultSettings,
 			...parsed,
 			sidebarItems: migrateSidebarItems(parsed.sidebarItems),
-			// merge so newly added shortcuts appear with defaults for existing users
-			shortcuts: { ...defaultSettings.shortcuts, ...(parsed.shortcuts ?? {}) }
+			// merge so newly added shortcuts appear with defaults; drop ids of
+			// removed actions so stale bindings cannot conflict with new ones
+			shortcuts: {
+				...defaultSettings.shortcuts,
+				...pickKnownShortcuts(parsed.shortcuts)
+			}
 		};
 	} catch {
 		return { ...defaultSettings };
@@ -98,6 +102,13 @@ function persistToDb(updates: Partial<Settings>): void {
 	})();
 }
 
+// only keep shortcut ids the app still defines
+function pickKnownShortcuts(stored: Record<string, ShortcutKey[]> | undefined) {
+	if (!stored || typeof stored !== 'object') return {};
+	const known = new Set(Object.keys(defaultSettings.shortcuts));
+	return Object.fromEntries(Object.entries(stored).filter(([id]) => known.has(id)));
+}
+
 function parseDbValue(key: string, value: string): unknown {
 	if (key === 'sidebarItems' || key === 'shortcuts') return JSON.parse(value);
 	if (value === 'true') return true;
@@ -125,7 +136,7 @@ export async function loadSettingsFromDb(): Promise<void> {
 					// merge so cli-set shortcuts never drop the other defaults
 					merged.shortcuts = {
 						...defaultSettings.shortcuts,
-						...(parsed as Record<string, ShortcutKey[]>)
+						...pickKnownShortcuts(parsed as Record<string, ShortcutKey[]>)
 					};
 				} else if (row.key === 'sidebarItems') {
 					merged.sidebarItems = migrateSidebarItems(parsed as SidebarItemConfig[] | undefined);

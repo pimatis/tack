@@ -5,6 +5,7 @@
 	import { sortableItem, useDndActive, reorderArray, type DragDropState } from '$lib/dnd';
 	import type { Settings, SidebarItemConfig, SidebarItemId } from '$lib/types/settings';
 	import { defaultSidebarItems } from '$lib/types/settings';
+	import Icon from '$lib/components/Icon.svelte';
 
 	let {
 		settings,
@@ -98,20 +99,11 @@
 				}}
 			>
 				<!-- drag handle -->
-				<svg
+				<Icon
+					icon="grip"
+					size={14}
 					class="shrink-0 text-muted-foreground/40 transition-colors group-hover/sidebar-row:text-muted-foreground"
-					width="14"
-					height="14"
-					viewBox="0 0 24 24"
-					fill="none"
-				>
-					<circle cx="9" cy="6" r="1.5" fill="currentColor" />
-					<circle cx="15" cy="6" r="1.5" fill="currentColor" />
-					<circle cx="9" cy="12" r="1.5" fill="currentColor" />
-					<circle cx="15" cy="12" r="1.5" fill="currentColor" />
-					<circle cx="9" cy="18" r="1.5" fill="currentColor" />
-					<circle cx="15" cy="18" r="1.5" fill="currentColor" />
-				</svg>
+				/>
 				<!-- item info -->
 				<div class="min-w-0 flex-1">
 					<p class="text-[13px] font-medium">{sidebarItemLabels[item.id]}</p>

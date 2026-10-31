@@ -20,14 +20,9 @@
 	import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
 	import { checkForUpdate } from '$lib/updater/update.service';
 	import { TaskPageState } from '$lib/task/taskState.svelte';
-	import { notesState } from '$lib/notes/notesState.svelte';
-	import NotesSidebar from './notes/Sidebar.svelte';
-	import { Tabs, TabsList, TabsTrigger } from '$lib/components/ui/tabs/index.js';
-	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Collapsible from '$lib/components/ui/collapsible/index.js';
-	import * as Select from '$lib/components/ui/select/index.js';
-	import { Input } from '$lib/components/ui/input/index.js';
-	import { Textarea } from '$lib/components/ui/textarea/index.js';
+	import Icon from '$lib/components/Icon.svelte';
+	import type { IconName } from '$lib/icons';
 
 	let {
 		settings = null,
@@ -66,9 +61,14 @@
 	let activeFilter = $state<string | null>(null);
 
 	// persist collapsed sidebar sections across page reloads
-	type CollapsibleSectionId = 'status' | 'priority' | 'projects';
+	type CollapsibleSectionId = 'status' | 'priority' | 'projects' | 'labels';
 	const COLLAPSED_SECTIONS_KEY = 'tack-collapsed-sidebar-sections';
-	const collapsibleSectionIds: CollapsibleSectionId[] = ['status', 'priority', 'projects'];
+	const collapsibleSectionIds: CollapsibleSectionId[] = [
+		'status',
+		'priority',
+		'projects',
+		'labels'
+	];
 
 	function loadCollapsedSections(): Set<CollapsibleSectionId> {
 		try {
@@ -164,6 +164,23 @@
 		3: { label: 'Medium' },
 		4: { label: 'Low' }
 	};
+
+	// shared chrome classes keep every nav row and group header visually identical
+	const navItemClass =
+		'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors';
+	const navIdleClass =
+		'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground';
+	const navActiveClass = 'bg-sidebar-accent/70 text-sidebar-foreground';
+	const groupTriggerClass =
+		'flex w-full cursor-pointer list-none items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground';
+	const groupContentClass = 'mt-0.5 ml-3 grid gap-px pl-2';
+	// tree-item marks a row inside a collapsible group; the scoped styles
+	// below draw the vertical rail + connector stub onto it
+	const treeItemClass = 'tree-item';
+	const countClass = 'ml-auto shrink-0 text-[11px] text-muted-foreground/60 tabular-nums';
+	const countDangerClass = 'ml-auto shrink-0 text-[11px] text-red-400/80 tabular-nums';
+	const iconBtnClass =
+		'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground';
 
 	// computed counts
 	let statusCounts = $derived.by(() => {
@@ -282,7 +299,6 @@
 	// navigate home if not already there, then dispatch event
 	async function goHomeThenDispatch(eventName: string, detail?: unknown) {
 		if (isMobile) mobileOpen = false;
-		notesState.activeTab = 'tasks';
 		if (window.location.pathname !== '/') {
 			await goto('/');
 			await tick();
@@ -338,54 +354,6 @@
 		});
 	}
 
-	// notes create dialog: opened from the + button or folder context menus
-	let noteCreateOpen = $state(false);
-	let noteCreateType = $state<'note' | 'folder'>('note');
-	let noteCreateName = $state('');
-	let noteCreateDescription = $state('');
-	let noteCreateParent = $state<string>('root');
-	let noteCreateTemplate = $state('none');
-	let noteCreateTemplates = $state<string[]>([]);
-
-	async function openNoteCreateDialog(type: 'note' | 'folder', parent: string | null = null) {
-		if (isMobile) mobileOpen = false;
-		if (notesState.activeTab !== 'notes') notesState.activeTab = 'notes';
-		if (window.location.pathname !== '/') {
-			await goto('/');
-			await tick();
-		}
-		noteCreateType = type;
-		noteCreateParent = parent ?? 'root';
-		noteCreateName = '';
-		noteCreateDescription = '';
-		noteCreateTemplate = 'none';
-		noteCreateTemplates = (await notesState.loadTemplates()).map((t) =>
-			t.name.replace(/\.md$/i, '')
-		);
-		noteCreateOpen = true;
-	}
-
-	function submitNoteCreate(event: SubmitEvent) {
-		event.preventDefault();
-		const name = noteCreateName.trim();
-		if (!name) return;
-		const parent = noteCreateParent === 'root' ? null : noteCreateParent;
-		if (noteCreateType === 'note') {
-			const description = noteCreateDescription.trim();
-			void notesState.createNoteIn(
-				parent,
-				name,
-				noteCreateTemplate === 'none' ? undefined : noteCreateTemplate,
-				description || undefined
-			);
-		} else void notesState.createFolder(parent, name);
-		noteCreateOpen = false;
-	}
-
-	function parentLabel(rel: string): string {
-		return `${'— '.repeat(rel.split('/').length - 1)}${rel.split('/').pop()}`;
-	}
-
 	onMount(() => {
 		// tablet and below: drawer mode; layout already forces narrow below 1024px
 		const mobileQuery = window.matchMedia('(max-width: 1023px)');
@@ -428,14 +396,6 @@
 		};
 		window.addEventListener('filter-overdue', setFilterActive);
 		window.addEventListener('clear-filters', clearActiveState);
-		const openNoteCreate = (event: Event) => {
-			const detail = (event as CustomEvent).detail ?? {};
-			void openNoteCreateDialog(
-				detail.type === 'folder' ? 'folder' : 'note',
-				detail.parent ?? null
-			);
-		};
-		window.addEventListener('open-note-create-dialog', openNoteCreate);
 		// update check is not needed for first paint; let the ui settle first
 		const updateTimer = window.setTimeout(() => void checkForUpdates(), 4000);
 
@@ -443,22 +403,6 @@
 		const unregisterToggleSidebar = registry?.register({
 			id: 'toggle-sidebar',
 			run: () => toggleSidebar()
-		});
-		// notes shortcuts mirror the task ones: only in the notes tab, not while typing
-		const notesShortcutReady = () =>
-			notesState.activeTab === 'notes' &&
-			window.location.pathname === '/' &&
-			!document.querySelector("[role='dialog'] input");
-		const unregisterNewNote = registry?.register({
-			id: 'new-note',
-			// quick capture: works anywhere in the app, even while typing
-			allowInInput: true,
-			run: () => void notesState.quickCapture()
-		});
-		const unregisterTodayNote = registry?.register({
-			id: 'today-note',
-			enabled: notesShortcutReady,
-			run: () => void notesState.openTodayNote()
 		});
 
 		return () => {
@@ -475,10 +419,7 @@
 			window.removeEventListener('filter-upcoming', setFilterActive);
 			window.removeEventListener('filter-overdue', setFilterActive);
 			window.removeEventListener('clear-filters', clearActiveState);
-			window.removeEventListener('open-note-create-dialog', openNoteCreate);
 			unregisterToggleSidebar?.();
-			unregisterNewNote?.();
-			unregisterTodayNote?.();
 		};
 	});
 </script>
@@ -488,6 +429,33 @@
 	{#if combo}
 		<span class="ml-1 opacity-50">{keyComboLabel(combo)}</span>
 	{/if}
+{/snippet}
+
+<!-- one row shape for every flat filter: icon + label + trailing count -->
+{#snippet navRow(
+	icon: IconName,
+	text: string,
+	count: number,
+	active: boolean,
+	onclick: () => void,
+	danger = false
+)}
+	<button
+		type="button"
+		class="{navItemClass} {active ? navActiveClass : navIdleClass}"
+		{onclick}
+		aria-pressed={active}
+	>
+		<Icon
+			{icon}
+			size={15}
+			class="shrink-0 {danger && count > 0 ? 'text-red-400' : 'text-muted-foreground'}"
+		/>
+		<span class="truncate">{text}</span>
+		{#if count > 0}
+			<span class={danger ? countDangerClass : countClass}>{count}</span>
+		{/if}
+	</button>
 {/snippet}
 
 <!-- mobile drawer backdrop: sibling of the aside so it never covers the
@@ -504,7 +472,7 @@
 <aside
 	class="flex h-dvh shrink-0 flex-col transition-all duration-200 {collapsed
 		? 'w-12'
-		: 'w-50'} {collapsed ? 'overflow-hidden' : ''} {isMobile
+		: 'w-56'} {collapsed ? 'overflow-hidden' : ''} {isMobile
 		? 'fixed top-0 left-0 z-50 bg-sidebar shadow-xl shadow-black/10 max-md:w-60!'
 		: ''} {isMobile && !mobileOpen ? '-translate-x-full' : ''}"
 >
@@ -549,16 +517,11 @@
 							{...props}
 							variant="ghost"
 							size="icon-sm"
-							class="text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+							class={iconBtnClass}
 							onclick={handleToggle}
 							aria-label="Expand sidebar"
 						>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-								><path
-									fill="currentColor"
-									d="M16.06 10.94a1.5 1.5 0 0 1 0 2.12l-5.656 5.658a1.5 1.5 0 1 1-2.121-2.122L12.879 12 8.283 7.404a1.5 1.5 0 0 1 2.12-2.122l5.658 5.657Z"
-								/></svg
-							>
+							<Icon icon="arrow-right" size={16} />
 						</Button>
 					{/snippet}
 				</Tooltip.Trigger>
@@ -581,14 +544,9 @@
 								if (isMobile) mobileOpen = false;
 								window.dispatchEvent(new Event('open-command-palette'));
 							}}
-							class="text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+							class={iconBtnClass}
 						>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-								><path
-									fill="currentColor"
-									d="M2 10.5a8.5 8.5 0 1 1 15.176 5.262l3.652 3.652a1 1 0 0 1-1.414 1.414l-3.652-3.652A8.5 8.5 0 0 1 2 10.5M10.5 6a1 1 0 0 0 0 2 2.5 2.5 0 0 1 2.5 2.5 1 1 0 1 0 2 0A4.5 4.5 0 0 0 10.5 6"
-								/></svg
-							>
+							<Icon icon="search" size={16} />
 						</Button>
 					{/snippet}
 				</Tooltip.Trigger>
@@ -602,661 +560,387 @@
 							{...props}
 							variant="ghost"
 							size="icon-sm"
-							aria-label={notesState.activeTab === 'notes' ? 'New note' : 'New task'}
+							aria-label="New task"
 							onclick={() => {
-								// pencil creates whatever the active tab shows
-								if (notesState.activeTab === 'notes') {
-									void notesState.createNote();
-									if (isMobile) mobileOpen = false;
-								} else {
-									void goHomeThenDispatch('open-task-dialog');
-								}
+								if (isMobile) mobileOpen = false;
+								void goHomeThenDispatch('open-task-dialog');
 							}}
-							class="text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+							class={iconBtnClass}
 						>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-								><path
-									fill="currentColor"
-									d="M20.131 3.16a3 3 0 0 0-4.242 0l-.707.708 4.95 4.95.706-.707a3 3 0 0 0 0-4.243l-.707-.707Zm-1.414 7.072-4.95-4.95-9.09 9.091a1.5 1.5 0 0 0-.401.724l-1.029 4.455a1 1 0 0 0 1.2 1.2l4.456-1.028a1.5 1.5 0 0 0 .723-.401z"
-								/></svg
-							>
+							<Icon icon="compose" size={16} />
 						</Button>
 					{/snippet}
 				</Tooltip.Trigger>
 				<Tooltip.Content side="bottom"
-					>{notesState.activeTab === 'notes' ? 'New note' : 'New task'}
+					>New task
 					{@render shortcut('new-task')}</Tooltip.Content
 				>
 			</Tooltip.Root>
-			{#if notesState.activeTab === 'tasks'}
-				<Tooltip.Root>
-					<Tooltip.Trigger>
-						{#snippet child({ props })}
-							<Button
-								{...props}
-								variant="ghost"
-								size="icon-sm"
-								aria-label="New project"
-								onclick={() => void goHomeThenDispatch('open-project-dialog')}
-								class="text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-							>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-									><path
-										fill="currentColor"
-										d="M10.5 20a1.5 1.5 0 0 0 3 0v-6.5H20a1.5 1.5 0 0 0 0-3h-6.5V4a1.5 1.5 0 0 0-3 0v6.5H4a1.5 1.5 0 0 0 0 3h6.5z"
-									/></svg
-								>
-							</Button>
-						{/snippet}
-					</Tooltip.Trigger>
-					<Tooltip.Content side="bottom"
-						>New project {@render shortcut('new-project')}</Tooltip.Content
-					>
-				</Tooltip.Root>
-			{/if}
-			{#if notesState.activeTab === 'notes'}
-				<Tooltip.Root>
-					<Tooltip.Trigger>
-						{#snippet child({ props })}
-							<Button
-								{...props}
-								variant="ghost"
-								size="icon-sm"
-								aria-label="New note or folder"
-								onclick={() => void openNoteCreateDialog('note', null)}
-								class="text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-							>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-									><path
-										fill="currentColor"
-										d="M10.5 20a1.5 1.5 0 0 0 3 0v-6.5H20a1.5 1.5 0 0 0 0-3h-6.5V4a1.5 1.5 0 0 0-3 0v6.5H4a1.5 1.5 0 0 0 0 3h6.5z"
-									/></svg
-								>
-							</Button>
-						{/snippet}
-					</Tooltip.Trigger>
-					<Tooltip.Content side="bottom">New note or folder</Tooltip.Content>
-				</Tooltip.Root>
-			{/if}
+			<Tooltip.Root>
+				<Tooltip.Trigger>
+					{#snippet child({ props })}
+						<Button
+							{...props}
+							variant="ghost"
+							size="icon-sm"
+							aria-label="New project"
+							onclick={() => void goHomeThenDispatch('open-project-dialog')}
+							class={iconBtnClass}
+						>
+							<Icon icon="add" size={16} />
+						</Button>
+					{/snippet}
+				</Tooltip.Trigger>
+				<Tooltip.Content side="bottom"
+					>New project {@render shortcut('new-project')}</Tooltip.Content
+				>
+			</Tooltip.Root>
 		</div>
 	</div>
-
-	<!-- section switch: tasks or notes -->
-	{#if !collapsed}
-		<div class="px-2.5 pb-0.5">
-			<Tabs bind:value={notesState.activeTab} class="w-full">
-				<TabsList class="w-full">
-					<TabsTrigger value="tasks" class="text-[12px]">Tasks</TabsTrigger>
-					<TabsTrigger value="notes" class="text-[12px]">Notes</TabsTrigger>
-				</TabsList>
-			</Tabs>
-		</div>
-	{:else}
-		<div class="flex flex-col items-center gap-1 pb-1">
-			<Tabs bind:value={notesState.activeTab} class="flex flex-col items-center gap-1">
-				<!-- line variant: no muted pill behind the icon rail, per icon-rail convention -->
-				<TabsList variant="line" class="flex flex-col items-center gap-1 bg-transparent">
-					<Tooltip.Root>
-						<Tooltip.Trigger>
-							{#snippet child({ props })}
-								<TabsTrigger
-									{...props}
-									value="tasks"
-									class="size-7 rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground data-active:bg-sidebar-accent/70 data-active:text-sidebar-foreground"
-									aria-label="Tasks"
-								>
-									<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-										><path
-											fill="currentColor"
-											d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2m4.7 7.3a1 1 0 0 0-1.4 0l-4.8 4.8-1.8-1.8a1 1 0 0 0-1.4 1.42l2.5 2.5a1 1 0 0 0 1.4 0l5.5-5.5a1 1 0 0 0 0-1.42"
-										/></svg
-									>
-								</TabsTrigger>
-							{/snippet}
-						</Tooltip.Trigger>
-						<Tooltip.Content side="right">Tasks</Tooltip.Content>
-					</Tooltip.Root>
-					<Tooltip.Root>
-						<Tooltip.Trigger>
-							{#snippet child({ props })}
-								<TabsTrigger
-									{...props}
-									value="notes"
-									class="size-7 rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground data-active:bg-sidebar-accent/70 data-active:text-sidebar-foreground"
-									aria-label="Notes"
-								>
-									<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-										><path
-											fill="currentColor"
-											d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.17a2 2 0 0 0-.59-1.42l-4.58-4.58A2 2 0 0 0 13.41 2zm7.5 1.13L18.87 8H13.5zM8 12h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2m0 4h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2"
-										/></svg
-									>
-								</TabsTrigger>
-							{/snippet}
-						</Tooltip.Trigger>
-						<Tooltip.Content side="right">Notes</Tooltip.Content>
-					</Tooltip.Root>
-				</TabsList>
-			</Tabs>
-		</div>
-	{/if}
 
 	<Separator class="mx-2 my-2 bg-sidebar-border/40" />
 
 	<ScrollArea class="min-h-0 flex-1" bind:viewportRef={listViewport}>
-		{#if notesState.activeTab === 'notes'}
-			<NotesSidebar {collapsed} />
-		{:else}
-			<!-- home -->
-			<div class={collapsed ? 'mb-1 flex justify-center px-0' : 'px-1.5'}>
-				<Button
-					variant="ghost"
-					href="/"
-					size={collapsed ? 'icon-sm' : 'default'}
-					class={collapsed
-						? 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-						: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}
-					onclick={(e) => {
-						e.preventDefault();
-						void goHomeThenDispatch('clear-filters');
-					}}
-					aria-label="Home"
-				>
-					<svg
-						class="shrink-0 text-muted-foreground"
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						><path
-							fill="currentColor"
-							d="M13.2 2.65a2 2 0 0 0-2.4 0l-7 5.25A2 2 0 0 0 3 9.5V19a2 2 0 0 0 2 2h3.9a1.1 1.1 0 0 0 1.1-1.1V15a2 2 0 1 1 4 0v4.9a1.1 1.1 0 0 0 1.1 1.1H19a2 2 0 0 0 2-2V9.5a2 2 0 0 0-.8-1.6z"
-						/></svg
-					>
-					{#if !collapsed}<span>Home</span>{/if}
-				</Button>
-			</div>
+		<!-- home -->
+		<div class={collapsed ? 'mb-1 flex justify-center px-0' : 'px-1.5'}>
+			<Button
+				variant="ghost"
+				href="/"
+				size={collapsed ? 'icon-sm' : 'default'}
+				class={collapsed
+					? iconBtnClass
+					: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] ' + navIdleClass}
+				onclick={(e) => {
+					e.preventDefault();
+					void goHomeThenDispatch('clear-filters');
+				}}
+				aria-label="Home"
+			>
+				<Icon icon="home" size={15} class="shrink-0 text-muted-foreground" />
+				{#if !collapsed}<span>Home</span>{/if}
+			</Button>
+		</div>
 
-			<!-- dynamic filter items (reorderable via settings) -->
-			{#if !collapsed}
-				<div class="px-3 pt-2 pb-1 text-[11px] font-medium text-muted-foreground/60">Filters</div>
-				{#each orderedFilterItems as item (item.id)}
-					{#if item.id === 'pinned'}
-						<div
-							class="relative px-1.5"
-							role="listitem"
-							aria-label="Pinned"
-							use:sortableItem={{
-								dragData: item,
-								container: 'sidebar-filters',
-								onDrop: (state: DragDropState<SidebarItemConfig>) =>
-									handleSidebarReorder(state, item)
-							}}
-						>
-							<button
-								type="button"
-								class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {pinnedActive
-									? 'bg-sidebar-accent/70 text-sidebar-foreground'
-									: 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}"
-								onclick={() => void goHomeThenDispatch('filter-pinned')}
-							>
-								<svg
-									class="shrink-0 text-muted-foreground"
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-								>
-									<path
-										fill="currentColor"
-										d="M16.735 2.835a2 2 0 0 0-2.615-.186l-2.913 2.185a9 9 0 0 1-4.127 1.71l-2.177.31c-.73.105-1.265.891-.913 1.662.331.723 1.385 2.629 4.36 5.72l-4.178 4.178a1 1 0 1 0 1.414 1.414l4.178-4.178c3.091 2.975 4.997 4.029 5.72 4.36.77.352 1.557-.183 1.661-.913l.311-2.177a9 9 0 0 1 1.71-4.127L21.35 9.88a2 2 0 0 0-.186-2.615z"
-									/>
-								</svg>
-								<span>Pinned</span>
-								{#if pinnedCount > 0}
-									<span class="ml-auto text-[11px] text-muted-foreground/50 tabular-nums"
-										>{pinnedCount}</span
-									>
-								{/if}
-							</button>
-						</div>
-					{:else if item.id === 'today'}
-						<div
-							class="relative px-1.5"
-							role="listitem"
-							aria-label="Today"
-							use:sortableItem={{
-								dragData: item,
-								container: 'sidebar-filters',
-								onDrop: (state: DragDropState<SidebarItemConfig>) =>
-									handleSidebarReorder(state, item)
-							}}
-						>
-							<button
-								type="button"
-								class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {activeFilter ===
-								'filter-today'
-									? 'bg-sidebar-accent/70 text-sidebar-foreground'
-									: 'text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}"
-								onclick={() => dispatchFilter('filter-today', 'filter-today')}
-							>
-								<svg
-									class="shrink-0 text-muted-foreground"
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									><path
-										fill="currentColor"
-										d="M12 4a9 9 0 1 1 0 18 9 9 0 0 1 0-18m0 4a1 1 0 0 0-.993.883L11 9v3.986a.998.998 0 0 0 .202.617l.09.104 2.106 2.105a1 1 0 0 0 1.498-1.32l-.084-.094L13 12.586V9a1 1 0 0 0-1-1m6-5.394a12.054 12.054 0 0 1 3.272 2.776 1 1 0 0 1-1.544 1.27 10.053 10.053 0 0 0-2.729-2.315 1 1 0 1 1 1.002-1.731Zm-10.634.365A1 1 0 0 1 7 4.337a10.053 10.053 0 0 0-2.729 2.316 1 1 0 1 1-1.544-1.27 12.053 12.053 0 0 1 3.271-2.777 1 1 0 0 1 1.367.365Z"
-									/></svg
-								>
-								<span>Today</span>
-								{#if todayCount > 0}
-									<span class="ml-auto text-[11px] text-muted-foreground/50 tabular-nums"
-										>{todayCount}</span
-									>
-								{/if}
-							</button>
-						</div>
-					{:else if item.id === 'upcoming'}
-						<div
-							class="relative px-1.5"
-							role="listitem"
-							aria-label="Upcoming"
-							use:sortableItem={{
-								dragData: item,
-								container: 'sidebar-filters',
-								onDrop: (state: DragDropState<SidebarItemConfig>) =>
-									handleSidebarReorder(state, item)
-							}}
-						>
-							<button
-								type="button"
-								class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {activeFilter ===
-								'filter-upcoming'
-									? 'bg-sidebar-accent/70 text-sidebar-foreground'
-									: 'text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}"
-								onclick={() => dispatchFilter('filter-upcoming', 'filter-upcoming')}
-							>
-								<svg
-									class="shrink-0 text-muted-foreground"
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									><path
-										fill="currentColor"
-										d="M16 3a1 1 0 0 1 1 1v1h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2V4a1 1 0 0 1 2 0v1h6V4a1 1 0 0 1 1-3M8.01 16H8a1 1 0 0 0-.117 1.993L8.01 18a1 1 0 1 0 0-2m4 0H12a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m4 0H16a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m-8-4H8a1 1 0 0 0-.117 1.993L8.01 14a1 1 0 1 0 0-2m4 0H12a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m4 0H16a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2M19 7H5v2h14z"
-									/></svg
-								>
-								<span>Upcoming</span>
-								{#if upcomingCount > 0}
-									<span class="ml-auto text-[11px] text-muted-foreground/50 tabular-nums"
-										>{upcomingCount}</span
-									>
-								{/if}
-							</button>
-						</div>
-					{:else if item.id === 'overdue'}
-						<div
-							class="relative px-1.5"
-							role="listitem"
-							aria-label="Overdue"
-							use:sortableItem={{
-								dragData: item,
-								container: 'sidebar-filters',
-								onDrop: (state: DragDropState<SidebarItemConfig>) =>
-									handleSidebarReorder(state, item)
-							}}
-						>
-							<button
-								type="button"
-								class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {activeFilter ===
-								'filter-overdue'
-									? 'bg-sidebar-accent/70 text-sidebar-foreground'
-									: 'text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}"
-								onclick={() => dispatchFilter('filter-overdue', 'filter-overdue')}
-							>
-								<svg
-									class="shrink-0 {overdueCount > 0 ? 'text-red-400' : 'text-muted-foreground'}"
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									><path
-										fill="currentColor"
-										d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2m0 13a1 1 0 1 0 0 2 1 1 0 0 0 0-2m0-9a1 1 0 0 0-.993.883L11 7v6a1 1 0 0 0 1.993.117L13 13V7a1 1 0 0 0-1-1"
-									/></svg
-								>
-								<span>Overdue</span>
-								{#if overdueCount > 0}
-									<span class="ml-auto text-[11px] text-red-400/80 tabular-nums"
-										>{overdueCount}</span
-									>
-								{/if}
-							</button>
-						</div>
-					{:else if item.id === 'status'}
-						<div
-							class="relative px-1.5"
-							role="listitem"
-							aria-label="Status"
-							use:sortableItem={{
-								dragData: item,
-								container: 'sidebar-filters',
-								onDrop: (state: DragDropState<SidebarItemConfig>) =>
-									handleSidebarReorder(state, item)
-							}}
-						>
-							<Collapsible.Root
-								open={!collapsedSections.has('status')}
-								onOpenChange={(open) => setSectionOpen('status', open)}
-								class="group/status"
-							>
-								<Collapsible.Trigger
-									class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-								>
-									<svg
-										class="text-muted-foreground transition-transform duration-150 group-data-[state=open]/status:rotate-90"
-										width="14"
-										height="14"
-										viewBox="0 0 24 24"
-										fill="none"
-										><path
-											fill="currentColor"
-											d="M16.06 10.94a1.5 1.5 0 0 1 0 2.12l-5.656 5.658a1.5 1.5 0 1 1-2.121-2.122L12.879 12 8.283 7.404a1.5 1.5 0 0 1 2.12-2.122l5.658 5.657Z"
-										/></svg
-									>
-									<span>Status</span>
-								</Collapsible.Trigger>
-								<Collapsible.Content
-									class="mt-0.5 ml-[13px] grid gap-px border-l border-sidebar-border/50 pl-1.5"
-								>
-									{#each statusOrder as status (status)}
-										<button
-											type="button"
-											class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {activeFilter ===
-											'filter-by-status:' + status
-												? 'bg-sidebar-accent/70 text-sidebar-foreground'
-												: 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}"
-											onclick={() =>
-												dispatchFilter('filter-by-status', 'filter-by-status:' + status, status)}
-										>
-											<StatusIcon {status} size={14} />
-											<span>{statusConfig[status].label}</span>
-											{#if statusCounts[status] > 0}
-												<span class="ml-auto shrink-0 text-[11px] text-muted-foreground/60"
-													>{statusCounts[status]}</span
-												>
-											{/if}
-										</button>
-									{/each}
-								</Collapsible.Content>
-							</Collapsible.Root>
-						</div>
-					{:else if item.id === 'priority'}
-						<div
-							class="relative px-1.5"
-							role="listitem"
-							aria-label="Priority"
-							use:sortableItem={{
-								dragData: item,
-								container: 'sidebar-filters',
-								onDrop: (state: DragDropState<SidebarItemConfig>) =>
-									handleSidebarReorder(state, item)
-							}}
-						>
-							<Collapsible.Root
-								open={!collapsedSections.has('priority')}
-								onOpenChange={(open) => setSectionOpen('priority', open)}
-								class="group/priority"
-							>
-								<Collapsible.Trigger
-									class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-								>
-									<svg
-										class="text-muted-foreground transition-transform duration-150 group-data-[state=open]/priority:rotate-90"
-										width="14"
-										height="14"
-										viewBox="0 0 24 24"
-										fill="none"
-										><path
-											fill="currentColor"
-											d="M16.06 10.94a1.5 1.5 0 0 1 0 2.12l-5.656 5.658a1.5 1.5 0 1 1-2.121-2.122L12.879 12 8.283 7.404a1.5 1.5 0 0 1 2.12-2.122l5.658 5.657Z"
-										/></svg
-									>
-									<span>Priority</span>
-								</Collapsible.Trigger>
-								<Collapsible.Content
-									class="mt-0.5 ml-[13px] grid gap-px border-l border-sidebar-border/50 pl-1.5"
-								>
-									{#each [1, 2, 3, 4] as p (p)}
-										<button
-											type="button"
-											class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {activeFilter ===
-											'filter-by-priority:' + p
-												? 'bg-sidebar-accent/70 text-sidebar-foreground'
-												: 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}"
-											onclick={() =>
-												dispatchFilter('filter-by-priority', 'filter-by-priority:' + p, p)}
-										>
-											<PriorityIcon priority={p} size={14} />
-											<span>{priorityConfig[p].label}</span>
-											{#if priorityCounts[p] > 0}
-												<span class="ml-auto shrink-0 text-[11px] text-muted-foreground/60"
-													>{priorityCounts[p]}</span
-												>
-											{/if}
-										</button>
-									{/each}
-								</Collapsible.Content>
-							</Collapsible.Root>
-						</div>
-					{/if}
-				{/each}
-			{:else}
-				<!-- collapsed: show pinned only -->
-				{#if isItemVisible('pinned')}
-					<div class="flex justify-center px-0">
-						<Button
-							variant="ghost"
-							size="icon-sm"
-							class="text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground {pinnedActive
-								? 'bg-sidebar-accent/70 text-sidebar-foreground'
-								: ''}"
-							onclick={() => void goHomeThenDispatch('filter-pinned')}
-							aria-label="Pinned"
-						>
-							<svg
-								class="shrink-0 text-muted-foreground"
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-							>
-								<path
-									fill="currentColor"
-									d="M16.735 2.835a2 2 0 0 0-2.615-.186l-2.913 2.185a9 9 0 0 1-4.127 1.71l-2.177.31c-.73.105-1.265.891-.913 1.662.331.723 1.385 2.629 4.36 5.72l-4.178 4.178a1 1 0 1 0 1.414 1.414l4.178-4.178c3.091 2.975 4.997 4.029 5.72 4.36.77.352 1.557-.183 1.661-.913l.311-2.177a9 9 0 0 1 1.71-4.127L21.35 9.88a2 2 0 0 0-.186-2.615z"
-								/>
-							</svg>
-						</Button>
+		<!-- dynamic filter items (reorderable via settings) -->
+		{#if !collapsed}
+			<div class="px-3 pt-2 pb-1 text-[12px] font-medium text-muted-foreground">Filters</div>
+			{#each orderedFilterItems as item (item.id)}
+				{#if item.id === 'pinned'}
+					<div
+						class="relative px-1.5"
+						role="listitem"
+						aria-label="Pinned"
+						use:sortableItem={{
+							dragData: item,
+							container: 'sidebar-filters',
+							onDrop: (state: DragDropState<SidebarItemConfig>) => handleSidebarReorder(state, item)
+						}}
+					>
+						{@render navRow(
+							'pin',
+							'Pinned',
+							pinnedCount,
+							pinnedActive,
+							() => void goHomeThenDispatch('filter-pinned')
+						)}
 					</div>
-				{/if}
-			{/if}
-
-			<!-- projects -->
-			{#if !collapsed}
-				<div class="px-1.5">
-					<Collapsible.Root
-						open={!collapsedSections.has('projects')}
-						onOpenChange={(open) => setSectionOpen('projects', open)}
-						class="group/projects"
+				{:else if item.id === 'today'}
+					<div
+						class="relative px-1.5"
+						role="listitem"
+						aria-label="Today"
+						use:sortableItem={{
+							dragData: item,
+							container: 'sidebar-filters',
+							onDrop: (state: DragDropState<SidebarItemConfig>) => handleSidebarReorder(state, item)
+						}}
 					>
-						<Collapsible.Trigger
-							class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+						{@render navRow('clock', 'Today', todayCount, activeFilter === 'filter-today', () =>
+							dispatchFilter('filter-today', 'filter-today')
+						)}
+					</div>
+				{:else if item.id === 'upcoming'}
+					<div
+						class="relative px-1.5"
+						role="listitem"
+						aria-label="Upcoming"
+						use:sortableItem={{
+							dragData: item,
+							container: 'sidebar-filters',
+							onDrop: (state: DragDropState<SidebarItemConfig>) => handleSidebarReorder(state, item)
+						}}
+					>
+						{@render navRow(
+							'calendar',
+							'Upcoming',
+							upcomingCount,
+							activeFilter === 'filter-upcoming',
+							() => dispatchFilter('filter-upcoming', 'filter-upcoming')
+						)}
+					</div>
+				{:else if item.id === 'overdue'}
+					<div
+						class="relative px-1.5"
+						role="listitem"
+						aria-label="Overdue"
+						use:sortableItem={{
+							dragData: item,
+							container: 'sidebar-filters',
+							onDrop: (state: DragDropState<SidebarItemConfig>) => handleSidebarReorder(state, item)
+						}}
+					>
+						{@render navRow(
+							'alert-triangle',
+							'Overdue',
+							overdueCount,
+							activeFilter === 'filter-overdue',
+							() => dispatchFilter('filter-overdue', 'filter-overdue'),
+							true
+						)}
+					</div>
+				{:else if item.id === 'status'}
+					<div
+						class="relative px-1.5 pt-1"
+						role="listitem"
+						aria-label="Status"
+						use:sortableItem={{
+							dragData: item,
+							container: 'sidebar-filters',
+							onDrop: (state: DragDropState<SidebarItemConfig>) => handleSidebarReorder(state, item)
+						}}
+					>
+						<Collapsible.Root
+							open={!collapsedSections.has('status')}
+							onOpenChange={(open) => setSectionOpen('status', open)}
+							class="group/status"
 						>
-							<svg
-								class="text-muted-foreground transition-transform duration-150 group-data-[state=open]/projects:rotate-90"
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								><path
-									fill="currentColor"
-									d="M16.06 10.94a1.5 1.5 0 0 1 0 2.12l-5.656 5.658a1.5 1.5 0 1 1-2.121-2.122L12.879 12 8.283 7.404a1.5 1.5 0 0 1 2.12-2.122l5.658 5.657Z"
-								/></svg
-							>
-							{#if !collapsed}<span>Projects</span>{/if}
-							{#if !collapsed}
-								<Tooltip.Root>
-									<Tooltip.Trigger>
-										{#snippet child({ props })}
-											<span
-												{...props}
-												class="ml-auto text-muted-foreground/40 transition-colors hover:text-muted-foreground"
-											>
-												<svg
-													width="13"
-													height="13"
-													viewBox="0 0 24 24"
-													fill="none"
-													aria-label="Projects cannot be reordered"
-												>
-													<path
-														fill="currentColor"
-														d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2m0 14a1 1 0 1 0 0 2 1 1 0 0 0 0-2m0-9.5a3.625 3.625 0 0 0-3.625 3.625 1 1 0 1 0 2 0 1.625 1.625 0 1 1 2.23 1.51c-.676.27-1.605.962-1.605 2.115V14a1 1 0 1 0 2 0c0-.244.05-.366.261-.47l.087-.04A3.626 3.626 0 0 0 12 6.5"
-													/>
-												</svg>
-											</span>
-										{/snippet}
-									</Tooltip.Trigger>
-									<Tooltip.Content side="right" class="max-w-[220px]">
-										Projects are ordered automatically and can't be dragged. Use the toolbar above
-										to create or manage them.
-									</Tooltip.Content>
-								</Tooltip.Root>
-							{/if}
-						</Collapsible.Trigger>
-						<Collapsible.Content
-							class="mt-0.5 ml-[13px] grid gap-px border-l border-sidebar-border/50 pl-1.5"
-						>
-							{#each projects as project (project.id)}
-								<!-- svelte-ignore a11y_no_static_element_interactions -->
-								<div
-									oncontextmenu={(e) => openProjectMenu(e, project)}
-									class="flex w-full min-w-0 items-center rounded-md transition-colors hover:bg-sidebar-accent"
-								>
-									<Button
-										variant="ghost"
-										class="flex h-auto min-w-0 flex-1 items-center gap-2 rounded-none px-2 py-1.5 text-left text-[13px] text-sidebar-foreground/90"
-										onclick={() => void goHomeThenDispatch('filter-by-project', project.id)}
-									>
-										<svg
-											class="shrink-0 text-muted-foreground"
-											width="14"
-											height="14"
-											viewBox="0 0 24 24"
-											fill="none"
-											><path
-												fill="currentColor"
-												d="M9.686 2.512a1.5 1.5 0 0 1 1.303 1.674L10.637 7h3.976l.399-3.186a1.5 1.5 0 0 1 2.977.372L17.637 7H20a1.5 1.5 0 0 1 0 3h-2.738l-.5 4H19.5a1.5 1.5 0 0 1 0 3h-3.113l-.398 3.186a1.5 1.5 0 0 1-2.977-.372L13.363 17H9.388l-.398 3.186a1.5 1.5 0 1 1-2.977-.372L6.363 17H4.5a1.5 1.5 0 1 1 0-3h2.238l.5-4H5a1.5 1.5 0 1 1 0-3h2.613l.399-3.186A1.5 1.5 0 0 1 9.686 2.51ZM13.74 14l.5-4h-3.977l-.5 4z"
-											/></svg
-										>
-										<span class="truncate">{project.name}</span>
-										<span class="ml-auto shrink-0 text-[11px] text-muted-foreground/60"
-											>{project.prefix}</span
-										>
-									</Button>
-								</div>
-							{/each}
-							<DropdownMenu.Root bind:open={projectMenuOpen}>
-								<DropdownMenu.Trigger
-									class="h-0 w-0 outline-none"
-									style="position: fixed; left: {projectMenuX}px; top: {projectMenuY}px"
+							<Collapsible.Trigger class={groupTriggerClass}>
+								<Icon
+									icon="arrow-right"
+									size={12}
+									class="shrink-0 text-muted-foreground transition-transform duration-150 group-data-[state=open]/status:rotate-90"
 								/>
-								<DropdownMenu.Content class="w-44">
-									{#if projectMenuTarget}
-										<DropdownMenu.Item onclick={() => editProject(projectMenuTarget!)}>
-											<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-												><path
-													fill="currentColor"
-													d="M20.131 3.16a3 3 0 0 0-4.242 0l-.707.708 4.95 4.95.706-.707a3 3 0 0 0 0-4.243l-.707-.707Zm-1.414 7.072-4.95-4.95-9.09 9.091a1.5 1.5 0 0 0-.401.724l-1.029 4.455a1 1 0 0 0 1.2 1.2l4.456-1.028a1.5 1.5 0 0 0 .723-.401z"
-												/></svg
-											>
-											Edit project
-										</DropdownMenu.Item>
-										<DropdownMenu.Item
-											variant="destructive"
-											onclick={() => void deleteProject(projectMenuTarget!)}
-										>
-											<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-												><path
-													fill="currentColor"
-													d="M14.28 2a2 2 0 0 1 1.897 1.368L16.72 5H20a1 1 0 1 1 0 2l-.003.071-.867 12.143A3 3 0 0 1 16.138 22H7.862a3 3 0 0 1-2.992-2.786L4.003 7.07A1.01 1.01 0 0 1 4 7a1 1 0 0 1 0-2h3.28l.543-1.632A2 2 0 0 1 9.721 2zM9 10a1 1 0 0 0-.993.883L8 11v6a1 1 0 0 0 1.993.117L10 17v-6a1 1 0 0 0-1-1m6 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0v-6a1 1 0 0 0-1-1m-.72-6H9.72l-.333 1h5.226z"
-												/></svg
-											>
-											Delete project
-										</DropdownMenu.Item>
-									{/if}
-								</DropdownMenu.Content>
-							</DropdownMenu.Root>
-						</Collapsible.Content>
-					</Collapsible.Root>
-
-					<!-- labels -->
-					{#if labels.length > 0}
-						<Collapsible.Root open class="group/labels mt-0.5">
-							<Collapsible.Trigger
-								class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-							>
-								<svg
-									class="text-muted-foreground transition-transform duration-150 group-data-[state=open]/labels:rotate-90"
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									><path
-										fill="currentColor"
-										d="M16.06 10.94a1.5 1.5 0 0 1 0 2.12l-5.656 5.658a1.5 1.5 0 1 1-2.121-2.122L12.879 12 8.283 7.404a1.5 1.5 0 0 1 2.12-2.122l5.658 5.657Z"
-									/></svg
-								>
-								<span>Labels</span>
+								<span>Status</span>
 							</Collapsible.Trigger>
-							<Collapsible.Content
-								class="mt-0.5 ml-[13px] grid gap-px border-l border-sidebar-border/50 pl-1.5"
-							>
-								{#each labels as label (label.id)}
+							<Collapsible.Content class={groupContentClass}>
+								{#each statusOrder as status (status)}
 									<button
 										type="button"
-										class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors {activeFilter ===
-										'filter-by-label:' + label.id
-											? 'bg-sidebar-accent/70 text-sidebar-foreground'
-											: 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}"
+										aria-pressed={activeFilter === 'filter-by-status:' + status}
+										class="{treeItemClass} {navItemClass} {activeFilter ===
+										'filter-by-status:' + status
+											? navActiveClass
+											: navIdleClass}"
 										onclick={() =>
-											dispatchFilter('filter-by-label', 'filter-by-label:' + label.id, label.id)}
+											dispatchFilter('filter-by-status', 'filter-by-status:' + status, status)}
 									>
-										<span class="h-2.5 w-2.5 shrink-0 rounded-full {labelColorMap[label.color].dot}"
-										></span>
-										<span class="truncate">{label.name}</span>
-										{#if (labelCounts.get(label.id) ?? 0) > 0}
-											<span class="ml-auto shrink-0 text-[11px] text-muted-foreground/60"
-												>{labelCounts.get(label.id)}</span
-											>
+										<StatusIcon {status} size={14} />
+										<span>{statusConfig[status].label}</span>
+										{#if statusCounts[status] > 0}
+											<span class={countClass}>{statusCounts[status]}</span>
 										{/if}
 									</button>
 								{/each}
 							</Collapsible.Content>
 						</Collapsible.Root>
-					{/if}
+					</div>
+				{:else if item.id === 'priority'}
+					<div
+						class="relative px-1.5 pt-1"
+						role="listitem"
+						aria-label="Priority"
+						use:sortableItem={{
+							dragData: item,
+							container: 'sidebar-filters',
+							onDrop: (state: DragDropState<SidebarItemConfig>) => handleSidebarReorder(state, item)
+						}}
+					>
+						<Collapsible.Root
+							open={!collapsedSections.has('priority')}
+							onOpenChange={(open) => setSectionOpen('priority', open)}
+							class="group/priority"
+						>
+							<Collapsible.Trigger class={groupTriggerClass}>
+								<Icon
+									icon="arrow-right"
+									size={12}
+									class="shrink-0 text-muted-foreground transition-transform duration-150 group-data-[state=open]/priority:rotate-90"
+								/>
+								<span>Priority</span>
+							</Collapsible.Trigger>
+							<Collapsible.Content class={groupContentClass}>
+								{#each [1, 2, 3, 4] as p (p)}
+									<button
+										type="button"
+										aria-pressed={activeFilter === 'filter-by-priority:' + p}
+										class="{treeItemClass} {navItemClass} {activeFilter ===
+										'filter-by-priority:' + p
+											? navActiveClass
+											: navIdleClass}"
+										onclick={() =>
+											dispatchFilter('filter-by-priority', 'filter-by-priority:' + p, p)}
+									>
+										<PriorityIcon priority={p} size={14} />
+										<span>{priorityConfig[p].label}</span>
+										{#if priorityCounts[p] > 0}
+											<span class={countClass}>{priorityCounts[p]}</span>
+										{/if}
+									</button>
+								{/each}
+							</Collapsible.Content>
+						</Collapsible.Root>
+					</div>
+				{/if}
+			{/each}
+		{:else}
+			<!-- collapsed: show pinned only -->
+			{#if isItemVisible('pinned')}
+				<div class="flex justify-center px-0">
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						class="{iconBtnClass} {pinnedActive ? navActiveClass : ''}"
+						onclick={() => void goHomeThenDispatch('filter-pinned')}
+						aria-label="Pinned"
+					>
+						<Icon icon="pin" size={15} class="shrink-0 text-muted-foreground" />
+					</Button>
 				</div>
 			{/if}
+		{/if}
+
+		<!-- projects -->
+		{#if !collapsed}
+			<div class="px-1.5 pt-1">
+				<Collapsible.Root
+					open={!collapsedSections.has('projects')}
+					onOpenChange={(open) => setSectionOpen('projects', open)}
+					class="group/projects"
+				>
+					<div class="flex items-center gap-1 pr-1">
+						<Collapsible.Trigger class="{groupTriggerClass} flex-1">
+							<Icon
+								icon="arrow-right"
+								size={12}
+								class="shrink-0 text-muted-foreground transition-transform duration-150 group-data-[state=open]/projects:rotate-90"
+							/>
+							<span>Projects</span>
+						</Collapsible.Trigger>
+						<Tooltip.Root>
+							<Tooltip.Trigger>
+								{#snippet child({ props })}
+									<button
+										{...props}
+										type="button"
+										aria-label="New project"
+										class="rounded-md p-1 text-muted-foreground/50 transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+										onclick={(e) => {
+											e.stopPropagation();
+											void goHomeThenDispatch('open-project-dialog');
+										}}
+									>
+										<Icon icon="add" size={13} />
+									</button>
+								{/snippet}
+							</Tooltip.Trigger>
+							<Tooltip.Content side="right"
+								>New project {@render shortcut('new-project')}</Tooltip.Content
+							>
+						</Tooltip.Root>
+					</div>
+					<Collapsible.Content class={groupContentClass}>
+						{#if projects.length === 0}
+							<div class="px-2 py-1.5 text-[12px] text-muted-foreground/60">No projects yet</div>
+						{/if}
+						{#each projects as project (project.id)}
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div
+								oncontextmenu={(e) => openProjectMenu(e, project)}
+								class="{treeItemClass} flex w-full min-w-0 items-center rounded-md transition-colors hover:bg-sidebar-accent/50 {activeFilter ===
+								'filter-by-project:' + project.id
+									? 'bg-sidebar-accent/70'
+									: ''}"
+							>
+								<Button
+									variant="ghost"
+									class="flex h-auto min-w-0 flex-1 items-center gap-2 rounded-none px-2 py-1.5 text-left text-[13px] text-sidebar-foreground/80 hover:text-sidebar-foreground"
+									onclick={() => void goHomeThenDispatch('filter-by-project', project.id)}
+								>
+									<Icon icon="hashtag" size={15} class="shrink-0 text-muted-foreground" />
+									<span class="truncate">{project.name}</span>
+									<span class={countClass}>{project.prefix}</span>
+								</Button>
+							</div>
+						{/each}
+						<DropdownMenu.Root bind:open={projectMenuOpen}>
+							<DropdownMenu.Trigger
+								class="h-0 w-0 outline-none"
+								style="position: fixed; left: {projectMenuX}px; top: {projectMenuY}px"
+							/>
+							<DropdownMenu.Content class="w-44">
+								{#if projectMenuTarget}
+									<DropdownMenu.Item onclick={() => editProject(projectMenuTarget!)}>
+										<Icon icon="pencil" size={15} />
+										Edit project
+									</DropdownMenu.Item>
+									<DropdownMenu.Item
+										variant="destructive"
+										onclick={() => void deleteProject(projectMenuTarget!)}
+									>
+										<Icon icon="trash" size={15} />
+										Delete project
+									</DropdownMenu.Item>
+								{/if}
+							</DropdownMenu.Content>
+						</DropdownMenu.Root>
+					</Collapsible.Content>
+				</Collapsible.Root>
+
+				<!-- labels -->
+				{#if labels.length > 0}
+					<Collapsible.Root
+						open={!collapsedSections.has('labels')}
+						onOpenChange={(open) => setSectionOpen('labels', open)}
+						class="group/labels mt-1"
+					>
+						<Collapsible.Trigger class={groupTriggerClass}>
+							<Icon
+								icon="arrow-right"
+								size={12}
+								class="shrink-0 text-muted-foreground transition-transform duration-150 group-data-[state=open]/labels:rotate-90"
+							/>
+							<span>Labels</span>
+						</Collapsible.Trigger>
+						<Collapsible.Content class={groupContentClass}>
+							{#each labels as label (label.id)}
+								<button
+									type="button"
+									aria-pressed={activeFilter === 'filter-by-label:' + label.id}
+									class="{treeItemClass} {navItemClass} {activeFilter ===
+									'filter-by-label:' + label.id
+										? navActiveClass
+										: navIdleClass}"
+									onclick={() =>
+										dispatchFilter('filter-by-label', 'filter-by-label:' + label.id, label.id)}
+								>
+									<span class="h-2.5 w-2.5 shrink-0 rounded-full {labelColorMap[label.color].dot}"
+									></span>
+									<span class="truncate">{label.name}</span>
+									{#if (labelCounts.get(label.id) ?? 0) > 0}
+										<span class={countClass}>{labelCounts.get(label.id)}</span>
+									{/if}
+								</button>
+							{/each}
+						</Collapsible.Content>
+					</Collapsible.Root>
+				{/if}
+			</div>
 		{/if}
 		<div class="h-2 shrink-0"></div>
 	</ScrollArea>
 
 	<!-- stats footer -->
-	{#if !collapsed && notesState.activeTab === 'tasks' && totalTasks > 0 && isItemVisible('quickStats')}
+	{#if !collapsed && totalTasks > 0 && isItemVisible('quickStats')}
 		<div class="shrink-0 border-t border-sidebar-border/40 px-3 py-2">
 			<div class="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
 				<span>{totalTasks} tasks</span>
@@ -1271,58 +955,19 @@
 		</div>
 	{/if}
 
-	<!-- archive (notes only) + trash + settings -->
+	<!-- trash + settings -->
 	<div
 		class="shrink-0 border-t border-sidebar-border/40 {collapsed
 			? 'px-0'
 			: 'px-2'} py-1.5 {collapsed ? 'flex flex-col items-center gap-1' : ''}"
 	>
-		{#if notesState.activeTab === 'notes'}
-			<Button
-				variant="ghost"
-				href="/archive"
-				size={collapsed ? 'icon-sm' : 'default'}
-				class={collapsed
-					? 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-					: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}
-				aria-label="Archive"
-				onclick={() => {
-					closeMobile();
-				}}
-			>
-				<svg
-					class="shrink-0 text-muted-foreground"
-					width="14"
-					height="14"
-					viewBox="0 0 24 24"
-					fill="none"
-					><path
-						fill="currentColor"
-						d="M7.414 3A2 2 0 0 0 6 3.586L3.586 6a2 2 0 0 0-.543 1h17.914a2 2 0 0 0-.543-1L18 3.586A2 2 0 0 0 16.586 3zM21 9H3v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zm-9 2a1 1 0 0 1 1 1v3.186l.414-.415a1 1 0 0 1 1.414 1.415l-2.12 2.121a1 1 0 0 1-1.415 0l-2.121-2.121a1 1 0 0 1 1.414-1.415l.414.415V12a1 1 0 0 1 1-1"
-					/></svg
-				>
-				{#if !collapsed}
-					<span>Archive</span>
-					{#if notesState.archived.length > 0}
-						<span class="ml-auto text-[11px] text-muted-foreground/50 tabular-nums"
-							>{notesState.archived.length}</span
-						>
-					{/if}
-				{/if}
-			</Button>
-		{/if}
 		{#if updateAvailable && !collapsed}
 			<button
 				type="button"
 				onclick={() => (updateDialogOpen = true)}
 				class="mb-1 flex w-full items-center gap-2 rounded-md border border-primary/20 bg-primary/10 px-2 py-1.5 text-left text-[12px] text-sidebar-foreground/90 transition-colors hover:bg-primary/15"
 			>
-				<svg class="shrink-0 text-primary" width="14" height="14" viewBox="0 0 24 24" fill="none"
-					><path
-						fill="currentColor"
-						d="M20 14.5a1.5 1.5 0 0 1 1.5 1.5v4a2.5 2.5 0 0 1-2.5 2.5H5A2.5 2.5 0 0 1 2.5 20v-4a1.5 1.5 0 0 1 3 0v3.5h13V16a1.5 1.5 0 0 1 1.5-1.5m-8-13A1.5 1.5 0 0 1 13.5 3v9.036l1.682-1.682a1.5 1.5 0 0 1 2.121 2.12l-4.066 4.067a1.75 1.75 0 0 1-2.474 0l-4.066-4.066a1.5 1.5 0 0 1 2.121-2.121l1.682 1.682V3A1.5 1.5 0 0 1 12 1.5"
-					/></svg
-				>
+				<Icon icon="download" size={15} class="shrink-0 text-primary" />
 				<span class="truncate">Update to {updateVersion} is available</span>
 			</button>
 		{/if}
@@ -1331,25 +976,15 @@
 			href="/trash"
 			size={collapsed ? 'icon-sm' : 'default'}
 			class={collapsed
-				? 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-				: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}
+				? iconBtnClass
+				: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] ' + navIdleClass}
 			aria-label="Trash"
 			onclick={() => {
 				// keep the active tab so the trash opens on the same tab's items
 				closeMobile();
 			}}
 		>
-			<svg
-				class="shrink-0 text-muted-foreground"
-				width="14"
-				height="14"
-				viewBox="0 0 24 24"
-				fill="none"
-				><path
-					fill="currentColor"
-					d="M14.28 2a2 2 0 0 1 1.897 1.368L16.72 5H20a1 1 0 1 1 0 2l-.003.071-.867 12.143A3 3 0 0 1 16.138 22H7.862a3 3 0 0 1-2.992-2.786L4.003 7.07A1.01 1.01 0 0 1 4 7a1 1 0 0 1 0-2h3.28l.543-1.632A2 2 0 0 1 9.721 2zM9 10a1 1 0 0 0-.993.883L8 11v6a1 1 0 0 0 1.993.117L10 17v-6a1 1 0 0 0-1-1m6 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0v-6a1 1 0 0 0-1-1m-.72-6H9.72l-.333 1h5.226z"
-				/></svg
-			>
+			<Icon icon="trash" size={15} class="shrink-0 text-muted-foreground" />
 			{#if !collapsed}<span>Trash</span>{/if}
 		</Button>
 		<Button
@@ -1357,25 +992,15 @@
 			href="/settings"
 			size={collapsed ? 'icon-sm' : 'default'}
 			class={collapsed
-				? 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-				: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}
+				? iconBtnClass
+				: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] ' + navIdleClass}
 			aria-label="Settings"
 			onclick={() => {
 				// keep the active tab; settings renders on its own route
 				closeMobile();
 			}}
 		>
-			<svg
-				class="shrink-0 text-muted-foreground"
-				width="14"
-				height="14"
-				viewBox="0 0 24 24"
-				fill="none"
-				><path
-					fill="currentColor"
-					d="M9.965 2.809a1.511 1.511 0 0 0-1.401-.203 9.99 9.99 0 0 0-2.982 1.725 1.51 1.51 0 0 0-.524 1.313c.075.753-.058 1.48-.42 2.106-.361.627-.925 1.106-1.615 1.417a1.511 1.511 0 0 0-.875 1.113 10.059 10.059 0 0 0 0 3.44c.093.537.46.926.875 1.114.69.31 1.254.79 1.616 1.416.361.627.494 1.353.419 2.106-.045.452.107.964.524 1.313a9.989 9.989 0 0 0 2.982 1.725 1.51 1.51 0 0 0 1.4-.203c.615-.442 1.312-.691 2.036-.691s1.42.249 2.035.691c.37.266.89.39 1.401.203a9.99 9.99 0 0 0 2.982-1.725c.417-.349.57-.86.524-1.313-.075-.753.057-1.48.42-2.106.361-.627.925-1.105 1.615-1.416.414-.187.782-.577.875-1.114a10.062 10.062 0 0 0 0-3.44 1.511 1.511 0 0 0-.875-1.113c-.69-.311-1.254-.79-1.616-1.417-.362-.626-.494-1.353-.419-2.106a1.511 1.511 0 0 0-.524-1.313 9.99 9.99 0 0 0-2.982-1.725 1.511 1.511 0 0 0-1.4.203C13.42 3.25 12.723 3.5 12 3.5s-1.42-.249-2.035-.691M9 12a3 3 0 1 1 6 0 3 3 0 0 1-6 0"
-				/></svg
-			>
+			<Icon icon="settings" size={15} class="shrink-0 text-muted-foreground" />
 			{#if !collapsed}<span>Settings</span>{/if}
 		</Button>
 	</div>
@@ -1387,95 +1012,31 @@
 	{/await}
 {/if}
 
-<!-- create note or folder -->
-<Dialog.Root bind:open={noteCreateOpen}>
-	<Dialog.Content class="w-[calc(100vw-2rem)] max-w-sm gap-0 p-0" showCloseButton={false}>
-		<Dialog.Title class="sr-only">Create {noteCreateType}</Dialog.Title>
-		<form onsubmit={submitNoteCreate} class="flex flex-col">
-			<div class="flex items-center justify-between px-4 pt-4 pb-3 sm:px-5">
-				<span class="text-[13px] font-medium text-foreground">
-					{noteCreateType === 'note' ? 'New note' : 'New folder'}
-				</span>
-				<Dialog.Close>
-					{#snippet child({ props })}
-						<Button
-							{...props}
-							variant="ghost"
-							size="icon-sm"
-							class="text-muted-foreground hover:text-foreground"
-						>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-								><path
-									fill="currentColor"
-									d="M18.3 5.71a1 1 0 0 0-1.42 0L12 10.59l-4.88-4.88a1 1 0 1 0-1.42 1.42L10.59 12l-4.88 4.88a1 1 0 1 0 1.41 1.42L12 13.41l4.88 4.88a1 1 0 0 0 1.42-1.42L13.41 12l4.88-4.88a1 1 0 0 0 0-1.41Z"
-								/></svg
-							>
-						</Button>
-					{/snippet}
-				</Dialog.Close>
-			</div>
-			<div class="flex flex-col gap-3 px-4 pb-4 sm:px-5">
-				<Select.Root
-					type="single"
-					value={noteCreateType}
-					onValueChange={(v) => (noteCreateType = v as 'note' | 'folder')}
-				>
-					<Select.Trigger class="w-full">
-						{noteCreateType === 'note' ? 'Note' : 'Folder'}
-					</Select.Trigger>
-					<Select.Content>
-						<Select.Item value="note" label="Note">Note</Select.Item>
-						<Select.Item value="folder" label="Folder">Folder</Select.Item>
-					</Select.Content>
-				</Select.Root>
-				<Input
-					bind:value={noteCreateName}
-					placeholder={noteCreateType === 'note' ? 'Untitled' : 'New Folder'}
-				/>
-				{#if noteCreateType === 'note'}
-					<Textarea bind:value={noteCreateDescription} placeholder="Add a description..." />
-				{/if}
-				{#if noteCreateType === 'note' && noteCreateTemplates.length > 0}
-					<Select.Root
-						type="single"
-						value={noteCreateTemplate}
-						onValueChange={(v) => (noteCreateTemplate = v)}
-					>
-						<Select.Trigger class="w-full">
-							{noteCreateTemplate === 'none' ? 'Empty note' : `Template: ${noteCreateTemplate}`}
-						</Select.Trigger>
-						<Select.Content>
-							<Select.Item value="none" label="Empty note">Empty note</Select.Item>
-							{#each noteCreateTemplates as template (template)}
-								<Select.Item value={template} label={template}>{template}</Select.Item>
-							{/each}
-						</Select.Content>
-					</Select.Root>
-				{/if}
-				<Select.Root
-					type="single"
-					value={noteCreateParent}
-					onValueChange={(v) => (noteCreateParent = v)}
-				>
-					<Select.Trigger class="w-full">
-						{noteCreateParent === 'root' ? 'Notes root' : parentLabel(noteCreateParent)}
-					</Select.Trigger>
-					<Select.Content>
-						<Select.Item value="root" label="Notes root">Notes root</Select.Item>
-						{#each notesState.folders as rel (rel)}
-							<Select.Item value={rel} label={parentLabel(rel)}>
-								{parentLabel(rel)}
-							</Select.Item>
-						{/each}
-					</Select.Content>
-				</Select.Root>
-			</div>
-			<div class="flex justify-end gap-2 px-4 pb-4 sm:px-5">
-				<Button type="button" variant="outline" size="sm" onclick={() => (noteCreateOpen = false)}
-					>Cancel</Button
-				>
-				<Button type="submit" size="sm" disabled={!noteCreateName.trim()}>Create</Button>
-			</div>
-		</form>
-	</Dialog.Content>
-</Dialog.Root>
+<style>
+	/* file-explorer style indent guides: a vertical rail under the group
+	   chevron plus a short stub connecting each row to it; the guides live
+	   in the left gutter so the row hover background never covers them,
+	   and the last row's rail stops at mid-height ending with an elbow */
+	.tree-item {
+		position: relative;
+	}
+	.tree-item::before,
+	.tree-item::after {
+		content: '';
+		position: absolute;
+		left: -8px;
+	}
+	.tree-item::before {
+		top: 0;
+		bottom: -1px;
+		border-left: 1px solid color-mix(in oklch, var(--sidebar-border) 60%, transparent);
+	}
+	.tree-item::after {
+		top: 50%;
+		width: 14px;
+		border-top: 1px solid color-mix(in oklch, var(--sidebar-border) 60%, transparent);
+	}
+	.tree-item:last-of-type::before {
+		bottom: 50%;
+	}
+</style>

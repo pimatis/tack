@@ -82,6 +82,14 @@ fn format_activity(
                 format!("set due date to {}", new)
             }
         }
+        "recurrence_changed" => {
+            if new.is_empty() {
+                "removed the repeat schedule".to_string()
+            } else {
+                format!("set the task to repeat {}", new.to_lowercase())
+            }
+        }
+        "recurrence_spawned" => format!("scheduled the next occurrence for {}", new),
         "label_added" => format!("added label {}", new),
         "label_removed" => format!("removed label {}", old),
         "attachment_added" => format!("attached {}", new),

@@ -11,6 +11,7 @@ import {
 	log as logActivity,
 	logBatch as logActivityBatch
 } from '$lib/repositories/activity.repository';
+import { nextOccurrence, addDaysIso, addDaysTimestamp, recurrenceLabel } from '$lib/task/recurrence';
 
 type CreateTaskInput = Pick<Task, 'title'> &
 	Partial<
@@ -24,6 +25,8 @@ type CreateTaskInput = Pick<Task, 'title'> &
 			| 'dueDate'
 			| 'endDate'
 			| 'reminderAt'
+			| 'recurrenceRule'
+			| 'recurrenceParentId'
 		>
 	>;
 
@@ -38,6 +41,7 @@ type UpdateTaskInput = Partial<
 		| 'endDate'
 		| 'pinned'
 		| 'reminderAt'
+		| 'recurrenceRule'
 	>
 >;
 
@@ -53,6 +57,8 @@ const TASK_LIST_COLUMNS = `
 	end_date AS endDate,
 	reminder_at AS reminderAt,
 	reminder_sent_at AS reminderSentAt,
+	recurrence_rule AS recurrenceRule,
+	recurrence_parent_id AS recurrenceParentId,
 	sort_order AS sortOrder,
 	pinned,
 	created_at AS createdAt,
@@ -94,6 +100,8 @@ export async function create(input: CreateTaskInput): Promise<Task> {
 			dueDate: input.dueDate ?? null,
 			endDate: input.endDate ?? null,
 			reminderAt: input.reminderAt ?? null,
+			recurrenceRule: input.recurrenceRule ?? null,
+			recurrenceParentId: input.recurrenceParentId ?? null,
 			sortOrder: 0,
 			createdAt: now,
 			updatedAt: now,
@@ -101,8 +109,8 @@ export async function create(input: CreateTaskInput): Promise<Task> {
 		};
 
 		await db.execute(
-			`INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, reminder_at, sort_order, created_at, updated_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, $11, $12)`,
+			`INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, reminder_at, recurrence_rule, recurrence_parent_id, sort_order, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 0, $13, $14)`,
 			[
 				task.id,
 				task.number,
@@ -114,6 +122,8 @@ export async function create(input: CreateTaskInput): Promise<Task> {
 				task.dueDate,
 				task.endDate,
 				task.reminderAt,
+				task.recurrenceRule,
+				task.recurrenceParentId,
 				task.createdAt,
 				task.updatedAt
 			]
@@ -240,6 +250,22 @@ export async function update(id: string, input: UpdateTaskInput): Promise<Task |
 			});
 		}
 
+		// the rule is stored as a compact string, so the activity log gets the
+		// readable schedule instead
+		if (
+			input.recurrenceRule !== undefined &&
+			(current.recurrenceRule ?? null) !== input.recurrenceRule
+		) {
+			values.push(input.recurrenceRule);
+			assignments.push(`recurrence_rule = $${values.length}`);
+			activityEntries.push({
+				action: 'recurrence_changed',
+				field: 'recurrence_rule',
+				oldValue: recurrenceLabel(current.recurrenceRule),
+				newValue: recurrenceLabel(input.recurrenceRule)
+			});
+		}
+
 		if (assignments.length === 0) return current;
 
 		values.push(new Date().toISOString());
@@ -265,10 +291,54 @@ export async function update(id: string, input: UpdateTaskInput): Promise<Task |
 			}))
 		);
 
-		return await findById(id);
+		const updated = await findById(id);
+
+		// completing a recurring task rolls the series forward: this row stays
+		// as history and a fresh todo takes the next date
+		if (updated && current.status !== 'done' && updated.status === 'done') {
+			await spawnNextOccurrence(updated);
+		}
+
+		return updated;
 	} catch (error) {
 		throw new Error('Failed to update task', { cause: error });
 	}
+}
+
+// copy a completed occurrence forward on its schedule; the recurrence parent
+// keeps the series linked and stops the same date from spawning twice when a
+// task is checked done again
+async function spawnNextOccurrence(parent: Task): Promise<Task | null> {
+	const next = nextOccurrence(parent.recurrenceRule, parent.dueDate);
+	if (!next) return null;
+
+	const db = await getDb();
+	const existing = await db.select<{ id: string }[]>(
+		`SELECT id FROM tasks WHERE recurrence_parent_id = $1 AND due_date = $2 AND deleted_at IS NULL`,
+		[parent.id, next.dueDate]
+	);
+	if (existing.length > 0) return null;
+
+	const occurrence = await create({
+		title: parent.title,
+		description: parent.description,
+		projectId: parent.projectId ?? null,
+		priority: parent.priority,
+		dueDate: next.dueDate,
+		endDate: parent.endDate ? addDaysIso(parent.endDate, next.deltaDays) : null,
+		reminderAt: parent.reminderAt ? addDaysTimestamp(parent.reminderAt, next.deltaDays) : null,
+		recurrenceRule: parent.recurrenceRule,
+		recurrenceParentId: parent.id
+	});
+
+	const labelIds = parent.labelIds ?? (await findLabelIdsByTaskId(parent.id));
+	if (labelIds.length > 0) {
+		await setTaskLabels(occurrence.id, labelIds);
+		occurrence.labelIds = [...labelIds];
+	}
+
+	void logActivity(parent.id, 'recurrence_spawned', 'due_date', parent.dueDate ?? null, next.dueDate);
+	return occurrence;
 }
 
 export async function reorderInStatus(status: TaskStatus, taskIds: string[]): Promise<void> {
@@ -323,12 +393,28 @@ export async function bulkUpdateStatus(ids: string[], status: TaskStatus): Promi
 		const db = await getDb();
 		const now = new Date().toISOString();
 		const placeholders = ids.map((_, i) => `$${i + 3}`).join(', ');
+		// completing recurring tasks rolls each series forward; read them
+		// before the update clears their old status
+		const recurring =
+			status === 'done'
+				? await db.select<Task[]>(
+						`SELECT ${TASK_COLUMNS} FROM tasks
+						 WHERE id IN (${ids.map((_, i) => `$${i + 1}`).join(', ')})
+						   AND status != 'done'
+						   AND recurrence_rule IS NOT NULL
+						   AND deleted_at IS NULL`,
+						ids
+					)
+				: [];
 		await db.execute(
 			`UPDATE tasks SET status = $1, updated_at = $2 WHERE id IN (${placeholders})`,
 			[status, now, ...ids]
 		);
 		for (const id of ids) {
 			void logActivity(id, 'status_changed', 'status', undefined, statusConfig[status].label);
+		}
+		for (const task of recurring) {
+			await spawnNextOccurrence(task);
 		}
 	} catch (error) {
 		throw new Error('Failed to update status', { cause: error });
@@ -386,7 +472,8 @@ export async function duplicate(id: string): Promise<Task | null> {
 			projectId: original.projectId,
 			dueDate: original.dueDate,
 			endDate: original.endDate,
-			reminderAt: original.reminderAt
+			reminderAt: original.reminderAt,
+			recurrenceRule: original.recurrenceRule
 		});
 		if (original.labelIds && original.labelIds.length > 0) {
 			await setTaskLabels(copy.id, original.labelIds);

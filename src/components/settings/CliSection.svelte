@@ -3,6 +3,7 @@
 	import { invoke } from '@tauri-apps/api/core';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { isTauri } from '$lib/db/client';
+	import Icon from '$lib/components/Icon.svelte';
 
 	const browser = !isTauri();
 
@@ -70,12 +71,7 @@
 				<span
 					class="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-500"
 				>
-					<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"
-						><path
-							fill="currentColor"
-							d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2m3.535 6.381-4.95 4.95-2.12-2.121a1 1 0 0 0-1.415 1.414l2.758 2.758a1.1 1.1 0 0 0 1.556 0l5.586-5.586a1 1 0 0 0-1.415-1.415"
-						/></svg
-					>
+					<Icon icon="check-circle" size={15} />
 					Installed
 				</span>
 			{:else}

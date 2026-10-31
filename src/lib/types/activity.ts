@@ -7,6 +7,8 @@ export type ActivityAction =
 	| 'due_date_changed'
 	| 'end_date_changed'
 	| 'reminder_changed'
+	| 'recurrence_changed'
+	| 'recurrence_spawned'
 	| 'label_added'
 	| 'label_removed'
 	| 'attachment_added'

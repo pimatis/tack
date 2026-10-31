@@ -4,6 +4,7 @@
 	import StatusIcon from './StatusIcon.svelte';
 	import { statusConfig, statusOrder } from '$lib/task/constants';
 	import type { TaskStatus } from '$lib/types/task';
+	import Icon from '$lib/components/Icon.svelte';
 
 	let {
 		value,
@@ -45,17 +46,7 @@
 				<StatusIcon status={s} size={14} />
 				<span>{statusConfig[s].label}</span>
 				{#if value === s}
-					<svg
-						class="ml-auto text-muted-foreground"
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						><path
-							fill="currentColor"
-							d="M21.546 5.111a1.5 1.5 0 0 1 0 2.121L10.303 18.475a1.6 1.6 0 0 1-2.263 0L2.454 12.89a1.5 1.5 0 1 1 2.121-2.121l4.596 4.596L19.424 5.111a1.5 1.5 0 0 1 2.122 0"
-						/></svg
-					>
+					<Icon icon="check" size={14} class="ml-auto text-muted-foreground" />
 				{/if}
 			</DropdownMenu.Item>
 		{/each}

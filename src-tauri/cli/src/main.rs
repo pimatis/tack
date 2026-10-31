@@ -1,6 +1,7 @@
 mod backup;
 mod commands;
 mod db;
+mod recurrence;
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -13,9 +14,6 @@ struct Cli {
 
     #[arg(long, global = true, help = "Output machine-readable JSON")]
     json: bool,
-
-    #[arg(long, global = true, help = "Override notes folder path")]
-    notes_dir: Option<PathBuf>,
 
     #[command(subcommand)]
     command: Commands,
@@ -67,42 +65,6 @@ enum Commands {
     Live {
         #[command(subcommand)]
         action: LiveAction,
-    },
-    /// Manage notes
-    Note {
-        #[command(subcommand)]
-        action: NoteAction,
-    },
-    /// Manage note folders
-    Folder {
-        #[command(subcommand)]
-        action: FolderAction,
-    },
-    /// Manage notes vaults (saved notes folders)
-    Vault {
-        #[command(subcommand)]
-        action: VaultAction,
-    },
-}
-
-#[derive(Subcommand)]
-enum VaultAction {
-    /// List saved vaults and the active one
-    List,
-    /// Switch to a vault (adds it to the list)
-    Use {
-        #[arg(long)]
-        path: String,
-    },
-    /// Register an existing folder as a vault
-    Add {
-        #[arg(long)]
-        path: String,
-    },
-    /// Forget a vault (the active folder is kept)
-    Remove {
-        #[arg(long)]
-        path: String,
     },
 }
 
@@ -156,6 +118,11 @@ enum TaskAction {
         end_date: Option<String>,
         #[arg(long, help = "Reminder (ISO 8601, e.g. 2026-09-14T09:00)")]
         reminder: Option<String>,
+        #[arg(
+            long,
+            help = "Repeat schedule: daily, weekly:<mon..sun|1-7>, monthly:<1-31>"
+        )]
+        repeat: Option<String>,
         #[arg(long)]
         description: Option<String>,
     },
@@ -204,11 +171,13 @@ enum TaskAction {
         due_date: Option<String>,
         #[arg(long, help = "End date (YYYY-MM-DD), use empty string to clear")]
         end_date: Option<String>,
+        #[arg(long, help = "Reminder (ISO 8601); use empty string to clear")]
+        reminder: Option<String>,
         #[arg(
             long,
-            help = "Reminder (ISO 8601); use empty string to clear"
+            help = "Repeat schedule: daily, weekly:<mon..sun|1-7>, monthly:<1-31>; use empty string to clear"
         )]
-        reminder: Option<String>,
+        repeat: Option<String>,
     },
     /// Delete a task
     Delete { id: String },
@@ -426,245 +395,6 @@ enum LiveAction {
     Watch,
 }
 
-#[derive(Subcommand)]
-enum NoteAction {
-    /// List notes
-    List {
-        #[arg(long, help = "Only direct children of this folder (empty for root)")]
-        folder: Option<String>,
-        #[arg(
-            long,
-            help = "Only notes carrying this tag (frontmatter or inline #tag)"
-        )]
-        tag: Option<String>,
-    },
-    /// Create a note
-    Create {
-        #[arg(long)]
-        title: String,
-        #[arg(long, help = "Folder to create the note in (defaults to root)")]
-        folder: Option<String>,
-        #[arg(long, help = "Initial markdown content")]
-        content: Option<String>,
-    },
-    /// Quick capture: create an Untitled note in one step
-    Quick {
-        #[arg(long, help = "Folder to create the note in (defaults to root)")]
-        folder: Option<String>,
-        #[arg(long, help = "Initial markdown content")]
-        content: Option<String>,
-    },
-    /// Print a note's content
-    Show {
-        #[arg(long, help = "Note name or folder path")]
-        note: String,
-    },
-    /// Write a note's content
-    Update {
-        #[arg(long, help = "Note name or folder path")]
-        note: String,
-        #[arg(long, help = "New markdown content")]
-        content: Option<String>,
-        #[arg(long, help = "Read content from stdin instead of --content")]
-        stdin: bool,
-    },
-    /// Rename a note (mention links are rewritten)
-    Rename {
-        #[arg(long, help = "Note name or folder path")]
-        note: String,
-        #[arg(long)]
-        title: String,
-    },
-    /// Move a note to another folder
-    Move {
-        #[arg(long, help = "Note name or folder path")]
-        note: String,
-        #[arg(long, help = "Target folder (omit for root)")]
-        folder: Option<String>,
-    },
-    /// Archive a note
-    Archive {
-        #[arg(long, help = "Note name or folder path")]
-        note: String,
-    },
-    /// List archived notes
-    Archived,
-    /// Restore an archived note
-    Unarchive {
-        #[arg(long)]
-        note: String,
-    },
-    /// Move a note to trash
-    Delete {
-        #[arg(long, help = "Note name or folder path")]
-        note: String,
-    },
-    /// List trashed notes
-    Trash,
-    /// Restore a trashed note
-    Restore {
-        #[arg(long)]
-        note: String,
-    },
-    /// Permanently delete trashed notes
-    Purge {
-        #[arg(long)]
-        note: Option<String>,
-        #[arg(long, help = "Empty the whole trash")]
-        all: bool,
-    },
-    /// Pin a note to the top of the sidebar
-    Pin {
-        #[arg(long, help = "Note name or folder path")]
-        note: String,
-    },
-    /// Unpin a note
-    Unpin {
-        #[arg(long, help = "Note name or folder path")]
-        note: String,
-    },
-    /// Show note details
-    Info {
-        #[arg(long, help = "Note name or folder path")]
-        note: String,
-    },
-    /// Full-text search across note contents
-    Search {
-        #[arg(long)]
-        query: String,
-        #[arg(long, help = "Restrict search to this folder")]
-        folder: Option<String>,
-    },
-    /// Open (create if missing) today's daily note (YYYY-MM-DD.md)
-    Today {
-        #[arg(long, help = "Day offset from today (yesterday = -1)")]
-        offset: Option<i64>,
-    },
-    /// Manage note tags (frontmatter + inline #tags)
-    Tag {
-        #[command(subcommand)]
-        action: TagAction,
-    },
-    /// Manage note templates (.tack/templates)
-    Template {
-        #[command(subcommand)]
-        action: TemplateAction,
-    },
-    /// List the saved versions of a note
-    History {
-        #[arg(long, help = "Note name or folder path")]
-        note: String,
-    },
-    /// Restore a saved version of a note
-    RestoreVersion {
-        #[arg(long, help = "Note name or folder path")]
-        note: String,
-        #[arg(long, help = "Version timestamp (see: tack note history)")]
-        at: String,
-    },
-    /// Export a note as markdown or html
-    Export {
-        #[arg(long, help = "Note name or folder path")]
-        note: String,
-        #[arg(long, help = "md or html", default_value = "md")]
-        format: String,
-        #[arg(long, help = "Output file (defaults next to the note)")]
-        out: Option<String>,
-    },
-    /// Attach a file to a note (copied into .tack/assets)
-    Attach {
-        #[arg(long, help = "Note name or folder path")]
-        note: String,
-        #[arg(long, help = "File to attach (image files get a preview reference)")]
-        file: String,
-    },
-    /// Create a note from a template
-    FromTemplate {
-        #[arg(long)]
-        title: String,
-        #[arg(long, help = "Template name (see: tack note template list)")]
-        template: String,
-        #[arg(long, help = "Folder to create the note in (defaults to root)")]
-        folder: Option<String>,
-    },
-    /// Notes that link to this note (mentions or wiki links)
-    Backlinks {
-        #[arg(long, help = "Note name or folder path")]
-        note: String,
-    },
-    /// Notes mentioning this note's title without linking to it
-    Unlinked {
-        #[arg(long, help = "Note name or folder path")]
-        note: String,
-    },
-    /// Convert a note into a task (title + description)
-    ToTask {
-        #[arg(long, help = "Note name or folder path")]
-        note: String,
-    },
-}
-
-#[derive(Subcommand)]
-enum TagAction {
-    /// Add a tag to a note
-    Add {
-        #[arg(long, help = "Note name or folder path")]
-        note: String,
-        #[arg(long)]
-        tag: String,
-    },
-    /// Remove a tag from a note
-    Remove {
-        #[arg(long, help = "Note name or folder path")]
-        note: String,
-        #[arg(long)]
-        tag: String,
-    },
-    /// List all tags with note counts
-    List,
-}
-
-#[derive(Subcommand)]
-enum TemplateAction {
-    /// List templates
-    List,
-    /// Create a template
-    Create {
-        #[arg(long)]
-        title: String,
-        #[arg(
-            long,
-            help = "Template content; {{title}} {{date}} {{time}} {{yesterday}} {{tomorrow}} are filled in on use"
-        )]
-        content: Option<String>,
-    },
-}
-
-#[derive(Subcommand)]
-enum FolderAction {
-    /// List folders with note counts
-    List,
-    /// Create a folder
-    Create {
-        #[arg(long)]
-        name: String,
-        #[arg(long, help = "Parent folder (defaults to root)")]
-        parent: Option<String>,
-    },
-    /// Rename a folder (mention links are rewritten)
-    Rename {
-        #[arg(long, help = "Folder path relative to the notes root")]
-        folder: String,
-        #[arg(long)]
-        name: String,
-    },
-    /// Delete an empty folder
-    Delete {
-        #[arg(long, help = "Folder path relative to the notes root")]
-        folder: String,
-    },
-}
-
 fn parse_ids(s: &str) -> Vec<String> {
     s.split(',')
         .map(|id| id.trim().to_string())
@@ -713,6 +443,7 @@ fn main() {
                 due_date,
                 end_date,
                 reminder,
+                repeat,
                 description,
             } => {
                 let dd = due_date.as_deref().filter(|s| !s.is_empty());
@@ -729,6 +460,7 @@ fn main() {
                     ed,
                     description.as_deref(),
                     reminder.as_deref(),
+                    repeat.as_deref(),
                 )
             }
             TaskAction::List {
@@ -773,6 +505,7 @@ fn main() {
                 due_date,
                 end_date,
                 reminder,
+                repeat,
             } => commands::task::update(
                 &conn,
                 json,
@@ -784,6 +517,7 @@ fn main() {
                 due_date.as_deref(),
                 end_date.as_deref(),
                 reminder.as_deref(),
+                repeat.as_deref(),
             ),
             TaskAction::Delete { id } => commands::task::delete(&conn, json, &id),
             TaskAction::Duplicate { id } => commands::task::duplicate(&conn, json, &id),
@@ -894,131 +628,6 @@ fn main() {
             LiveAction::Off => commands::live::off(&conn, json),
             LiveAction::Status => commands::live::status(&conn, json),
             LiveAction::Watch => commands::live::watch(&conn, json),
-        },
-        Commands::Note { action } => {
-            let root = match commands::note::resolve_dir(cli.notes_dir.as_ref(), &conn) {
-                Ok(p) => p,
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    std::process::exit(1);
-                }
-            };
-            match action {
-                NoteAction::List { folder, tag } => {
-                    commands::note::list(&root, json, folder.as_deref(), tag.as_deref())
-                }
-                NoteAction::Create {
-                    title,
-                    folder,
-                    content,
-                } => commands::note::create(
-                    &root,
-                    json,
-                    &title,
-                    folder.as_deref(),
-                    content.as_deref(),
-                ),
-                NoteAction::Quick { folder, content } => commands::note::quick(
-                    &root,
-                    json,
-                    folder.as_deref(),
-                    content.as_deref(),
-                ),
-                NoteAction::Show { note } => commands::note::show(&root, json, &note),
-                NoteAction::Update {
-                    note,
-                    content,
-                    stdin,
-                } => commands::note::update(&root, json, &note, content.as_deref(), stdin),
-                NoteAction::Rename { note, title } => {
-                    commands::note::rename(&root, json, &note, &title)
-                }
-                NoteAction::Move { note, folder } => {
-                    commands::note::move_note(&root, json, &note, folder.as_deref())
-                }
-                NoteAction::Archive { note } => commands::note::archive(&root, json, &note),
-                NoteAction::Archived => commands::note::archived_list(&root, json),
-                NoteAction::Unarchive { note } => commands::note::unarchive(&root, json, &note),
-                NoteAction::Delete { note } => commands::note::delete(&root, json, &note),
-                NoteAction::Trash => commands::note::trash_list(&root, json),
-                NoteAction::Restore { note } => commands::note::restore(&root, json, &note),
-                NoteAction::Purge { note, all } => {
-                    commands::note::purge(&root, json, note.as_deref(), all)
-                }
-                NoteAction::Pin { note } => commands::note::pin(&conn, json, &root, &note, false),
-                NoteAction::Unpin { note } => commands::note::pin(&conn, json, &root, &note, true),
-                NoteAction::Info { note } => commands::note::info(&root, json, &note),
-                NoteAction::Search { query, folder } => {
-                    commands::note::search(&root, json, &query, folder.as_deref())
-                }
-                NoteAction::Today { offset } => commands::note::today(&root, json, offset),
-                NoteAction::Tag { action } => match action {
-                    TagAction::Add { note, tag } => {
-                        commands::note::tag_add(&root, json, &note, &tag)
-                    }
-                    TagAction::Remove { note, tag } => {
-                        commands::note::tag_remove(&root, json, &note, &tag)
-                    }
-                    TagAction::List => commands::note::tag_list(&root, json),
-                },
-                NoteAction::Template { action } => match action {
-                    TemplateAction::List => commands::note::template_list(&root, json),
-                    TemplateAction::Create { title, content } => {
-                        commands::note::template_create(&root, json, &title, content.as_deref())
-                    }
-                },
-                NoteAction::History { note } => commands::note::history(&root, json, &note),
-                NoteAction::RestoreVersion { note, at } => {
-                    commands::note::restore_version(&root, json, &note, &at)
-                }
-                NoteAction::Export { note, format, out } => {
-                    commands::note::export(&root, json, &note, &format, out.as_deref())
-                }
-                NoteAction::Attach { note, file } => {
-                    commands::note::attach(&root, json, &note, &file)
-                }
-                NoteAction::FromTemplate {
-                    title,
-                    template,
-                    folder,
-                } => commands::note::create_from_template(
-                    &root,
-                    json,
-                    &title,
-                    &template,
-                    folder.as_deref(),
-                ),
-                NoteAction::Backlinks { note } => commands::note::backlinks(&root, json, &note),
-                NoteAction::Unlinked { note } => commands::note::unlinked(&root, json, &note),
-                NoteAction::ToTask { note } => commands::note::to_task(&conn, &root, json, &note),
-            }
-        }
-        Commands::Folder { action } => {
-            let root = match commands::note::resolve_dir(cli.notes_dir.as_ref(), &conn) {
-                Ok(p) => p,
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    std::process::exit(1);
-                }
-            };
-            match action {
-                FolderAction::List => commands::note::folder_list(&root, json),
-                FolderAction::Create { name, parent } => {
-                    commands::note::folder_create(&root, json, &name, parent.as_deref())
-                }
-                FolderAction::Rename { folder, name } => {
-                    commands::note::folder_rename(&root, json, &folder, &name)
-                }
-                FolderAction::Delete { folder } => {
-                    commands::note::folder_delete(&root, json, &folder)
-                }
-            }
-        }
-        Commands::Vault { action } => match action {
-            VaultAction::List => commands::vault::list(&conn, json),
-            VaultAction::Use { path } => commands::vault::use_vault(&conn, json, &path),
-            VaultAction::Add { path } => commands::vault::add(&conn, json, &path),
-            VaultAction::Remove { path } => commands::vault::remove(&conn, json, &path),
         },
     };
 

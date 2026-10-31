@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Select as SelectPrimitive } from 'bits-ui';
 	import { cn, type WithoutChild } from '$lib/utils.js';
+	import Icon from '$lib/components/Icon.svelte';
 
 	let {
 		ref = $bindable(null),
@@ -24,20 +25,5 @@
 	{...restProps}
 >
 	{@render children?.()}
-	<svg
-		class="pointer-events-none size-4 text-muted-foreground"
-		width="24"
-		height="24"
-		viewBox="0 0 24 24"
-		fill="none"
-	>
-		<path
-			fill="none"
-			stroke="currentColor"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			stroke-width="2"
-			d="M14.828 11L12 13.828L9.172 11"
-		/>
-	</svg>
+	<Icon icon="arrow-down" size={24} class="pointer-events-none size-4 text-muted-foreground" />
 </SelectPrimitive.Trigger>

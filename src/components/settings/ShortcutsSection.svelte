@@ -9,6 +9,7 @@
 	import { getSettings, setSettings } from '$lib/stores/settings';
 	import { defaultSettings } from '$lib/types/settings';
 	import ShortcutKeycap from './ShortcutKeycap.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 
 	let draft = $state<Record<string, ShortcutKey[]>>(
 		JSON.parse(JSON.stringify(getSettings().shortcuts))
@@ -135,29 +136,7 @@
 				{:else}
 					<span class="text-[11px] text-muted-foreground/50">No shortcut</span>
 				{/if}
-				<svg
-					class="text-muted-foreground/40"
-					width="13"
-					height="13"
-					viewBox="0 0 24 24"
-					fill="none"
-				>
-					<rect
-						x="2"
-						y="6"
-						width="20"
-						height="12"
-						rx="2"
-						stroke="currentColor"
-						stroke-width="1.5"
-					/>
-					<path
-						d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M9 14h6"
-						stroke="currentColor"
-						stroke-width="1.5"
-						stroke-linecap="round"
-					/>
-				</svg>
+				<Icon icon="keyboard" size={13} class="text-muted-foreground/40" />
 			</span>
 		</Button>
 		{#if i < SHORTCUTS.length - 1}<Separator />{/if}

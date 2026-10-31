@@ -38,11 +38,9 @@ define_class!(
             completion_handler: &DynBlock<dyn Fn(UNNotificationPresentationOptions)>,
         ) {
             // a foreground app would otherwise swallow the banner
-            completion_handler.call((
-                UNNotificationPresentationOptions::Banner
-                    | UNNotificationPresentationOptions::List
-                    | UNNotificationPresentationOptions::Sound,
-            ));
+            completion_handler.call((UNNotificationPresentationOptions::Banner
+                | UNNotificationPresentationOptions::List
+                | UNNotificationPresentationOptions::Sound,));
         }
 
         #[unsafe(method(userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:))]
@@ -83,7 +81,10 @@ impl Delegate {
 // requires; bundleIdentifier() alone is non-nil even for a bare binary, so we
 // check the bundle path instead. getting this wrong terminates the process
 pub fn is_bundled() -> bool {
-    NSBundle::mainBundle().bundlePath().to_string().ends_with(".app")
+    NSBundle::mainBundle()
+        .bundlePath()
+        .to_string()
+        .ends_with(".app")
 }
 
 // register the delegate so foreground banners and clicks reach us

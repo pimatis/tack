@@ -10,6 +10,7 @@
 	import DueDateBadge from './DueDateBadge.svelte';
 	import EndDateBadge from './EndDateBadge.svelte';
 	import ReminderBadge from './ReminderBadge.svelte';
+	import RecurrenceBadge from './RecurrenceBadge.svelte';
 	import TaskMenu from './TaskMenu.svelte';
 	import { sortableItem, type DragDropState } from '$lib/dnd';
 	import type { Task, TaskPriority, TaskStatus } from '$lib/types/task';
@@ -17,6 +18,7 @@
 	import type { Label } from '$lib/types/label';
 	import type { Settings } from '$lib/types/settings';
 	import { issueId, formatDate } from '$lib/task/utils';
+	import Icon from '$lib/components/Icon.svelte';
 
 	let {
 		task,
@@ -163,6 +165,11 @@
 			{formatDate(task.updatedAt)}
 		</span>
 
+		<!-- recurrence indicator -->
+		<div class="flex w-5 shrink-0 justify-center">
+			<RecurrenceBadge rule={task.recurrenceRule} />
+		</div>
+
 		<!-- reminder indicator -->
 		<div class="flex w-5 shrink-0 justify-center">
 			<ReminderBadge reminderAt={task.reminderAt} sentAt={task.reminderSentAt} />
@@ -171,12 +178,7 @@
 		<!-- pinned indicator -->
 		<div class="flex w-5 shrink-0 justify-center">
 			{#if task.pinned}
-				<svg class="text-foreground/60" width="13" height="13" viewBox="0 0 24 24" fill="none">
-					<path
-						fill="currentColor"
-						d="M16.735 2.835a2 2 0 0 0-2.615-.186l-2.913 2.185a9 9 0 0 1-4.127 1.71l-2.177.31c-.73.105-1.265.891-.913 1.662.331.723 1.385 2.629 4.36 5.72l-4.178 4.178a1 1 0 1 0 1.414 1.414l4.178-4.178c3.091 2.975 4.997 4.029 5.72 4.36.77.352 1.557-.183 1.661-.913l.311-2.177a9 9 0 0 1 1.71-4.127L21.35 9.88a2 2 0 0 0-.186-2.615z"
-					/>
-				</svg>
+				<Icon icon="pin" size={13} class="text-foreground/60" />
 			{/if}
 		</div>
 	</article>

@@ -69,8 +69,8 @@ export async function importData(data: ExportData): Promise<void> {
 	for (const t of data.tasks ?? []) {
 		const row = t as Record<string, unknown>;
 		await db.execute(
-			`INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, sort_order, pinned, created_at, updated_at, deleted_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+			`INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, sort_order, pinned, created_at, updated_at, deleted_at, recurrence_rule, recurrence_parent_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
 			[
 				row.id,
 				row.number,
@@ -84,7 +84,9 @@ export async function importData(data: ExportData): Promise<void> {
 				row.pinned ?? 0,
 				row.created_at,
 				row.updated_at,
-				row.deleted_at ?? null
+				row.deleted_at ?? null,
+				row.recurrence_rule ?? null,
+				row.recurrence_parent_id ?? null
 			]
 		);
 	}

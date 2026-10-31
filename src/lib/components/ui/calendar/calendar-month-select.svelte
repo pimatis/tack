@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Calendar as CalendarPrimitive } from 'bits-ui';
-	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import Icon from '$lib/components/Icon.svelte';
 	import { cn, type WithoutChildrenOrChild } from '$lib/utils.js';
 
 	let {
@@ -36,7 +36,7 @@
 				aria-hidden="true"
 			>
 				{monthItems.find((item) => item.value === value)?.label || selectedMonthItem.label}
-				<ChevronDownIcon class={cn('size-4', className)} />
+				<Icon icon="arrow-down" class={cn('size-4', className)} />
 			</span>
 		{/snippet}
 	</CalendarPrimitive.MonthSelect>

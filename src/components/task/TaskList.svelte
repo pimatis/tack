@@ -1,7 +1,7 @@
 <script lang="ts">
 	import StatusIcon from './StatusIcon.svelte';
 	import TaskRow from './TaskRow.svelte';
-	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import Icon from '$lib/components/Icon.svelte';
 	import type { DragDropState } from '$lib/dnd';
 	import type { Task, TaskPriority, TaskStatus } from '$lib/types/task';
 	import type { Project } from '$lib/types/project';
@@ -60,7 +60,8 @@
 					<StatusIcon {status} size={14} />
 					<span class="text-[13px] font-medium text-foreground">{statusConfig[status].label}</span>
 					<span class="text-[12px] text-muted-foreground/60">{group.length}</span>
-					<ChevronDownIcon
+					<Icon
+						icon="arrow-down"
 						class="ml-auto size-3.5 text-muted-foreground/50 transition-transform {collapsed
 							? '-rotate-90'
 							: ''}"

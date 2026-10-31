@@ -88,16 +88,6 @@ pub(crate) fn run_migrations(conn: &Connection) -> Result<(), String> {
             include_str!("../migrations/016_end_date.sql"),
         ),
         (
-            17,
-            "create_notes_fts_index",
-            include_str!("../migrations/017_notes_fts.sql"),
-        ),
-        (
-            18,
-            "create_task_notes_table",
-            include_str!("../migrations/018_task_notes.sql"),
-        ),
-        (
             19,
             "add_task_reminders",
             include_str!("../migrations/019_reminders.sql"),
@@ -108,9 +98,14 @@ pub(crate) fn run_migrations(conn: &Connection) -> Result<(), String> {
             include_str!("../migrations/020_task_search_scope.sql"),
         ),
         (
-            21,
-            "create_notes_index_tables",
-            include_str!("../migrations/021_notes_index_tables.sql"),
+            22,
+            "add_task_recurrence",
+            include_str!("../migrations/022_task_recurrence.sql"),
+        ),
+        (
+            23,
+            "index_task_recurrence_parent",
+            include_str!("../migrations/023_task_recurrence_index.sql"),
         ),
     ];
     let known: std::collections::HashSet<i64> =
@@ -173,12 +168,7 @@ pub(crate) fn run_migrations(conn: &Connection) -> Result<(), String> {
         // error mid-migration must not leave stray schema behind, which the
         // re-run below (any downgrade path) would otherwise trip over
         let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-        if let Err(e) = tx.execute_batch(sql) {
-            let msg = e.to_string();
-            if !msg.contains("duplicate column name") {
-                return Err(format!("migration {} failed: {}", version, msg));
-            }
-        }
+        apply_migration(&tx, *version, sql)?;
         // same schema sqlx creates; checksum matches sqlx's sha384 so older
         // binaries using tauri-plugin-sql can still verify it
         tx.execute_batch(
@@ -200,6 +190,22 @@ pub(crate) fn run_migrations(conn: &Connection) -> Result<(), String> {
         )
         .map_err(|e| format!("failed to record migration {}: {}", version, e))?;
         tx.commit().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+// migrations must survive a replay: a downgraded binary drops the tracking rows
+// of migrations it does not know, so the same script runs again on a schema
+// that already has its objects. sqlite stops a batch at the first failing
+// statement, so ddl that is not idempotent belongs at the end of a file
+fn apply_migration(conn: &Connection, version: i32, sql: &str) -> Result<(), String> {
+    if let Err(e) = conn.execute_batch(sql) {
+        let message = e.to_string();
+        let already_applied =
+            message.contains("duplicate column name") || message.contains("already exists");
+        if !already_applied {
+            return Err(format!("migration {} failed: {}", version, message));
+        }
     }
     Ok(())
 }

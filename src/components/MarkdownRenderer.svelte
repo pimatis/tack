@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { mount, unmount, tick } from 'svelte';
+	import { mount, unmount } from 'svelte';
 	import { renderMarkdown } from '$lib/markdown/render';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 
@@ -7,71 +7,26 @@
 		content: string;
 		class?: string;
 		onToggleLine?: (line: number) => void;
-		onOpenMention?: (href: string) => void;
-		onMentionHover?: (href: string, anchor: HTMLElement) => void;
-		onMentionLeave?: () => void;
-		onOpenWiki?: (name: string) => void;
-		onOpenTag?: (tag: string) => void;
-		resolveAsset?: (rel: string) => string;
-		// markdown line to scroll to and flash (block link navigation)
-		highlight?: { line: number; nonce: number } | null;
 	};
 
-	let {
-		content,
-		class: className = '',
-		onToggleLine,
-		onOpenMention,
-		onMentionHover,
-		onMentionLeave,
-		onOpenWiki,
-		onOpenTag,
-		resolveAsset,
-		highlight
-	}: Props = $props();
-	let html = $derived(renderMarkdown(content, { resolveAsset, highlightLine: highlight?.line }));
+	let { content, class: className = '', onToggleLine }: Props = $props();
+	let html = $derived(renderMarkdown(content));
 	let container = $state<HTMLElement | null>(null);
 
-	// scroll the marked block into view and flash it whenever a new
-	// navigation request arrives (each request is a fresh highlight object)
-	$effect(() => {
-		if (!highlight) return;
-		const root = container;
-		if (!root) return;
-		void tick().then(() => {
-			const block = root.querySelector('[data-target-line]');
-			if (!block) return;
-			block.scrollIntoView({ block: 'center' });
-			block.classList.add('note-line-flash');
-			setTimeout(() => block.classList.remove('note-line-flash'), 1600);
-		});
-	});
-
 	const COPY_ICON =
-		'<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path fill="currentColor" d="M9 2a2 2 0 0 0-2 2v2h2V4h11v11h-2v2h2a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM4 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg>';
+		'<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><g fill="currentColor"><path d="M15.2402 5.61426C17.9551 5.61426 19.3127 5.61431 20.1562 6.46094C20.9998 7.30786 21 8.67127 21 11.3975V16.2168C21 18.9429 20.9998 20.3064 20.1562 21.1533C19.3127 21.9998 17.955 22 15.2402 22H12.3604C9.64515 22 8.2869 22.0002 7.44336 21.1533C6.59984 20.3064 6.60059 18.9429 6.60059 16.2168V11.3975C6.60059 8.67128 6.59984 7.30786 7.44336 6.46094C8.28689 5.61402 9.64506 5.61426 12.3604 5.61426H15.2402Z"/><path d="M15.2402 2C16.7616 2.0001 18.0629 2.94764 18.5898 4.28711C17.7091 4.16822 16.6114 4.16887 15.335 4.16895H12.2656C10.9891 4.16887 9.8886 4.16821 9.00781 4.28711C8.06393 4.41454 7.15966 4.70266 6.42578 5.43945C5.69187 6.17631 5.40523 7.08449 5.27832 8.03223C5.15992 8.91654 5.16008 10.0211 5.16016 11.3027V16.3125C5.1601 17.374 5.16027 18.6502 5.22754 19.5596C3.92032 19.0177 3 17.7249 3 16.2168V10.3789C2.99999 8.60799 3.00049 7.20531 3.14746 6.10742C3.29878 4.97738 3.61751 4.06213 4.33594 3.34082C5.05433 2.61968 5.96542 2.29937 7.09082 2.14746C8.18439 1.99988 9.58168 1.99999 11.3457 2H15.2402Z"/></g></svg>';
 	const COPIED_ICON =
-		'<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path fill="currentColor" d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2m3.535 6.381-4.95 4.95-2.12-2.121a1 1 0 0 0-1.415 1.414l2.758 2.758a1.1 1.1 0 0 0 1.556 0l5.586-5.586a1 1 0 0 0-1.415-1.415"/></svg>';
+		'<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path fill="currentColor" fill-rule="evenodd" d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12ZM16.0303 8.96967C16.3232 9.26256 16.3232 9.73744 16.0303 10.0303L11.0303 15.0303C10.7374 15.3232 10.2626 15.3232 9.96967 15.0303L7.96967 13.0303C7.67678 12.7374 7.67678 12.2626 7.96967 11.9697C8.26256 11.6768 8.73744 11.6768 9.03033 11.9697L10.5 13.4393L12.7348 11.2045L14.9697 8.96967C15.2626 8.67678 15.7374 8.67678 16.0303 8.96967Z" clip-rule="evenodd"/></svg>';
 
 	// injected buttons and checkboxes are real elements; clicks are handled by delegation here
 	async function handleClick(event: MouseEvent) {
-		// task:/note: mention links navigate inside the app instead of the browser
-		const mention = (event.target as HTMLElement).closest?.('a[href^="task:"], a[href^="note:"]');
-		if (mention instanceof HTMLAnchorElement) {
+		// task:/note: mention links and [[wiki]] links from old content are
+		// dead ends; swallow the click instead of triggering scheme navigation
+		const dead = (event.target as HTMLElement).closest?.(
+			'a[href^="task:"], a[href^="note:"], a[data-wiki]'
+		);
+		if (dead instanceof HTMLAnchorElement) {
 			event.preventDefault();
-			onOpenMention?.(mention.getAttribute('href') ?? '');
-			return;
-		}
-		// [[wiki]] links resolve by note name in the host
-		const wiki = (event.target as HTMLElement).closest?.('a[data-wiki]');
-		if (wiki instanceof HTMLAnchorElement) {
-			event.preventDefault();
-			onOpenWiki?.(wiki.dataset.wiki ?? '');
-			return;
-		}
-		// inline #tags filter the sidebar list
-		const tag = (event.target as HTMLElement).closest?.('span[data-tag]');
-		if (tag instanceof HTMLElement) {
-			onOpenTag?.(tag.dataset.tag ?? '');
 			return;
 		}
 		const button = (event.target as HTMLElement).closest?.('.copy-code-btn');
@@ -83,24 +38,6 @@
 			setTimeout(() => (button.innerHTML = COPY_ICON), 1500);
 		} catch {
 			// clipboard unavailable (permissions) - stay quiet
-		}
-	}
-
-	// hover delegation for mention previews; the anchor element lets the
-	// parent position the preview card next to the link
-	function handleMouseOver(event: MouseEvent) {
-		const mention = (event.target as HTMLElement).closest?.('a[href^="task:"], a[href^="note:"]');
-		if (mention instanceof HTMLAnchorElement) {
-			onMentionHover?.(mention.getAttribute('href') ?? '', mention);
-		}
-	}
-
-	function handleMouseOut(event: MouseEvent) {
-		const from = event.target as HTMLElement;
-		const to = event.relatedTarget as HTMLElement | null;
-		const mention = from.closest?.('a[href^="task:"], a[href^="note:"]');
-		if (mention instanceof HTMLAnchorElement && !(to && mention.contains(to))) {
-			onMentionLeave?.();
 		}
 	}
 
@@ -132,12 +69,10 @@
 
 {#if html}
 	<!-- the injected copy buttons are real <button>s; the div is only a click relay -->
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions, a11y_mouse_events_have_key_events -->
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div
 		bind:this={container}
 		onclick={handleClick}
-		onmouseover={handleMouseOver}
-		onmouseout={handleMouseOut}
 		class="prose prose-sm max-w-none prose-invert {className}"
 	>
 		<!-- renderMarkdown escapes all user input; {@html} is safe here -->

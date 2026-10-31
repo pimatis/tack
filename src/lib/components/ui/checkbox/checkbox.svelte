@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Checkbox as CheckboxPrimitive } from 'bits-ui';
 	import { cn, type WithoutChildrenOrChild } from '$lib/utils.js';
+	import Icon from '$lib/components/Icon.svelte';
 
 	let {
 		ref = $bindable(null),
@@ -28,26 +29,9 @@
 			class="grid place-content-center text-current transition-none [&>svg]:size-3.5"
 		>
 			{#if checked}
-				<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-					<path
-						fill="none"
-						stroke="currentColor"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="m3.514 11.83l5.657 5.656L20.485 6.172"
-					/>
-				</svg>
+				<Icon icon="check" size={24} />
 			{:else if indeterminate}
-				<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-					<path
-						fill="none"
-						stroke="currentColor"
-						stroke-linecap="round"
-						stroke-width="2"
-						d="M5 12h14"
-					/>
-				</svg>
+				<Icon icon="minus" size={24} />
 			{/if}
 		</div>
 	{/snippet}

@@ -1,16 +1,16 @@
 <script lang="ts">
-	import { iconName, loadIconBodies, peekIconBody } from '$lib/notes/icons';
+	import { ICONS, iconName, loadIconBodies, peekIconBody, type IconName } from '$lib/icons';
 
 	let {
 		icon,
 		size = 14,
 		class: className
-	}: { icon: string; size?: number; class?: string } = $props();
+	}: { icon: IconName; size?: number; class?: string } = $props();
 
 	let body = $state<string | null>(null);
 
 	$effect(() => {
-		const name = iconName(icon);
+		const name = iconName(ICONS[icon]);
 		const cached = peekIconBody(name);
 		if (cached !== null) {
 			body = cached;

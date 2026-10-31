@@ -8,6 +8,7 @@
 	import type { Label } from '$lib/types/label';
 	import type { Settings } from '$lib/types/settings';
 	import { statusConfig } from '$lib/task/constants';
+	import Icon from '$lib/components/Icon.svelte';
 
 	let {
 		groups,
@@ -59,12 +60,7 @@
 					aria-label={`Add task to ${statusConfig[status].label}`}
 					onclick={() => (dialogOpen = true)}
 				>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-						><path
-							fill="currentColor"
-							d="M10.5 20a1.5 1.5 0 0 0 3 0v-6.5H20a1.5 1.5 0 0 0 0-3h-6.5V4a1.5 1.5 0 0 0-3 0v6.5H4a1.5 1.5 0 0 0 0 3h6.5z"
-						/></svg
-					>
+					<Icon icon="add" size={14} />
 				</Button>
 			</div>
 

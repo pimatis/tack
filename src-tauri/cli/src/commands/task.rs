@@ -1,4 +1,5 @@
 use crate::db::*;
+use crate::recurrence;
 use chrono::{Local, SecondsFormat, TimeZone, Utc};
 use rusqlite::{params, Connection};
 use serde_json::json;
@@ -45,6 +46,7 @@ struct TaskRow {
     prefix: Option<String>,
     updated_at: String,
     created_at: String,
+    recurrence_rule: Option<String>,
 }
 
 fn map_task_row(row: &rusqlite::Row) -> rusqlite::Result<TaskRow> {
@@ -60,6 +62,7 @@ fn map_task_row(row: &rusqlite::Row) -> rusqlite::Result<TaskRow> {
         prefix: row.get(8)?,
         updated_at: row.get(9)?,
         created_at: row.get(10)?,
+        recurrence_rule: row.get(11)?,
     })
 }
 
@@ -86,6 +89,8 @@ fn render_task_rows(json: bool, rows: &[TaskRow]) -> Result<()> {
                     "due_date": r.due_date,
                     "end_date": r.end_date,
                     "pinned": r.pinned,
+                    "recurrence_rule": r.recurrence_rule,
+                    "repeat": r.recurrence_rule.as_deref().and_then(recurrence::label),
                     "project_prefix": r.prefix,
                     "updated_at": r.updated_at,
                     "created_at": r.created_at,
@@ -108,12 +113,16 @@ fn render_task_rows(json: bool, rows: &[TaskRow]) -> Result<()> {
                     priority_label(r.priority).to_string(),
                     r.due_date.clone().unwrap_or("-".to_string()),
                     if r.pinned { "yes" } else { "-" }.to_string(),
+                    r.recurrence_rule
+                        .as_deref()
+                        .and_then(recurrence::label)
+                        .unwrap_or("-".to_string()),
                 ]
             })
             .collect();
         print_table(
             &[
-                "ID", "NUMBER", "TITLE", "STATUS", "PRIORITY", "DUE DATE", "PINNED",
+                "ID", "NUMBER", "TITLE", "STATUS", "PRIORITY", "DUE DATE", "PINNED", "REPEAT",
             ],
             &table_rows,
         );
@@ -143,12 +152,20 @@ pub fn create(
     end_date: Option<&str>,
     description: Option<&str>,
     reminder: Option<&str>,
+    repeat: Option<&str>,
 ) -> Result<()> {
     let project_id = resolve_project_id(conn, project, project_prefix)?;
     let id = new_id();
     let now = now_iso();
     let reminder_at = match reminder {
         Some(value) => parse_reminder(value)?,
+        None => None,
+    };
+    let recurrence_rule = match repeat {
+        Some(value) => {
+            let rule = recurrence::normalize(value)?;
+            (!rule.is_empty()).then_some(rule)
+        }
         None => None,
     };
 
@@ -173,9 +190,9 @@ pub fn create(
     .map_err(|e| format!("Failed to assign task number: {}", e))?;
 
     conn.execute(
-        "INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, reminder_at, sort_order, pinned, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0, 0, ?11, ?12)",
-        params![id, number, project_id, title, description, final_status, final_priority, due_date, end_date, reminder_at, now, now],
+        "INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, reminder_at, recurrence_rule, sort_order, pinned, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 0, 0, ?12, ?13)",
+        params![id, number, project_id, title, description, final_status, final_priority, due_date, end_date, reminder_at, recurrence_rule, now, now],
     ).map_err(|e| format!("Failed to create task: {}", e))?;
 
     log_activity(conn, &id, "created", None, None, None, "cli")?;
@@ -195,6 +212,7 @@ pub fn create(
                     "due_date": due_date,
                     "end_date": end_date,
                     "reminder_at": reminder_at,
+                    "recurrence_rule": recurrence_rule,
                     "project_id": project_id,
                     "created_at": now,
                 }
@@ -206,6 +224,9 @@ pub fn create(
         println!("ID: {}", id);
         println!("Status: {}", status_label(&final_status));
         println!("Priority: {}", priority_label(final_priority));
+        if let Some(rule) = recurrence_rule.as_deref() {
+            println!("Repeat: {}", recurrence::label(rule).unwrap_or_default());
+        }
     }
     Ok(())
 }
@@ -223,7 +244,7 @@ pub fn list(
     let project_id = resolve_project_id(conn, project, project_prefix)?;
 
     let mut sql = String::from(
-        "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at
+        "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule
          FROM tasks t
          LEFT JOIN projects p ON t.project_id = p.id
          WHERE t.deleted_at IS NULL",
@@ -283,7 +304,7 @@ pub fn search(
     let project_id = resolve_project_id(conn, project, project_prefix)?;
 
     let mut sql = String::from(
-        "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at
+        "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule
          FROM tasks_fts
          JOIN tasks t ON t.id = tasks_fts.task_id
          LEFT JOIN projects p ON t.project_id = p.id
@@ -319,7 +340,8 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
     let id = resolve_task_id(conn, id)?;
     let task = conn.query_row(
         "SELECT t.id, t.number, t.title, t.description, t.status, t.priority, t.due_date, t.end_date, t.pinned,
-                t.project_id, p.name, p.prefix, t.created_at, t.updated_at, t.reminder_at
+                t.project_id, p.name, p.prefix, t.created_at, t.updated_at, t.reminder_at,
+                t.recurrence_rule, t.recurrence_parent_id
          FROM tasks t
          LEFT JOIN projects p ON t.project_id = p.id
          WHERE t.id = ?1",
@@ -341,6 +363,8 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
                 row.get::<_, String>(12)?,
                 row.get::<_, String>(13)?,
                 row.get::<_, Option<String>>(14)?,
+                row.get::<_, Option<String>>(15)?,
+                row.get::<_, Option<String>>(16)?,
             ))
         },
     ).map_err(|_| format!("Task {} not found", id))?;
@@ -361,6 +385,8 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
         created,
         updated,
         reminder,
+        recurrence_rule,
+        recurrence_parent_id,
     ) = task;
 
     let display_number = match &project_prefix {
@@ -433,6 +459,8 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
                     "due_date": due,
                     "end_date": end,
                     "reminder_at": reminder,
+                    "recurrence_rule": recurrence_rule,
+                    "recurrence_parent_id": recurrence_parent_id,
                     "pinned": pinned == 1,
                     "project": {
                         "name": project_name,
@@ -465,6 +493,13 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
         println!("Due date:    {}", due.unwrap_or("-".to_string()));
         println!("End date:    {}", end.unwrap_or("-".to_string()));
         println!("Reminder:    {}", reminder.unwrap_or("-".to_string()));
+        println!(
+            "Repeat:      {}",
+            recurrence_rule
+                .as_deref()
+                .and_then(recurrence::label)
+                .unwrap_or("-".to_string())
+        );
         println!("Pinned:      {}", if pinned == 1 { "yes" } else { "no" });
         if let Some(pname) = project_name {
             println!(
@@ -536,10 +571,11 @@ pub fn update(
     due_date: Option<&str>,
     end_date: Option<&str>,
     reminder: Option<&str>,
+    repeat: Option<&str>,
 ) -> Result<()> {
     let id = resolve_task_id(conn, id)?;
     let current = conn.query_row(
-        "SELECT title, description, status, priority, due_date, end_date, reminder_at FROM tasks WHERE id = ?1",
+        "SELECT title, description, status, priority, due_date, end_date, reminder_at, recurrence_rule FROM tasks WHERE id = ?1",
         params![id],
         |row| {
             Ok((
@@ -550,11 +586,13 @@ pub fn update(
                 row.get::<_, Option<String>>(4)?,
                 row.get::<_, Option<String>>(5)?,
                 row.get::<_, Option<String>>(6)?,
+                row.get::<_, Option<String>>(7)?,
             ))
         },
     ).map_err(|_| format!("Task {} not found", id))?;
 
-    let (cur_title, cur_desc, cur_status, cur_priority, cur_due, cur_end, cur_reminder) = current;
+    let (cur_title, cur_desc, cur_status, cur_priority, cur_due, cur_end, cur_reminder, cur_rule) =
+        current;
 
     let new_title = title.unwrap_or(&cur_title);
     let new_desc = description.map(Some).unwrap_or(cur_desc.as_deref());
@@ -574,10 +612,20 @@ pub fn update(
     };
     let reminder_changed = new_reminder != cur_reminder;
 
+    // empty string clears the schedule, None keeps the current value
+    let new_rule = match repeat {
+        Some(value) => {
+            let rule = recurrence::normalize(value)?;
+            (!rule.is_empty()).then_some(rule)
+        }
+        None => cur_rule.clone(),
+    };
+    let rule_changed = new_rule != cur_rule;
+
     let now = now_iso();
     let result = conn.execute(
-        "UPDATE tasks SET title = ?1, description = ?2, status = ?3, priority = ?4, due_date = ?5, end_date = ?6, reminder_at = ?7, reminder_sent_at = CASE WHEN ?7 IS NOT ?8 THEN NULL ELSE reminder_sent_at END, updated_at = ?9 WHERE id = ?10",
-        params![new_title, new_desc, new_status, new_priority, new_due, new_end, new_reminder, cur_reminder, now, id],
+        "UPDATE tasks SET title = ?1, description = ?2, status = ?3, priority = ?4, due_date = ?5, end_date = ?6, reminder_at = ?7, recurrence_rule = ?8, reminder_sent_at = CASE WHEN ?7 IS NOT ?9 THEN NULL ELSE reminder_sent_at END, updated_at = ?10 WHERE id = ?11",
+        params![new_title, new_desc, new_status, new_priority, new_due, new_end, new_reminder, new_rule, cur_reminder, now, id],
     ).map_err(|e| format!("Failed to update task: {}", e))?;
 
     if result == 0 {
@@ -630,13 +678,32 @@ pub fn update(
         )?;
     }
 
+    if rule_changed {
+        let old_label = cur_rule.as_deref().and_then(recurrence::label);
+        let new_label = new_rule.as_deref().and_then(recurrence::label);
+        log_activity(
+            conn,
+            &id,
+            "recurrence_changed",
+            Some("recurrence_rule"),
+            old_label.as_deref(),
+            new_label.as_deref(),
+            "cli",
+        )?;
+    }
+
+    // completing a recurring task rolls the series forward
+    if cur_status != "done" && new_status == "done" {
+        spawn_occurrence(conn, &id)?;
+    }
+
     if json {
         println!(
             "{}",
             serde_json::to_string_pretty(&json!({
                 "success": true,
                 "action": "task_updated",
-                "task": { "id": id }
+                "task": { "id": id, "recurrence_rule": new_rule }
             }))
             .map_err(|e| e.to_string())?
         );
@@ -644,6 +711,103 @@ pub fn update(
         println!("Updated task: {}", id);
     }
     Ok(())
+}
+
+// completing a recurring task creates its next occurrence and links it back
+// through recurrence_parent_id; the same due date never spawns twice
+fn spawn_occurrence(conn: &Connection, parent_id: &str) -> Result<Option<String>> {
+    let parent = conn.query_row(
+        "SELECT title, description, project_id, priority, due_date, end_date, reminder_at, recurrence_rule
+         FROM tasks WHERE id = ?1",
+        params![parent_id],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, i32>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, Option<String>>(6)?,
+                row.get::<_, Option<String>>(7)?,
+            ))
+        },
+    ).map_err(|_| format!("Task {} not found", parent_id))?;
+
+    let (title, description, project_id, priority, due_date, end_date, reminder_at, rule) = parent;
+    let Some(rule) = rule else {
+        return Ok(None);
+    };
+
+    let today = Local::now().date_naive();
+    let Some((next_date, delta_days)) = recurrence::next_due(&rule, due_date.as_deref(), today)
+    else {
+        return Ok(None);
+    };
+    let next_due = next_date.format("%Y-%m-%d").to_string();
+
+    let existing: i32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM tasks WHERE recurrence_parent_id = ?1 AND due_date = ?2 AND deleted_at IS NULL",
+            params![parent_id, next_due],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    if existing > 0 {
+        return Ok(None);
+    }
+
+    let id = new_id();
+    let now = now_iso();
+    let number: i32 = if let Some(ref pid) = project_id {
+        conn.query_row(
+            "SELECT COALESCE(MAX(number), 0) + 1 FROM tasks WHERE project_id = ?1",
+            params![pid],
+            |row| row.get(0),
+        )
+    } else {
+        conn.query_row(
+            "SELECT COALESCE(MAX(number), 0) + 1 FROM tasks WHERE project_id IS NULL",
+            [],
+            |row| row.get(0),
+        )
+    }
+    .map_err(|e| format!("Failed to assign task number: {}", e))?;
+
+    let next_end = end_date.as_deref().and_then(|value| {
+        recurrence::parse_date(value).map(|date| {
+            (date + chrono::Duration::days(delta_days))
+                .format("%Y-%m-%d")
+                .to_string()
+        })
+    });
+    let next_reminder = recurrence::shift_reminder(reminder_at.as_deref(), delta_days);
+
+    conn.execute(
+        "INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, reminder_at, recurrence_rule, recurrence_parent_id, sort_order, pinned, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, 'todo', ?6, ?7, ?8, ?9, ?10, ?11, 0, 0, ?12, ?13)",
+        params![id, number, project_id, title, description, priority, next_due, next_end, next_reminder, rule, parent_id, now, now],
+    )
+    .map_err(|e| format!("Failed to create next occurrence: {}", e))?;
+
+    conn.execute(
+        "INSERT INTO task_labels (task_id, label_id) SELECT ?1, label_id FROM task_labels WHERE task_id = ?2",
+        params![id, parent_id],
+    )
+    .map_err(|e| format!("Failed to copy labels: {}", e))?;
+
+    log_activity(conn, &id, "created", None, None, None, "cli")?;
+    log_activity(
+        conn,
+        parent_id,
+        "recurrence_spawned",
+        Some("due_date"),
+        due_date.as_deref(),
+        Some(&next_due),
+        "cli",
+    )?;
+
+    Ok(Some(id))
 }
 
 pub fn delete(conn: &Connection, json: bool, id: &str) -> Result<()> {
@@ -676,7 +840,7 @@ pub fn delete(conn: &Connection, json: bool, id: &str) -> Result<()> {
 pub fn duplicate(conn: &Connection, json: bool, id: &str) -> Result<()> {
     let id = resolve_task_id(conn, id)?;
     let original = conn.query_row(
-        "SELECT title, description, status, priority, project_id, due_date, end_date, reminder_at FROM tasks WHERE id = ?1",
+        "SELECT title, description, status, priority, project_id, due_date, end_date, reminder_at, recurrence_rule FROM tasks WHERE id = ?1",
         params![id],
         |row| {
             Ok((
@@ -688,11 +852,12 @@ pub fn duplicate(conn: &Connection, json: bool, id: &str) -> Result<()> {
                 row.get::<_, Option<String>>(5)?,
                 row.get::<_, Option<String>>(6)?,
                 row.get::<_, Option<String>>(7)?,
+                row.get::<_, Option<String>>(8)?,
             ))
         },
     ).map_err(|_| format!("Task {} not found", id))?;
 
-    let (title, desc, status, priority, project_id, due_date, end_date, reminder) = original;
+    let (title, desc, status, priority, project_id, due_date, end_date, reminder, rule) = original;
     let copy_title = format!("{} (copy)", title);
 
     create(
@@ -707,6 +872,7 @@ pub fn duplicate(conn: &Connection, json: bool, id: &str) -> Result<()> {
         end_date.as_deref(),
         desc.as_deref(),
         reminder.as_deref(),
+        rule.as_deref(),
     )?;
     Ok(())
 }
@@ -836,6 +1002,31 @@ pub fn bulk_status(conn: &Connection, json: bool, ids: &[String], status: &str) 
         .map(|(i, _)| format!("?{}", i + 3))
         .collect::<Vec<_>>()
         .join(", ");
+    // completing recurring tasks rolls each series forward; read them before
+    // the update clears their old status
+    let recurring: Vec<String> = if status == "done" {
+        let sql = format!(
+            "SELECT id FROM tasks WHERE id IN ({}) AND status != 'done' AND recurrence_rule IS NOT NULL AND deleted_at IS NULL",
+            ids.iter()
+                .enumerate()
+                .map(|(i, _)| format!("?{}", i + 1))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        let mut stmt = conn
+            .prepare(&sql)
+            .map_err(|e| format!("Failed to read recurring tasks: {}", e))?;
+        let arg_refs: Vec<&dyn rusqlite::ToSql> =
+            ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+        let rows = stmt
+            .query_map(&arg_refs[..], |row| row.get::<_, String>(0))
+            .map_err(|e| format!("Failed to read recurring tasks: {}", e))?
+            .filter_map(|r| r.ok())
+            .collect();
+        rows
+    } else {
+        Vec::new()
+    };
     let sql = format!(
         "UPDATE tasks SET status = ?1, updated_at = ?2 WHERE id IN ({})",
         placeholders
@@ -861,6 +1052,9 @@ pub fn bulk_status(conn: &Connection, json: bool, ids: &[String], status: &str) 
             Some(status_label(status)),
             "cli",
         );
+    }
+    for id in &recurring {
+        spawn_occurrence(conn, id)?;
     }
     if json {
         println!(
@@ -1034,7 +1228,11 @@ pub fn bulk_label(
         inserted
     };
 
-    let action = if remove { "label_removed" } else { "label_added" };
+    let action = if remove {
+        "label_removed"
+    } else {
+        "label_added"
+    };
     for id in ids {
         let _ = log_activity(
             conn,
@@ -1212,26 +1410,4 @@ pub fn empty_trash(conn: &Connection, json: bool) -> Result<()> {
         println!("Permanently deleted {} task(s) from trash", count);
     }
     Ok(())
-}
-
-// insert a task without printing; returns the new id (used by note → task)
-pub fn create_quiet(conn: &Connection, title: &str, description: &str) -> Result<String> {
-    let id = new_id();
-    let now = now_iso();
-    let priority = get_default_priority(conn);
-    let status = get_default_status(conn);
-    let number: i32 = conn
-        .query_row(
-            "SELECT COALESCE(MAX(number), 0) + 1 FROM tasks WHERE project_id IS NULL",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(|e| format!("Failed to assign task number: {}", e))?;
-    conn.execute(
-        "INSERT INTO tasks (id, number, project_id, title, description, status, priority, sort_order, pinned, created_at, updated_at)
-         VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6, 0, 0, ?7, ?7)",
-        params![id, number, title, description, status, priority, now],
-    )
-    .map_err(|e| format!("Failed to create task: {}", e))?;
-    Ok(id)
 }

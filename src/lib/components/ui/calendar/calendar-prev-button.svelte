@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Calendar as CalendarPrimitive } from 'bits-ui';
-	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
+	import Icon from '$lib/components/Icon.svelte';
 	import { buttonVariants, type ButtonVariant } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
 
@@ -16,7 +16,7 @@
 </script>
 
 {#snippet Fallback()}
-	<ChevronLeftIcon class={cn('size-4', className)} />
+	<Icon icon="arrow-left" class={cn('size-4', className)} />
 {/snippet}
 
 <CalendarPrimitive.PrevButton

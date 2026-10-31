@@ -7,7 +7,6 @@ mod live;
 #[cfg(target_os = "macos")]
 mod macos_notifications;
 mod migrations;
-mod notes;
 
 use rusqlite::Connection;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -216,11 +215,6 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        // pasted note images are served through our own scheme: the asset
-        // protocol refuses dotfile paths, and .tack/assets is one
-        .register_uri_scheme_protocol("tackasset", |_ctx, request| {
-            notes::asset::respond(request)
-        })
         .on_page_load(move |webview, payload| {
             // rust-side reveal: unlike requestAnimationFrame, this fires even
             // while the window is hidden (webkit pauses rAF off-screen)
@@ -237,19 +231,6 @@ pub fn run() {
             request_notification_permission,
             write_file,
             read_file,
-            notes::list_notes,
-            notes::read_notes,
-            notes::rename_note,
-            notes::delete_note,
-            notes::list_note_folders,
-            notes::list_notes_deep,
-            notes::read_notes_deep,
-            notes::create_folder,
-            notes::delete_folder,
-            notes::note_info,
-            notes::save_note_with_history,
-            notes::write_binary_file,
-            notes::watch::watch_notes_dir,
             attachments::save_attachment,
             attachments::read_attachment,
             attachments::delete_attachment,

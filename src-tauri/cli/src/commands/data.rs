@@ -117,15 +117,16 @@ pub fn import(conn: &Connection, json: bool, file_path: &str) -> Result<()> {
 
     for t in &data.tasks {
         conn.execute(
-            "INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, sort_order, pinned, created_at, updated_at, deleted_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            "INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, sort_order, pinned, created_at, updated_at, deleted_at, recurrence_rule, recurrence_parent_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 get_str(t, "id"), get_int(t, "number"), get_opt_str(t, "project_id"),
                 get_str(t, "title"), get_opt_str(t, "description"),
                 get_str(t, "status"), get_int(t, "priority"),
                 get_opt_str(t, "due_date"), get_opt_str(t, "end_date"), get_int(t, "sort_order"),
                 get_int(t, "pinned"), get_str(t, "created_at"), get_str(t, "updated_at"),
-                get_opt_str(t, "deleted_at"),
+                get_opt_str(t, "deleted_at"), get_opt_str(t, "recurrence_rule"),
+                get_opt_str(t, "recurrence_parent_id"),
             ],
         ).map_err(|e| format!("Failed to import task: {}", e))?;
     }

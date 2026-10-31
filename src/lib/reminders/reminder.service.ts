@@ -5,7 +5,6 @@ import { tick } from 'svelte';
 import { isTauri } from '$lib/db/client';
 import { notificationPermission } from '$lib/permissions/permissions.service';
 import { findById, findDueReminders, markReminderSent } from '$lib/repositories/task.repository';
-import { notesState } from '$lib/notes/notesState.svelte';
 
 // reminders are checked on a coarse timer; a few seconds of latency is fine
 const POLL_MS = 30_000;
@@ -15,7 +14,6 @@ const POLL_MS = 30_000;
 async function openTaskById(taskId: string): Promise<void> {
 	const task = await findById(taskId).catch(() => null);
 	if (!task) return;
-	notesState.activeTab = 'tasks';
 	if (window.location.pathname !== '/') {
 		await goto('/');
 		await tick();

@@ -3,6 +3,7 @@
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import { getSettings } from '$lib/stores/settings';
 	import { keyComboLabel } from '$lib/shortcuts/index.js';
+	import Icon from '$lib/components/Icon.svelte';
 
 	let {
 		pinnedFilter,
@@ -54,12 +55,7 @@
 						onclick={() => (viewMode = 'list')}
 						aria-label="List view"
 					>
-						<svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-							><path
-								fill="currentColor"
-								d="M20 17.5a1.5 1.5 0 0 1 .144 2.993L20 20.5H4a1.5 1.5 0 0 1-.144-2.993L4 17.5zm0-7a1.5 1.5 0 0 1 0 3H4a1.5 1.5 0 0 1 0-3zm0-7a1.5 1.5 0 0 1 0 3H4a1.5 1.5 0 1 1 0-3z"
-							/></svg
-						>
+						<Icon icon="list" size={15} />
 					</Button>
 				{/snippet}
 			</Tooltip.Trigger>
@@ -79,12 +75,7 @@
 						onclick={() => (viewMode = 'board')}
 						aria-label="Board view"
 					>
-						<svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-							><path
-								fill="currentColor"
-								d="M15.5 20a1.5 1.5 0 0 0 3 0v-1.5H20a1.5 1.5 0 0 0 0-3h-1.5v-7H20a1.5 1.5 0 0 0 0-3h-1.5V4a1.5 1.5 0 0 0-3 0v1.5h-7V4a1.5 1.5 0 1 0-3 0v1.5H4a1.5 1.5 0 1 0 0 3h1.5v7H4a1.5 1.5 0 0 0 0 3h1.5V20a1.5 1.5 0 0 0 3 0v-1.5h7zm-7-4.5h7v-7h-7z"
-							/></svg
-						>
+						<Icon icon="kanban" size={15} />
 					</Button>
 				{/snippet}
 			</Tooltip.Trigger>
@@ -104,12 +95,7 @@
 						onclick={() => (viewMode = 'calendar')}
 						aria-label="Calendar view"
 					>
-						<svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-							><path
-								fill="currentColor"
-								d="M16 3a1 1 0 0 1 1 1v1h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2V4a1 1 0 0 1 2 0v1h6V4a1 1 0 0 1 1-1M8.01 16H8a1 1 0 0 0-.117 1.993L8.01 18a1 1 0 1 0 0-2m4 0H12a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m4 0H16a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m-8-4H8a1 1 0 0 0-.117 1.993L8.01 14a1 1 0 1 0 0-2m4 0H12a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m4 0H16a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2M19 7H5v2h14z"
-							/></svg
-						>
+						<Icon icon="calendar" size={15} />
 					</Button>
 				{/snippet}
 			</Tooltip.Trigger>

@@ -28,14 +28,15 @@
 	import PermissionsSection from '../../components/settings/PermissionsSection.svelte';
 	import CliSection from '../../components/settings/CliSection.svelte';
 	import AboutSection from '../../components/settings/AboutSection.svelte';
-	import MingcuteIcon from '../../components/notes/MingcuteIcon.svelte';
+	import Icon from '$lib/components/Icon.svelte';
+	import type { IconName } from '$lib/icons';
 
 	type Section = {
 		value: string;
 		label: string;
 		description: string;
-		// mingcute icon name, resolved at runtime (see src/lib/notes/icons.ts)
-		icon: string;
+		// semantic icon key, resolved via the registry (see src/lib/icons.ts)
+		icon: IconName;
 	};
 
 	// single source of truth for the nav, the mobile picker and search labels
@@ -44,56 +45,56 @@
 			value: 'appearance',
 			label: 'Appearance',
 			description: 'Theme, color and layout basics',
-			icon: 'palette-fill'
+			icon: 'palette'
 		},
 		{
 			value: 'themes',
 			label: 'Themes',
 			description: 'Pick a color palette for the whole app',
-			icon: 'brush-fill'
+			icon: 'paint-brush'
 		},
 		{
 			value: 'sidebar',
 			label: 'Sidebar',
 			description: 'Choose what shows in the sidebar',
-			icon: 'layout-left-fill'
+			icon: 'panel-left'
 		},
-		{ value: 'tasks', label: 'Tasks', description: 'Defaults for new tasks', icon: 'task-fill' },
+		{ value: 'tasks', label: 'Tasks', description: 'Defaults for new tasks', icon: 'checklist' },
 		{
 			value: 'data',
 			label: 'Data',
 			description: 'Import, export and reset your data',
-			icon: 'storage-fill'
+			icon: 'database'
 		},
 		{
 			value: 'backup',
 			label: 'Backup',
 			description: 'Automatic snapshots and restore points',
-			icon: 'archive-fill'
+			icon: 'archive'
 		},
 		{
 			value: 'shortcuts',
 			label: 'Shortcuts',
 			description: 'Keyboard shortcuts for common actions',
-			icon: 'keyboard-fill'
+			icon: 'keyboard'
 		},
 		{
 			value: 'live',
 			label: 'Live',
 			description: 'Share your workspace in a browser',
-			icon: 'signal-fill'
+			icon: 'share'
 		},
 		{
 			value: 'permissions',
 			label: 'Permissions',
 			description: 'System permissions tack can use',
-			icon: 'notification-fill'
+			icon: 'notification'
 		},
 		{
 			value: 'workspace',
 			label: 'Workspace',
 			description: 'Stats, CLI and about tack',
-			icon: 'dashboard-fill'
+			icon: 'widget'
 		}
 	];
 
@@ -412,7 +413,7 @@
 					placeholder="Search settings"
 					class="text-[13px]"
 				/>
-				<InputGroup.Addon><MingcuteIcon icon="search-fill" size={15} /></InputGroup.Addon>
+				<InputGroup.Addon><Icon icon="search" size={15} /></InputGroup.Addon>
 				{#if searchQuery}
 					<InputGroup.Addon class="pr-1">
 						<Button
@@ -422,13 +423,13 @@
 							aria-label="Clear search"
 							class="text-muted-foreground hover:text-foreground"
 						>
-							<MingcuteIcon icon="close-fill" size={14} />
+							<Icon icon="close" size={14} />
 						</Button>
 					</InputGroup.Addon>
 				{/if}
 			</InputGroup.Root>
 			<Button variant="ghost" size="sm" href="/">
-				<MingcuteIcon icon="left-fill" />
+				<Icon icon="arrow-left" />
 				Back
 			</Button>
 		</div>
@@ -443,7 +444,7 @@
 					<Empty.Root class="border border-dashed border-border/70">
 						<Empty.Header>
 							<Empty.Media variant="icon">
-								<MingcuteIcon icon="search-fill" size={24} />
+								<Icon icon="search" size={24} />
 							</Empty.Media>
 							<Empty.Title>No settings match</Empty.Title>
 							<Empty.Description>Try a different word, or clear the search.</Empty.Description>
@@ -530,7 +531,7 @@
 								value={section.value}
 								class="h-8 justify-start gap-2.5 px-2.5 text-[13px]"
 							>
-								<MingcuteIcon icon={section.icon} size={16} />
+								<Icon icon={section.icon} size={16} />
 								<span class="truncate">{section.label}</span>
 							</Tabs.Trigger>
 						{/each}
@@ -543,7 +544,7 @@
 								<Select.Trigger class="w-full">
 									<span data-slot="select-value">
 										{#if activeSection}
-											<MingcuteIcon icon={activeSection.icon} size={16} />
+											<Icon icon={activeSection.icon} size={16} />
 											<span>{activeSection.label}</span>
 										{/if}
 									</span>
@@ -551,7 +552,7 @@
 								<Select.Content>
 									{#each sections as section (section.value)}
 										<Select.Item value={section.value} label={section.label}>
-											<MingcuteIcon icon={section.icon} size={16} />
+											<Icon icon={section.icon} size={16} />
 											<span>{section.label}</span>
 										</Select.Item>
 									{/each}

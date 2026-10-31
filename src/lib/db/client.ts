@@ -113,29 +113,3 @@ export function onDbChanged(callback: () => void): () => void {
 		source.close();
 	};
 }
-
-// notes live on the filesystem; the desktop app watches the notes folder
-// and emits notes-changed when a cli or external edit touches it. in the
-// browser the live server folds note mutations into the same db-changed
-// sse signal, so clients refresh from that
-export function onNotesChanged(callback: () => void): () => void {
-	if (isTauri()) {
-		let cancelled = false;
-		let unlisten: (() => void) | undefined;
-		void import('@tauri-apps/api/event').then(async ({ listen }) => {
-			if (cancelled) return;
-			unlisten = await listen('notes-changed', callback);
-		});
-		return () => {
-			cancelled = true;
-			unlisten?.();
-		};
-	}
-	const source = new EventSource(`/api/events/stream?${presenceQuery()}`);
-	const onEvent = () => callback();
-	source.addEventListener('db-changed', onEvent);
-	return () => {
-		source.removeEventListener('db-changed', onEvent);
-		source.close();
-	};
-}

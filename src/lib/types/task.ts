@@ -16,6 +16,10 @@ export type Task = {
 	reminderAt?: string | null;
 	// set once the reminder notification has fired
 	reminderSentAt?: string | null;
+	// daily, weekly:<iso weekday 1-7> or monthly:<day 1-31>
+	recurrenceRule?: string | null;
+	// the occurrence this task was spawned from
+	recurrenceParentId?: string | null;
 	sortOrder?: number;
 	pinned?: boolean;
 	labelIds?: string[];

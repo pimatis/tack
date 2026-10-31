@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Select as SelectPrimitive } from 'bits-ui';
 	import { cn, type WithoutChild } from '$lib/utils.js';
+	import Icon from '$lib/components/Icon.svelte';
 
 	let {
 		ref = $bindable(null),
@@ -25,22 +26,7 @@
 	{#snippet children({ selected, highlighted })}
 		<span class="absolute end-2 flex size-3.5 items-center justify-center">
 			{#if selected}
-				<svg
-					class="cn-select-item-indicator-icon"
-					width="24"
-					height="24"
-					viewBox="0 0 24 24"
-					fill="none"
-				>
-					<path
-						fill="none"
-						stroke="currentColor"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="m3.514 11.83l5.657 5.656L20.485 6.172"
-					/>
-				</svg>
+				<Icon icon="check" size={24} class="cn-select-item-indicator-icon" />
 			{/if}
 		</span>
 		<span class="flex flex-1 shrink-0 gap-2 whitespace-nowrap">

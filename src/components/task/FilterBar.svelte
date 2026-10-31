@@ -8,6 +8,7 @@
 	import type { Label } from '$lib/types/label';
 	import { labelColorMap } from '$lib/types/label';
 	import { statusConfig, statusOrder } from '$lib/task/constants';
+	import Icon from '$lib/components/Icon.svelte';
 
 	let {
 		searchQuery = $bindable(),
@@ -59,17 +60,11 @@
 <div class="flex flex-wrap items-center gap-2 pb-4">
 	<!-- search -->
 	<div class="relative min-w-0 flex-1 basis-full sm:basis-auto">
-		<svg
+		<Icon
+			icon="search"
+			size={14}
 			class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground/50"
-			width="14"
-			height="14"
-			viewBox="0 0 24 24"
-			fill="none"
-			><path
-				fill="currentColor"
-				d="M2 10.5a8.5 8.5 0 1 1 15.176 5.262l3.652 3.652a1 1 0 0 1-1.414 1.414l-3.652-3.652A8.5 8.5 0 0 1 2 10.5M10.5 6a1 1 0 0 0 0 2 2.5 2.5 0 0 1 2.5 2.5 1 1 0 1 0 2 0A4.5 4.5 0 0 0 10.5 6"
-			/></svg
-		>
+		/>
 		<Input
 			bind:value={searchQuery}
 			placeholder="Search tasks..."
@@ -83,12 +78,7 @@
 				class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground/50 transition-colors hover:text-foreground"
 				aria-label="Clear search"
 			>
-				<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-					><path
-						fill="currentColor"
-						d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
-					/></svg
-				>
+				<Icon icon="close" size={14} />
 			</Button>
 		{/if}
 	</div>
@@ -107,12 +97,7 @@
 						? 'border-border bg-muted/50 text-foreground'
 						: 'border-input text-muted-foreground hover:bg-muted/30 hover:text-foreground'}"
 				>
-					<svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-						><path
-							fill="currentColor"
-							d="M16 3a1 1 0 0 1 1 1v1h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2V4a1 1 0 0 1 2 0v1h6V4a1 1 0 0 1 1-1M8.01 16H8a1 1 0 0 0-.117 1.993L8.01 18a1 1 0 1 0 0-2m4 0H12a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m4 0H16a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m-8-4H8a1 1 0 0 0-.117 1.993L8.01 14a1 1 0 1 0 0-2m4 0H12a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2m4 0H16a1 1 0 0 0-.117 1.993l.127.007a1 1 0 1 0 0-2M19 7H5v2h14z"
-						/></svg
-					>
+					<Icon icon="calendar" size={13} />
 					<span>Status</span>
 					{#if statusFilters.size > 0}
 						<span
@@ -134,17 +119,7 @@
 					<StatusIcon status={s} size={14} />
 					<span>{statusConfig[s].label}</span>
 					{#if statusFilters.has(s)}
-						<svg
-							class="ml-auto text-muted-foreground"
-							width="14"
-							height="14"
-							viewBox="0 0 24 24"
-							fill="none"
-							><path
-								fill="currentColor"
-								d="M21.546 5.111a1.5 1.5 0 0 1 0 2.121L10.303 18.475a1.6 1.6 0 0 1-2.263 0L2.454 12.89a1.5 1.5 0 1 1 2.121-2.121l4.596 4.596L19.424 5.111a1.5 1.5 0 0 1 2.122 0"
-							/></svg
-						>
+						<Icon icon="check" size={14} class="ml-auto text-muted-foreground" />
 					{/if}
 				</DropdownMenu.Item>
 			{/each}
@@ -165,12 +140,7 @@
 						? 'border-border bg-muted/50 text-foreground'
 						: 'border-input text-muted-foreground hover:bg-muted/30 hover:text-foreground'}"
 				>
-					<svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-						><path
-							fill="currentColor"
-							d="M2 5a2 2 0 0 1 2-2h5.52a2 2 0 0 1 1.561.75l1.4 1.75H20a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"
-						/></svg
-					>
+					<Icon icon="hashtag" size={13} />
 					<span>Project</span>
 					{#if projectFilters.size > 0}
 						<span
@@ -197,17 +167,7 @@
 						</span>
 						<span class="truncate">{project.name}</span>
 						{#if projectFilters.has(project.id)}
-							<svg
-								class="ml-auto shrink-0 text-muted-foreground"
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								><path
-									fill="currentColor"
-									d="M21.546 5.111a1.5 1.5 0 0 1 0 2.121L10.303 18.475a1.6 1.6 0 0 1-2.263 0L2.454 12.89a1.5 1.5 0 1 1 2.121-2.121l4.596 4.596L19.424 5.111a1.5 1.5 0 0 1 2.122 0"
-								/></svg
-							>
+							<Icon icon="check" size={14} class="ml-auto shrink-0 text-muted-foreground" />
 						{/if}
 					</DropdownMenu.Item>
 				{/each}
@@ -230,12 +190,7 @@
 							? 'border-border bg-muted/50 text-foreground'
 							: 'border-input text-muted-foreground hover:bg-muted/30 hover:text-foreground'}"
 					>
-						<svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-							><path
-								fill="currentColor"
-								d="M10.537 2.164a3 3 0 0 1 2.244.727l.15.14 7.822 7.823a3 3 0 0 1 .135 4.098l-.135.144-5.657 5.657a3 3 0 0 1-4.098.135l-.144-.135L3.03 12.93a3 3 0 0 1-.878-2.188l.011-.205.472-5.185a3 3 0 0 1 2.537-2.695l.179-.021zM8.024 8.025a2 2 0 1 0 2.829 2.829 2 2 0 0 0-2.829-2.829"
-							/></svg
-						>
+						<Icon icon="tag" size={13} />
 						<span>Labels</span>
 						{#if labelFilters.size > 0}
 							<span
@@ -257,17 +212,7 @@
 						<span class="size-2.5 shrink-0 rounded-full {labelColorMap[label.color].dot}"></span>
 						<span class="truncate">{label.name}</span>
 						{#if labelFilters.has(label.id)}
-							<svg
-								class="ml-auto shrink-0 text-muted-foreground"
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								><path
-									fill="currentColor"
-									d="M21.546 5.111a1.5 1.5 0 0 1 0 2.121L10.303 18.475a1.6 1.6 0 0 1-2.263 0L2.454 12.89a1.5 1.5 0 1 1 2.121-2.121l4.596 4.596L19.424 5.111a1.5 1.5 0 0 1 2.122 0"
-								/></svg
-							>
+							<Icon icon="check" size={14} class="ml-auto shrink-0 text-muted-foreground" />
 						{/if}
 					</DropdownMenu.Item>
 				{/each}
@@ -282,12 +227,7 @@
 			onclick={onClearFilters}
 			class="flex h-8 items-center gap-1 rounded-lg px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
 		>
-			<svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-				><path
-					fill="currentColor"
-					d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
-				/></svg
-			>
+			<Icon icon="close" size={13} />
 			<span>Clear</span>
 		</Button>
 	{/if}

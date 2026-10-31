@@ -22,18 +22,14 @@ const MAX_ROWS: usize = 10_000;
 
 // tables the app writes through the live server. tasks_fts is missing on
 // purpose: triggers own that index and a direct write desyncs search
-const WRITABLE_TABLES: [&str; 12] = [
+const WRITABLE_TABLES: [&str; 8] = [
     "activity_log",
     "labels",
-    "note_links",
-    "notes_fts",
-    "notes_index_meta",
     "projects",
     "settings",
     "subtasks",
     "task_attachments",
     "task_labels",
-    "task_notes",
     "tasks",
 ];
 
@@ -250,12 +246,10 @@ mod tests {
         for sql in [
             "INSERT INTO tasks (id) VALUES ('a')",
             "insert into settings (key, value) values ('a', 'b')",
-            "insert into note_links(src, dst, kind) values ('a', 'b', 'mention')",
             "UPDATE tasks SET title = 'x' WHERE id = 'a'",
             "UPDATE OR IGNORE subtasks SET completed = 1",
             "UPDATE \"task_labels\" SET label_id = 'a'",
             "DELETE FROM task_labels WHERE task_id = 'a'",
-            "INSERT INTO notes_fts (path) VALUES ('a')",
         ] {
             assert!(
                 matches!(classify(sql), Ok(Statement::Write)),

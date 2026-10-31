@@ -10,6 +10,7 @@
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import Icon from '$lib/components/Icon.svelte';
 
 	type Props = {
 		selectedIds?: string[];
@@ -117,12 +118,7 @@
 						{/if}
 					</div>
 				{:else}
-					<svg class="text-muted-foreground" width="13" height="13" viewBox="0 0 24 24" fill="none"
-						><path
-							fill="currentColor"
-							d="M10.537 2.164a3 3 0 0 1 2.244.727l.15.14 7.822 7.823a3 3 0 0 1 .135 4.098l-.135.144-5.657 5.657a3 3 0 0 1-4.098.135l-.144-.135L3.03 12.93a3 3 0 0 1-.878-2.188l.011-.205.472-5.185a3 3 0 0 1 2.537-2.695l.179-.021zM8.024 8.025a2 2 0 1 0 2.829 2.829 2 2 0 0 0-2.829-2.829"
-						/></svg
-					>
+					<Icon icon="tag" size={13} class="text-muted-foreground" />
 					<span>Labels</span>
 				{/if}
 			</Button>
@@ -192,17 +188,7 @@
 								{label.name}
 							</Button>
 							{#if selectedSet.has(label.id)}
-								<svg
-									class="shrink-0 text-muted-foreground"
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									><path
-										fill="currentColor"
-										d="M13.06 16.06a1.5 1.5 0 0 1-2.12 0l-5.658-5.656a1.5 1.5 0 1 1 2.122-2.121L12 12.879l4.596-4.596a1.5 1.5 0 0 1 2.122 2.12l-5.657 5.658Z"
-									/></svg
-								>
+								<Icon icon="check" size={14} class="shrink-0 text-muted-foreground" />
 							{/if}
 							<!-- edit + delete buttons (visible on touch, hover on desktop) -->
 							<div
@@ -222,12 +208,7 @@
 												}}
 												aria-label="Edit label"
 											>
-												<svg width="11" height="11" viewBox="0 0 24 24" fill="none"
-													><path
-														fill="currentColor"
-														d="M20.131 3.16a3 3 0 0 0-4.242 0l-.707.708 4.95 4.95.706-.707a3 3 0 0 0 0-4.243l-.707-.707Zm-1.414 7.072-4.95-4.95-9.09 9.091a1.5 1.5 0 0 0-.401.724l-1.029 4.455a1 1 0 0 0 1.2 1.2l4.456-1.028a1.5 1.5 0 0 0 .723-.401z"
-													/></svg
-												>
+												<Icon icon="pencil" size={11} />
 											</Button>
 										{/snippet}
 									</Tooltip.Trigger>
@@ -247,12 +228,7 @@
 												}}
 												aria-label="Delete label"
 											>
-												<svg width="11" height="11" viewBox="0 0 24 24" fill="none"
-													><path
-														fill="currentColor"
-														d="M14.28 2a2 2 0 0 1 1.897 1.368L16.72 5H20a1 1 0 1 1 0 2l-.003.071-.867 12.143A3 3 0 0 1 16.138 22H7.862a3 3 0 0 1-2.992-2.786L4.003 7.07A1.01 1.01 0 0 1 4 7a1 1 0 0 1 0-2h3.28l.543-1.632A2 2 0 0 1 9.721 2zM9 10a1 1 0 0 0-.993.883L8 11v6a1 1 0 0 0 1.993.117L10 17v-6a1 1 0 0 0-1-1m6 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0v-6a1 1 0 0 0-1-1m-.72-6H9.72l-.333 1h5.226z"
-													/></svg
-												>
+												<Icon icon="trash" size={11} />
 											</Button>
 										{/snippet}
 									</Tooltip.Trigger>
@@ -293,12 +269,7 @@
 						disabled={creating}
 						aria-label="Add label"
 					>
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-							><path
-								fill="currentColor"
-								d="M10.5 20a1.5 1.5 0 0 0 3 0v-6.5H20a1.5 1.5 0 0 0 0-3h-6.5V4a1.5 1.5 0 0 0-3 0v6.5H4a1.5 1.5 0 0 0 0 3h6.5z"
-							/></svg
-						>
+						<Icon icon="add" size={14} />
 					</Button>
 				{/if}
 			</div>

@@ -8,6 +8,7 @@
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import MarkdownRenderer from './MarkdownRenderer.svelte';
 	import { normalizePrefix, isValidPrefix } from '$lib/prefix';
+	import Icon from '$lib/components/Icon.svelte';
 
 	type Props = { open?: boolean; project: Project | null; onUpdated?: (project: Project) => void };
 	let { open = $bindable(false), project, onUpdated }: Props = $props();
@@ -87,12 +88,7 @@
 							size="icon-sm"
 							class="text-muted-foreground hover:text-foreground"
 						>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-								><path
-									fill="currentColor"
-									d="m12 14.122 5.303 5.303a1.5 1.5 0 0 0 2.122-2.122L14.12 12l5.304-5.303a1.5 1.5 0 1 0-2.122-2.121L12 9.879 6.697 4.576a1.5 1.5 0 1 0-2.122 2.12L9.88 12l-5.304 5.304a1.5 1.5 0 1 0 2.122 2.12z"
-								/></svg
-							>
+							<Icon icon="close" size={16} />
 						</Button>
 					{/snippet}
 				</Dialog.Close>
@@ -127,20 +123,10 @@
 								onclick={() => (previewMode = !previewMode)}
 							>
 								{#if previewMode}
-									<svg width="11" height="11" viewBox="0 0 24 24" fill="none"
-										><path
-											fill="currentColor"
-											d="M7.06 16.836a1.25 1.25 0 0 1 1.86 1.666l-.091.102-2.298 2.298a1.5 1.5 0 0 1-2.008.103l-.114-.103-1.237-1.238a1.25 1.25 0 0 1 1.666-1.859l.102.091.53.53zM20 17.5a1.5 1.5 0 0 1 0 3h-8a1.5 1.5 0 1 1 0-3zM8.83 9.836a1.25 1.25 0 0 1 0 1.768l-2.3 2.298a1.5 1.5 0 0 1-2.122 0l-1.237-1.238a1.25 1.25 0 1 1 1.768-1.768l.53.53 1.59-1.59a1.25 1.25 0 0 1 1.769 0ZM20 10.5a1.5 1.5 0 0 1 .145 2.993L20 13.5h-8a1.5 1.5 0 0 1-.144-2.993L12 10.5zM7.06 2.836a1.25 1.25 0 0 1 1.86 1.666l-.091.101L6.53 6.902a1.5 1.5 0 0 1-2.008.103l-.114-.103-1.237-1.238a1.25 1.25 0 0 1 1.666-1.859l.102.091.53.53zM20 3.5a1.5 1.5 0 0 1 .145 2.993L20 6.5h-8a1.5 1.5 0 0 1-.144-2.993L12 3.5z"
-										/></svg
-									>
+									<Icon icon="checklist" size={11} />
 									<span>Edit</span>
 								{:else}
-									<svg width="11" height="11" viewBox="0 0 24 24" fill="none"
-										><path
-											fill="currentColor"
-											d="M12 5c3.679 0 8.162 2.417 9.73 5.901.146.328.27.71.27 1.099 0 .388-.123.771-.27 1.099C20.161 16.583 15.678 19 12 19c-3.679 0-8.162-2.417-9.73-5.901C2.124 12.77 2 12.389 2 12c0-.388.123-.771.27-1.099C3.839 7.417 8.322 5 12 5m0 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8m0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4"
-										/></svg
-									>
+									<Icon icon="eye" size={11} />
 									<span>Preview</span>
 								{/if}
 							</Button>

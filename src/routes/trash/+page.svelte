@@ -21,17 +21,11 @@
 	import { onDbChanged } from '$lib/db/client';
 	import { searchTaskIds } from '$lib/search/fts.service';
 	import { issueId } from '$lib/task/utils';
-	import { listTrashedNotes, restoreTrashedNote, purgeNote, purgeAllNotes } from '$lib/notes/trash';
-	import { notesState } from '$lib/notes/notesState.svelte';
-	import type { NoteInfo } from '$lib/notes/notesState.svelte';
-
-	type TrashFilter = 'all' | 'tasks' | 'notes';
+	import Icon from '$lib/components/Icon.svelte';
 
 	let tasks = $state<Task[]>([]);
 	let projects = $state<Project[]>([]);
-	let trashedNotes = $state<NoteInfo[]>([]);
 	// start on the filter matching the tab the trash was opened from
-	let typeFilter = $state<TrashFilter>(notesState.activeTab === 'notes' ? 'notes' : 'tasks');
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let searchQuery = $state('');
@@ -40,7 +34,6 @@
 	let appSettings = $state(getSettings());
 
 	let filteredTasks = $derived.by(() => {
-		if (typeFilter === 'notes') return [];
 		const q = searchQuery.toLowerCase().trim();
 		if (!q) return tasks;
 		// fts match (title, description, subtasks) with in-memory fallback while pending
@@ -48,15 +41,7 @@
 		return tasks.filter((t) => `${t.title} ${t.description ?? ''}`.toLowerCase().includes(q));
 	});
 
-	let filteredNotes = $derived.by(() => {
-		if (typeFilter === 'tasks') return [];
-		const q = searchQuery.toLowerCase().trim();
-		if (!q) return trashedNotes;
-		return trashedNotes.filter((n) => n.name.toLowerCase().includes(q));
-	});
-
-	let totalCount = $derived(tasks.length + trashedNotes.length);
-	let filteredCount = $derived(filteredTasks.length + filteredNotes.length);
+	let totalCount = $derived(tasks.length);
 
 	$effect(() => {
 		const query = searchQuery;
@@ -95,10 +80,6 @@
 			const [t, p] = await Promise.all([findTrashed(), findProjects()]);
 			tasks = t;
 			projects = p;
-			// deleted notes live as files in <notes folder>/trash; in live mode
-			// notesState.folder already comes from the desktop app's notes root
-			const folder = notesState.folder;
-			trashedNotes = folder ? await listTrashedNotes(folder) : [];
 		} catch (e) {
 			error = 'Failed to load trash';
 			console.error(e);
@@ -128,35 +109,9 @@
 		}
 	}
 
-	async function handleRestoreNote(note: NoteInfo) {
-		const folder = localStorage.getItem('tack-notes-folder');
-		if (!folder) return;
-		try {
-			await restoreTrashedNote(folder, note.name);
-			await load();
-		} catch (e) {
-			error = 'Failed to restore note';
-			console.error(e);
-		}
-	}
-
-	async function handlePurgeNote(note: NoteInfo) {
-		const folder = localStorage.getItem('tack-notes-folder');
-		if (!folder) return;
-		try {
-			await purgeNote(folder, note.name);
-			await load();
-		} catch (e) {
-			error = 'Failed to delete note';
-			console.error(e);
-		}
-	}
-
 	async function handleEmptyTrash() {
 		try {
 			await emptyTrash();
-			const folder = localStorage.getItem('tack-notes-folder');
-			if (folder) await purgeAllNotes(folder);
 			emptyConfirmOpen = false;
 			await load();
 			window.dispatchEvent(new Event('tasks-changed'));
@@ -166,27 +121,15 @@
 		}
 	}
 
-	// right-click on a row opens the dropdown at the pointer; tasks and notes
-	// share one menu host, keyed by whichever target was clicked
+	// right-click on a row opens the dropdown at the pointer
 	let menuOpen = $state(false);
 	let menuX = $state(0);
 	let menuY = $state(0);
 	let menuTask = $state<Task | null>(null);
-	let menuNote = $state<NoteInfo | null>(null);
 
 	function openTaskMenu(event: MouseEvent, task: Task) {
 		event.preventDefault();
 		menuTask = task;
-		menuNote = null;
-		menuX = event.clientX;
-		menuY = event.clientY;
-		menuOpen = true;
-	}
-
-	function openNoteMenu(event: MouseEvent, note: NoteInfo) {
-		event.preventDefault();
-		menuNote = note;
-		menuTask = null;
 		menuX = event.clientX;
 		menuY = event.clientY;
 		menuOpen = true;
@@ -215,14 +158,14 @@
 					<div class="flex items-center gap-1.5 text-[12px] text-muted-foreground">
 						<span class="size-1.5 rounded-full bg-foreground/30"></span>
 						<span
-							>{typeFilter === 'all' ? totalCount : filteredCount}
-							{(typeFilter === 'all' ? totalCount : filteredCount) === 1 ? 'item' : 'items'}</span
+							>{filteredTasks.length}
+							{filteredTasks.length === 1 ? 'item' : 'items'}</span
 						>
 					</div>
 				{/if}
 			</div>
 			<p class="truncate text-xs text-muted-foreground sm:text-sm">
-				Deleted tasks and notes can be restored or permanently removed
+				Deleted tasks can be restored or permanently removed
 			</p>
 		</div>
 		<div class="flex shrink-0 items-center gap-2">
@@ -236,12 +179,7 @@
 								size="sm"
 								class="text-destructive hover:bg-destructive/5"
 							>
-								<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-									><path
-										fill="currentColor"
-										d="M14.28 2a2 2 0 0 1 1.897 1.368L16.72 5H20a1 1 0 1 1 0 2l-.003.071-.867 12.143A3 3 0 0 1 16.138 22H7.862a3 3 0 0 1-2.992-2.786L4.003 7.07A1.01 1.01 0 0 1 4 7a1 1 0 0 1 0-2h3.28l.543-1.632A2 2 0 0 1 9.721 2zM9 10a1 1 0 0 0-.993.883L8 11v6a1 1 0 0 0 1.993.117L10 17v-6a1 1 0 0 0-1-1m6 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0v-6a1 1 0 0 0-1-1m-.72-6H9.72l-.333 1h5.226z"
-									/></svg
-								>
+								<Icon icon="trash" size={14} />
 								Empty trash
 							</Button>
 						{/snippet}
@@ -268,12 +206,7 @@
 				</Dialog.Root>
 			{/if}
 			<Button variant="ghost" size="sm" href="/">
-				<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-					><path
-						fill="currentColor"
-						d="M16.06 10.94a1.5 1.5 0 0 1 0 2.12l-5.656 5.658a1.5 1.5 0 1 1-2.121-2.122L12.879 12 8.283 7.404a1.5 1.5 0 0 1 2.12-2.122l5.658 5.657Z"
-					/></svg
-				>
+				<Icon icon="arrow-right" size={16} />
 				Back
 			</Button>
 		</div>
@@ -290,12 +223,7 @@
 			{:else if error}
 				<div class="flex flex-col items-center gap-3 py-20">
 					<div class="flex size-8 items-center justify-center rounded-lg bg-destructive/10">
-						<svg class="text-destructive" width="16" height="16" viewBox="0 0 24 24" fill="none"
-							><path
-								fill="currentColor"
-								d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2m-.01 8H11a1 1 0 0 0-.117 1.993L11 12v4.99c0 .52.394.95.9 1.004l.11.006h.49a1 1 0 0 0 .596-1.803L13 16.134V11.01c0-.52-.394-.95-.9-1.004zM12 7a1 1 0 1 0 0 2 1 1 0 0 0 0-2"
-							/></svg
-						>
+						<Icon icon="close-circle" size={16} class="text-destructive" />
 					</div>
 					<p class="text-[13px] text-destructive" role="alert">{error}</p>
 					<Button variant="outline" size="sm" onclick={load}>Try again</Button>
@@ -303,59 +231,26 @@
 			{:else if totalCount === 0}
 				<div class="flex flex-col items-center justify-center gap-5 py-28">
 					<div class="flex size-14 items-center justify-center rounded-2xl bg-muted/50">
-						<svg
-							class="text-muted-foreground/60"
-							width="28"
-							height="28"
-							viewBox="0 0 24 24"
-							fill="none"
-							><path
-								fill="currentColor"
-								d="M14.28 2a2 2 0 0 1 1.897 1.368L16.72 5H20a1 1 0 1 1 0 2l-.003.071-.867 12.143A3 3 0 0 1 16.138 22H7.862a3 3 0 0 1-2.992-2.786L4.003 7.07A1.01 1.01 0 0 1 4 7a1 1 0 0 1 0-2h3.28l.543-1.632A2 2 0 0 1 9.721 2zM9 10a1 1 0 0 0-.993.883L8 11v6a1 1 0 0 0 1.993.117L10 17v-6a1 1 0 0 0-1-1m6 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0v-6a1 1 0 0 0-1-1m-.72-6H9.72l-.333 1h5.226z"
-							/></svg
-						>
+						<Icon icon="trash" size={28} class="text-muted-foreground/60" />
 					</div>
 					<div class="flex flex-col items-center gap-1.5">
 						<p class="text-[15px] font-semibold text-foreground">Trash is empty</p>
-						<p class="text-[13px] text-muted-foreground">
-							Deleted tasks and notes will appear here
-						</p>
+						<p class="text-[13px] text-muted-foreground">Deleted tasks will appear here</p>
 					</div>
 				</div>
 			{:else}
 				<!-- search + type filter -->
 				<div class="mb-4 flex items-center gap-2">
 					<div class="relative flex-1">
-						<svg
+						<Icon
+							icon="search"
 							class="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground/50"
-							viewBox="0 0 24 24"
-							fill="none"
-							><path
-								fill="currentColor"
-								d="M2 10.5a8.5 8.5 0 1 1 15.176 5.262l3.652 3.652a1 1 0 0 1-1.414 1.414l-3.652-3.652A8.5 8.5 0 0 1 2 10.5M10.5 6a1 1 0 0 0 0 2 2.5 2.5 0 0 1 2.5 2.5 1 1 0 1 0 2 0A4.5 4.5 0 0 0 10.5 6"
-							/></svg
-						>
+						/>
 						<Input
 							placeholder="Search in trash..."
 							bind:value={searchQuery}
 							class="h-8 w-full rounded-lg border border-input bg-transparent pr-3 pl-8 text-[13px] text-foreground transition-all outline-none placeholder:text-muted-foreground/50 dark:bg-input/30"
 						/>
-					</div>
-					<div
-						class="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-muted/20 p-0.5"
-					>
-						{#each [['all', 'All'], ['tasks', 'Tasks'], ['notes', 'Notes']] as const as [value, label] (value)}
-							<button
-								type="button"
-								class="flex h-7 items-center rounded-md px-2.5 text-[12px] font-medium transition-colors {typeFilter ===
-								value
-									? 'bg-muted text-foreground'
-									: 'text-muted-foreground hover:text-foreground'}"
-								onclick={() => (typeFilter = value)}
-							>
-								{label}
-							</button>
-						{/each}
 					</div>
 				</div>
 
@@ -410,49 +305,6 @@
 					{/each}
 				</div>
 
-				<!-- note list -->
-				{#if filteredNotes.length > 0}
-					<div class="flex flex-col">
-						{#each filteredNotes as note (note.path)}
-							<article
-								oncontextmenu={(e) => openNoteMenu(e, note)}
-								class="group/task -mx-2 flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-muted/40"
-							>
-								<!-- file icon -->
-								<span class="flex size-5 shrink-0 items-center justify-center">
-									<svg
-										class="text-muted-foreground"
-										width="14"
-										height="14"
-										viewBox="0 0 24 24"
-										fill="none"
-										><path
-											fill="currentColor"
-											d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.17a2 2 0 0 0-.59-1.42l-4.58-4.58A2 2 0 0 0 13.41 2zm7.5 1.13L18.87 8H13.5zM8 12h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2m0 4h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2"
-										/></svg
-									>
-								</span>
-
-								<!-- type badge -->
-								<span class="shrink-0 font-mono text-[11px] font-medium text-muted-foreground/50"
-									>NOTE</span
-								>
-
-								<!-- title -->
-								<span class="min-w-0 flex-1 truncate text-[13px] text-foreground/70">
-									{note.name.replace(/\.md$/, '')}
-								</span>
-
-								<!-- deleted date -->
-								<span
-									class="hidden w-16 shrink-0 text-right text-[11px] text-muted-foreground/40 sm:block"
-								>
-									{formatDate(new Date(note.modified).toISOString())}
-								</span>
-							</article>
-						{/each}
-					</div>
-				{/if}
 				<DropdownMenu.Root bind:open={menuOpen}>
 					<DropdownMenu.Trigger
 						class="h-0 w-0 outline-none"
@@ -461,12 +313,7 @@
 					<DropdownMenu.Content class="w-44">
 						{#if menuTask}
 							<DropdownMenu.Item onclick={() => void handleRestore(menuTask!.id)}>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-									><path
-										fill="currentColor"
-										d="M2.614 5.426A1.5 1.5 0 0 1 4 4.5h10a7.5 7.5 0 1 1 0 15H5a1.5 1.5 0 0 1 0-3h9a4.5 4.5 0 1 0 0-9H7.621l.94.94a1.5 1.5 0 0 1-2.122 2.12l-3.5-3.5a1.5 1.5 0 0 1-.325-1.634Z"
-									/></svg
-								>
+								<Icon icon="undo" size={16} />
 								Restore
 							</DropdownMenu.Item>
 							<DropdownMenu.Separator />
@@ -474,42 +321,14 @@
 								variant="destructive"
 								onclick={() => void handlePermanentDelete(menuTask!.id)}
 							>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-									><path
-										fill="currentColor"
-										d="M14.28 2a2 2 0 0 1 1.897 1.368L16.72 5H20a1 1 0 1 1 0 2l-.003.071-.867 12.143A3 3 0 0 1 16.138 22H7.862a3 3 0 0 1-2.992-2.786L4.003 7.07A1.01 1.01 0 0 1 4 7a1 1 0 0 1 0-2h3.28l.543-1.632A2 2 0 0 1 9.721 2zM9 10a1 1 0 0 0-.993.883L8 11v6a1 1 0 0 0 1.993.117L10 17v-6a1 1 0 0 0-1-1m6 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0v-6a1 1 0 0 0-1-1m-.72-6H9.72l-.333 1h5.226z"
-									/></svg
-								>
-								Delete forever
-							</DropdownMenu.Item>
-						{:else if menuNote}
-							<DropdownMenu.Item onclick={() => void handleRestoreNote(menuNote!)}>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-									><path
-										fill="currentColor"
-										d="M2.614 5.426A1.5 1.5 0 0 1 4 4.5h10a7.5 7.5 0 1 1 0 15H5a1.5 1.5 0 0 1 0-3h9a4.5 4.5 0 1 0 0-9H7.621l.94.94a1.5 1.5 0 0 1-2.122 2.12l-3.5-3.5a1.5 1.5 0 0 1-.325-1.634Z"
-									/></svg
-								>
-								Restore
-							</DropdownMenu.Item>
-							<DropdownMenu.Separator />
-							<DropdownMenu.Item
-								variant="destructive"
-								onclick={() => void handlePurgeNote(menuNote!)}
-							>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-									><path
-										fill="currentColor"
-										d="M14.28 2a2 2 0 0 1 1.897 1.368L16.72 5H20a1 1 0 1 1 0 2l-.003.071-.867 12.143A3 3 0 0 1 16.138 22H7.862a3 3 0 0 1-2.992-2.786L4.003 7.07A1.01 1.01 0 0 1 4 7a1 1 0 0 1 0-2h3.28l.543-1.632A2 2 0 0 1 9.721 2zM9 10a1 1 0 0 0-.993.883L8 11v6a1 1 0 0 0 1.993.117L10 17v-6a1 1 0 0 0-1-1m6 0a1 1 0 0 0-1 1v6a1 1 0 1 0 2 0v-6a1 1 0 0 0-1-1m-.72-6H9.72l-.333 1h5.226z"
-									/></svg
-								>
+								<Icon icon="trash" size={16} />
 								Delete forever
 							</DropdownMenu.Item>
 						{/if}
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
 
-				{#if filteredCount === 0}
+				{#if filteredTasks.length === 0}
 					<div class="flex flex-col items-center gap-3 py-16">
 						<p class="text-[13px] text-muted-foreground">No matching items.</p>
 						<Button
