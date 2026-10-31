@@ -1305,10 +1305,10 @@
 									{#each activities as entry, i (entry.id)}
 										<div class="flex items-start gap-2.5">
 											<!-- timeline dot + line -->
-											<div class="flex flex-col items-center pt-1">
+											<div class="flex flex-col items-center self-stretch pt-1">
 												<div class="size-1.5 rounded-full bg-muted-foreground/30"></div>
 												{#if i < activities.length - 1}
-													<div class="min-h-[20px] w-px flex-1 bg-border/50"></div>
+													<div class="-mb-1 w-px flex-1 bg-border/50"></div>
 												{/if}
 											</div>
 											<!-- content -->
@@ -1317,13 +1317,13 @@
 													<p class="text-[12px] text-muted-foreground/80">
 														<span class="text-foreground/90">{activityMessage(entry)}</span>
 													</p>
-													{#if entry.source === 'cli'}
+													{#if entry.source === 'cli' || entry.source === 'agent'}
 														<Badge
 															variant="outline"
 															class="h-4 gap-0.5 border-muted-foreground/20 px-1.5 text-[10px] font-medium text-muted-foreground/60"
 														>
-															<Icon icon="code" size={9} />
-															CLI
+															<Icon icon={entry.source === 'cli' ? 'code' : 'magic'} size={9} />
+															{entry.source === 'cli' ? 'CLI' : 'Agent'}
 														</Badge>
 													{/if}
 												</div>

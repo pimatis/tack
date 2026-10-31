@@ -33,16 +33,19 @@
 	let busy = $state(false);
 	let copyTimer: ReturnType<typeof setTimeout> | undefined;
 
-	// shared password (set / change / remove)
+	// shared passwords (set / change / remove): full access and read-only
 	let pwDialogOpen = $state(false);
+	let pwKind = $state<'full' | 'read'>('full');
 	let pw = $state('');
 	let pwConfirm = $state('');
 	let pwError = $state('');
 	let pwBusy = $state(false);
 
 	const passwordSet = $derived(settings.livePasswordHash !== '');
+	const readPasswordSet = $derived(settings.liveReadPasswordHash !== '');
 
-	function openPasswordDialog() {
+	function openPasswordDialog(kind: 'full' | 'read') {
+		pwKind = kind;
 		pw = '';
 		pwConfirm = '';
 		pwError = '';
@@ -65,8 +68,12 @@
 			const { hash, salt } = await invoke<{ hash: string; salt: string }>('hash_live_password', {
 				password: pw
 			});
-			update('livePasswordHash', hash);
-			update('livePasswordSalt', salt);
+			const [hashKey, saltKey] =
+				pwKind === 'full'
+					? (['livePasswordHash', 'livePasswordSalt'] as const)
+					: (['liveReadPasswordHash', 'liveReadPasswordSalt'] as const);
+			update(hashKey, hash);
+			update(saltKey, salt);
 			pwDialogOpen = false;
 		} catch (e) {
 			pwError = String(e);
@@ -74,9 +81,14 @@
 		pwBusy = false;
 	}
 
-	function removePassword() {
-		update('livePasswordHash', '');
-		update('livePasswordSalt', '');
+	function removePassword(kind: 'full' | 'read') {
+		if (kind === 'full') {
+			update('livePasswordHash', '');
+			update('livePasswordSalt', '');
+			return;
+		}
+		update('liveReadPasswordHash', '');
+		update('liveReadPasswordSalt', '');
 	}
 
 	async function refresh() {
@@ -226,10 +238,40 @@
 			</div>
 			<div class="flex shrink-0 items-center gap-2">
 				{#if passwordSet}
-					<Button variant="outline" size="sm" onclick={openPasswordDialog}>Change</Button>
-					<Button variant="ghost" size="sm" onclick={removePassword}>Remove</Button>
+					<Button variant="outline" size="sm" onclick={() => openPasswordDialog('full')}
+						>Change</Button
+					>
+					<Button variant="ghost" size="sm" onclick={() => removePassword('full')}>Remove</Button>
 				{:else}
-					<Button variant="outline" size="sm" onclick={openPasswordDialog}>Set password</Button>
+					<Button variant="outline" size="sm" onclick={() => openPasswordDialog('full')}
+						>Set password</Button
+					>
+				{/if}
+			</div>
+		</div>
+
+		<Separator />
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<div class="min-w-0">
+				<p class="text-[13px] font-medium">Read-only password</p>
+				<p class="text-xs text-muted-foreground">
+					{#if readPasswordSet}
+						Visitors with this password can view but not change anything
+					{:else}
+						Optional: let visitors view the share without changing anything
+					{/if}
+				</p>
+			</div>
+			<div class="flex shrink-0 items-center gap-2">
+				{#if readPasswordSet}
+					<Button variant="outline" size="sm" onclick={() => openPasswordDialog('read')}
+						>Change</Button
+					>
+					<Button variant="ghost" size="sm" onclick={() => removePassword('read')}>Remove</Button>
+				{:else}
+					<Button variant="outline" size="sm" onclick={() => openPasswordDialog('read')}
+						>Set password</Button
+					>
 				{/if}
 			</div>
 		</div>
@@ -364,9 +406,19 @@
 	<Dialog.Root bind:open={pwDialogOpen}>
 		<Dialog.Content class="w-[calc(100vw-2rem)] max-w-sm gap-4 p-4 sm:p-6">
 			<Dialog.Header class="gap-1.5">
-				<Dialog.Title>{passwordSet ? 'Change password' : 'Set password'}</Dialog.Title>
+				<Dialog.Title>
+					{pwKind === 'full'
+						? passwordSet
+							? 'Change password'
+							: 'Set password'
+						: readPasswordSet
+							? 'Change read-only password'
+							: 'Set read-only password'}
+				</Dialog.Title>
 				<Dialog.Description>
-					Visitors opening the live share must enter this password.
+					{pwKind === 'full'
+						? 'Visitors opening the live share must enter this password.'
+						: 'Visitors with this password can view the share but cannot change anything.'}
 				</Dialog.Description>
 			</Dialog.Header>
 			<form

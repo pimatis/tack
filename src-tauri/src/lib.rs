@@ -35,6 +35,186 @@ fn show_window(app: tauri::AppHandle) {
     reveal_main_window(&app);
 }
 
+// tray menu and the global hotkey call this; unlike reveal_main_window it
+// runs every time, not just on first paint
+fn show_and_focus(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+// tray pieces the frontend mutates at runtime: the title badge, the
+// due-tasks submenu and the two check items (live server, do not disturb)
+struct TrayItems {
+    tray: tauri::tray::TrayIcon,
+    tasks: tauri::menu::Submenu<tauri::Wry>,
+    live: tauri::menu::CheckMenuItem<tauri::Wry>,
+    dnd: tauri::menu::CheckMenuItem<tauri::Wry>,
+}
+
+#[derive(serde::Deserialize)]
+struct TrayTask {
+    id: String,
+    title: String,
+}
+
+// the ui pushes its derived state here; rust owns no task/settings knowledge
+#[tauri::command]
+fn update_tray(
+    app: tauri::AppHandle,
+    count: u32,
+    tasks: Vec<TrayTask>,
+    live_on: bool,
+    dnd_on: bool,
+    tray_on: bool,
+) -> Result<(), String> {
+    use tauri::menu::MenuItemBuilder;
+    let state = app.state::<Mutex<TrayItems>>();
+    let items = state.lock().map_err(|e| e.to_string())?;
+    let _ = items.tray.set_visible(tray_on);
+    let title = if count == 0 {
+        None
+    } else {
+        Some(count.to_string())
+    };
+    let _ = items.tray.set_title(title);
+    let _ = items.live.set_checked(live_on);
+    let _ = items.dnd.set_checked(dnd_on);
+    // rebuild the submenu from scratch; a handful of items, no diffing needed
+    if let Ok(existing) = items.tasks.items() {
+        for item in existing {
+            let _ = items.tasks.remove(&item);
+        }
+    }
+    if tasks.is_empty() {
+        let empty = MenuItemBuilder::with_id("noop", "Nothing due today")
+            .enabled(false)
+            .build(&app)
+            .map_err(|e| e.to_string())?;
+        items.tasks.append(&empty).map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    for task in tasks.iter().take(10) {
+        let item = MenuItemBuilder::with_id(format!("task:{}", task.id), &task.title)
+            .build(&app)
+            .map_err(|e| e.to_string())?;
+        items.tasks.append(&item).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+fn setup_tray(app: &tauri::AppHandle) -> Result<(), String> {
+    use tauri::menu::{CheckMenuItemBuilder, Menu, MenuItemBuilder, PredefinedMenuItem};
+    use tauri::tray::TrayIconBuilder;
+
+    let open = MenuItemBuilder::with_id("open", "Open Tack")
+        .build(app)
+        .map_err(|e| e.to_string())?;
+    let nav_today = MenuItemBuilder::with_id("nav_today", "Today")
+        .build(app)
+        .map_err(|e| e.to_string())?;
+    let nav_overdue = MenuItemBuilder::with_id("nav_overdue", "Overdue")
+        .build(app)
+        .map_err(|e| e.to_string())?;
+    let tasks_sub = tauri::menu::SubmenuBuilder::with_id(app, "due_tasks", "Due today")
+        .build()
+        .map_err(|e| e.to_string())?;
+    let quick = MenuItemBuilder::with_id("quick_add", "Quick add task")
+        .build(app)
+        .map_err(|e| e.to_string())?;
+    let clip = MenuItemBuilder::with_id("quick_add_clipboard", "Quick add from clipboard")
+        .build(app)
+        .map_err(|e| e.to_string())?;
+    let live = CheckMenuItemBuilder::with_id("toggle_live", "Live server")
+        .build(app)
+        .map_err(|e| e.to_string())?;
+    let dnd = CheckMenuItemBuilder::with_id("toggle_dnd", "Do not disturb")
+        .build(app)
+        .map_err(|e| e.to_string())?;
+    let updates = MenuItemBuilder::with_id("check_updates", "Check for Updates…")
+        .build(app)
+        .map_err(|e| e.to_string())?;
+    let quit = MenuItemBuilder::with_id("quit", "Quit Tack")
+        .build(app)
+        .map_err(|e| e.to_string())?;
+    let menu = Menu::with_items(
+        app,
+        &[
+            &open,
+            &nav_today,
+            &nav_overdue,
+            &PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?,
+            &tasks_sub,
+            &PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?,
+            &quick,
+            &clip,
+            &PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?,
+            &live,
+            &dnd,
+            &PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?,
+            &updates,
+            &quit,
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+    let mut tray = TrayIconBuilder::new().menu(&menu).on_menu_event(|app, event| {
+        let id = event.id().as_ref();
+        match id {
+            "open" => show_and_focus(app),
+            "quick_add" => {
+                show_and_focus(app);
+                let _ = app.emit("quick-add", ());
+            }
+            "quick_add_clipboard" => {
+                show_and_focus(app);
+                let _ = app.emit("quick-add-clipboard", ());
+            }
+            "nav_today" => {
+                show_and_focus(app);
+                let _ = app.emit("tray-navigate", "today");
+            }
+            "nav_overdue" => {
+                show_and_focus(app);
+                let _ = app.emit("tray-navigate", "overdue");
+            }
+            // these stay in the background; the ui flips the setting and
+            // syncs the checked state back via update_tray
+            "toggle_live" => {
+                let _ = app.emit("tray-toggle-live", ());
+            }
+            "toggle_dnd" => {
+                let _ = app.emit("tray-toggle-dnd", ());
+            }
+            "check_updates" => {
+                show_and_focus(app);
+                let _ = app.emit("check-updates", ());
+            }
+            "quit" => app.exit(0),
+            _ => {
+                if let Some(task_id) = id.strip_prefix("task:") {
+                    show_and_focus(app);
+                    let _ = app.emit("focus-task", task_id.to_string());
+                }
+            }
+        }
+    });
+    // template icon: macOS tints it from the alpha channel, so the white logo
+    // stays visible on both light and dark menu bars
+    let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../../assets/logos/tray.png"))
+        .map_err(|e| e.to_string())?;
+    tray = tray.icon(tray_icon).icon_as_template(true);
+    let tray = tray.build(app).map_err(|e| e.to_string())?;
+    app.manage(Mutex::new(TrayItems {
+        tray,
+        tasks: tasks_sub,
+        live,
+        dnd,
+    }));
+    Ok(())
+}
+
 #[tauri::command]
 fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
@@ -216,6 +396,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .on_page_load(move |webview, payload| {
             // rust-side reveal: unlike requestAnimationFrame, this fires even
             // while the window is hidden (webkit pauses rAF off-screen)
@@ -242,6 +423,7 @@ pub fn run() {
             delete_backup,
             cli::install_cli,
             cli::cli_installed,
+            update_tray,
             live::live_start,
             live::live_stop,
             live::live_status,
@@ -280,6 +462,28 @@ pub fn run() {
                 "UPDATE settings SET value = 'false' WHERE key = 'liveEnabled'",
                 [],
             );
+            // close hides to the tray instead of quitting; only the tray's
+            // Quit item actually exits
+            if let Some(window) = app.get_webview_window("main") {
+                let w = window.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = w.hide();
+                    }
+                });
+            }
+            setup_tray(app.handle())?;
+            // global quick-add: focus the app and drop it on the new-task dialog
+            use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+            app.global_shortcut()
+                .on_shortcut("CmdOrCtrl+Alt+T", |app, _shortcut, event| {
+                    if event.state() == ShortcutState::Pressed {
+                        show_and_focus(app);
+                        let _ = app.emit("quick-add", ());
+                    }
+                })
+                .map_err(|e| e.to_string())?;
             let hub = Arc::new(live::LiveHub::default());
             app.manage(live::LiveState {
                 server: Mutex::new(None),

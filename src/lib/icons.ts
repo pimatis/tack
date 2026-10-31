@@ -104,11 +104,23 @@ export async function loadIconBodies(names: string[]): Promise<Record<string, st
 		`https://api.iconify.design/${ICON_PREFIX}.json?icons=${missing.join(',')}`
 	);
 	if (!res.ok) throw new Error(`iconify ${res.status}`);
-	const data = (await res.json()) as { icons?: Record<string, { body: string }> };
+	const data = (await res.json()) as {
+		icons?: Record<string, { body: string }>;
+		aliases?: Record<string, { parent: string }>;
+	};
 	for (const [name, icon] of Object.entries(data.icons ?? {})) {
 		const body = sanitizeIconBody(icon.body);
 		bodyCache.set(name, body);
 		out[name] = body;
+	}
+	// aliases name a different icon; resolve them so the requested name caches
+	// the shared body instead of ''
+	for (const name of missing) {
+		const parent = data.aliases?.[name]?.parent;
+		if (parent && parent in out) {
+			bodyCache.set(name, out[parent]);
+			out[name] = out[parent];
+		}
 	}
 	for (const name of missing) {
 		if (!(name in out)) bodyCache.set(name, '');

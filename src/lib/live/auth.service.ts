@@ -29,11 +29,13 @@ export function completeLiveAuth(): void {
 	done?.();
 }
 
-export async function loginLive(password: string): Promise<boolean> {
+export async function loginLive(password: string): Promise<{ ok: boolean; error?: string }> {
 	const res = await fetch('/api/auth', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ password })
 	});
-	return res.ok;
+	if (res.ok) return { ok: true };
+	if (res.status === 429) return { ok: false, error: 'Too many attempts - try again later' };
+	return { ok: false, error: 'Wrong password' };
 }

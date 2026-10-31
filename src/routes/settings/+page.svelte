@@ -32,12 +32,24 @@
 	import AboutSection from '../../components/settings/AboutSection.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { settingsSections as sections } from '$lib/settings/sections';
+	import logoWhite from '../../../assets/logos/white.png';
+	import logoBlack from '../../../assets/logos/black.png';
 
 	const tabLabels: Record<string, string> = Object.fromEntries(
 		sections.map((section) => [section.value, section.label])
 	);
 
 	let settings = $state<Settings>(getSettings());
+
+	// the footer logo flips with the effective theme: white on dark, black on light
+	const logo = $derived(
+		settings.theme === 'dark' ||
+			(settings.theme === 'system' &&
+				typeof window !== 'undefined' &&
+				window.matchMedia('(prefers-color-scheme: dark)').matches)
+			? logoWhite
+			: logoBlack
+	);
 	let stats = $state({ projects: 0, tasks: 0, done: 0, labels: 0 });
 	let appVersion = $state('');
 	let activeTab = $state('appearance');
@@ -101,6 +113,13 @@
 				description: 'Hide sidebar labels and project list',
 				keywords: ['collapsed', 'compact', 'narrow'],
 				switchValue: s.sidebarCollapsed
+			},
+			{
+				tab: 'appearance',
+				label: 'Menu bar icon',
+				description: 'Show Tack in the system tray',
+				keywords: ['tray', 'menu bar', 'status item', 'icon', 'hide'],
+				switchValue: s.trayEnabled
 			},
 			{
 				tab: 'appearance',
@@ -567,7 +586,7 @@
 				<footer
 					class="mt-8 flex max-w-[62rem] items-center justify-between border-t border-border/60 pt-4"
 				>
-					<p class="text-xs text-muted-foreground">Tack</p>
+					<img src={logo} alt="Tack" class="h-5 w-auto" />
 					<p class="text-xs text-muted-foreground">
 						{#if appVersion}Version {appVersion}{:else}Version ...{/if}
 					</p>

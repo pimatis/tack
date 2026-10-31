@@ -25,6 +25,8 @@ struct Ctx {
     attachments: PathBuf,
     frontend: PathBuf,
     hub: Arc<LiveHub>,
+    // /api/auth brute-force throttle, per server run
+    auth_limiter: Arc<auth::AuthLimiter>,
     // how long /api/events holds a quiet poll before answering
     events_timeout: Duration,
     // close flags for in-flight /api/events/stream connections

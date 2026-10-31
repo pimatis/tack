@@ -5,6 +5,10 @@
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { isTauri } from '$lib/db/client';
 	import { getAgentStatus, type AgentStatus } from '$lib/agent/agent.service';
+	import {
+		findRecentAgentActivity,
+		type AgentActivityEntry
+	} from '$lib/repositories/activity.repository';
 	import type { Settings } from '$lib/types/settings';
 	import Icon from '$lib/components/Icon.svelte';
 
@@ -23,9 +27,28 @@
 	let busy = $state(false);
 	let copied = $state(false);
 	let copyTimer: ReturnType<typeof setTimeout> | undefined;
+	let activity = $state<AgentActivityEntry[]>([]);
 
 	async function refresh() {
 		status = await getAgentStatus();
+		try {
+			activity = await findRecentAgentActivity();
+		} catch {
+			activity = [];
+		}
+	}
+
+	function actionText(entry: AgentActivityEntry): string {
+		return entry.action.replace(/_/g, ' ');
+	}
+
+	function relativeTime(value: string): string {
+		const diffMin = Math.round((Date.now() - new Date(value).getTime()) / 60000);
+		if (diffMin < 1) return 'just now';
+		if (diffMin < 60) return `${diffMin}m ago`;
+		const hours = Math.round(diffMin / 60);
+		if (hours < 24) return `${hours}h ago`;
+		return `${Math.round(hours / 24)}d ago`;
 	}
 
 	async function handleToggle(enabled: boolean) {
@@ -159,6 +182,28 @@
 			The server only listens on this device, never on your network. When an agent tries a
 			destructive action (delete, trash, reset), a dialog asks you to allow or deny it first.
 		</p>
+	</div>
+
+	<Separator />
+	<div class="flex flex-wrap items-center justify-between gap-3">
+		<div class="min-w-0">
+			<p class="text-[13px] font-medium">Recent agent activity</p>
+			<p class="text-xs text-muted-foreground">
+				{activity.length === 0
+					? 'Nothing agents have changed through the api yet'
+					: 'Latest changes agents made through the api'}
+			</p>
+		</div>
+		{#if activity.length > 0}
+			<div class="flex max-w-[60%] flex-col items-end gap-0.5">
+				{#each activity as entry (entry.id)}
+					<span class="font-mono text-[11px] text-muted-foreground" title={entry.createdAt}>
+						{entry.displayNumber}
+						{actionText(entry)} · {relativeTime(entry.createdAt)}
+					</span>
+				{/each}
+			</div>
+		{/if}
 	</div>
 
 	{#if error}

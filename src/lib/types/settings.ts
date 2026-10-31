@@ -31,9 +31,17 @@ export type Settings = {
 	// (never plaintext); empty means no password is required
 	livePasswordHash: string;
 	livePasswordSalt: string;
+	// optional second password that logs a visitor in with read-only access:
+	// every read works, writes are refused
+	liveReadPasswordHash: string;
+	liveReadPasswordSalt: string;
 	// loopback-only ui control for ai agents (see the agents settings tab)
 	agentEnabled: boolean;
 	agentPort: number;
+	// tray "do not disturb": suppresses reminder notifications while true
+	remindersMuted: boolean;
+	// show the app icon in the menu bar / system tray
+	trayEnabled: boolean;
 	sidebarItems: SidebarItemConfig[];
 	shortcuts: Record<string, ShortcutKey[]>;
 };
@@ -64,8 +72,12 @@ export const defaultSettings: Settings = {
 	livePort: 17890,
 	livePasswordHash: '',
 	livePasswordSalt: '',
+	liveReadPasswordHash: '',
+	liveReadPasswordSalt: '',
 	agentEnabled: true,
 	agentPort: 17891,
+	remindersMuted: false,
+	trayEnabled: true,
 	sidebarItems: [...defaultSidebarItems],
 	shortcuts: Object.fromEntries(SHORTCUTS.map((s) => [s.id, s.keys])) as Record<
 		string,

@@ -1,5 +1,5 @@
 use super::attachments::{delete_attachment, put_attachment, serve_attachment};
-use super::auth::{authorized, handle_auth, load_auth};
+use super::auth::{authorized, handle_auth, load_auth, Access};
 use super::backups::{create_backup_http, delete_backup_http, restore_backup_http, serve_backups};
 use super::events::{poll_events, stream_events};
 use super::query::run_query;
@@ -52,15 +52,30 @@ pub(super) fn handle_request(request: Request, ctx: &Ctx) {
     }
 
     // api gate: when a shared password is set, every data endpoint (sse
-    // included) requires the session token
-    if let Some(a) = &auth {
-        if !authorized(&request, query, a) {
-            let _ = request.respond(json_response(
-                StatusCode(401),
-                json!({ "error": "Unauthorized" }),
-            ));
-            return;
-        }
+    // included) requires the session token. no configured password means an
+    // open share, which is full access
+    let access = match &auth {
+        Some(a) => match authorized(&request, query, a) {
+            Some(access) => access,
+            None => {
+                let _ = request.respond(json_response(
+                    StatusCode(401),
+                    json!({ "error": "Unauthorized" }),
+                ));
+                return;
+            }
+        },
+        None => Access::Full,
+    };
+
+    // a read-only session may view anything but must not change stored data;
+    // writes hidden inside query payloads are refused in run_query
+    if access == Access::ReadOnly && is_mutation(&method, path) {
+        let _ = request.respond(json_response(
+            StatusCode(403),
+            json!({ "error": "Read-only access" }),
+        ));
+        return;
     }
 
     // sse bypasses respond(): tiny_http only flushes a response body once it
@@ -82,7 +97,7 @@ pub(super) fn handle_request(request: Request, ctx: &Ctx) {
     let mut request = request;
     let mutating = is_mutation(&method, path);
     let response = match (method, path) {
-        (Method::Post, "/api/select" | "/api/execute") => run_query(&mut request, ctx),
+        (Method::Post, "/api/select" | "/api/execute") => run_query(&mut request, ctx, access),
         (Method::Get, "/api/events") => poll_events(ctx),
         (Method::Get, "/api/presence") => presence_list(ctx),
         (Method::Get, p) if p.starts_with("/api/attachment/") => serve_attachment(p, query, ctx),
@@ -251,7 +266,7 @@ fn presence_identity(request: &Request, query: &str) -> (String, String, String)
     )
 }
 
-fn parse_query(query: &str) -> std::collections::HashMap<String, String> {
+pub(crate) fn parse_query(query: &str) -> std::collections::HashMap<String, String> {
     let mut out = std::collections::HashMap::new();
     for pair in query.split('&') {
         if pair.is_empty() {

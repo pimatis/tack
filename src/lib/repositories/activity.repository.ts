@@ -25,6 +25,32 @@ export async function findByTaskId(taskId: string): Promise<ActivityLog[]> {
 	}
 }
 
+export type AgentActivityEntry = ActivityLog & {
+	taskTitle: string;
+	displayNumber: string;
+};
+
+// latest entries written through the agent api; the agent settings tab lists
+// them so the user can audit what agents have been doing
+export async function findRecentAgentActivity(limit = 15): Promise<AgentActivityEntry[]> {
+	try {
+		const db = await getDb();
+		return await db.select<AgentActivityEntry[]>(
+			`SELECT ${COLUMNS},
+				t.title AS taskTitle,
+				COALESCE(p.prefix || '-' || t.number, '#' || t.number) AS displayNumber
+			FROM activity_log a
+			JOIN tasks t ON t.id = a.task_id
+			LEFT JOIN projects p ON p.id = t.project_id
+			WHERE a.source = 'agent'
+			ORDER BY a.created_at DESC LIMIT $1`,
+			[limit]
+		);
+	} catch (error) {
+		throw new Error('Failed to load agent activity', { cause: error });
+	}
+}
+
 export async function log(
 	taskId: string,
 	action: ActivityAction,

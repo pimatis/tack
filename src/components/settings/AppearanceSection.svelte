@@ -57,6 +57,17 @@
 
 <Separator />
 
+<!-- menu bar / system tray icon -->
+<div class="flex flex-wrap items-center justify-between gap-2">
+	<div class="min-w-0">
+		<p class="text-[13px] font-medium">Menu bar icon</p>
+		<p class="text-xs text-muted-foreground">Show Tack in the system tray</p>
+	</div>
+	<Switch checked={settings.trayEnabled} onCheckedChange={(v) => update('trayEnabled', v)} />
+</div>
+
+<Separator />
+
 <!-- default view mode -->
 <div class="flex flex-wrap items-center justify-between gap-2">
 	<div class="min-w-0">

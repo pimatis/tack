@@ -298,7 +298,10 @@ export async function importCsv(text: string): Promise<number> {
 	if (lines.length === 0) return 0;
 	const header = parseCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
 	const colIndex = (name: string) => header.indexOf(name);
-	if (colIndex('title') === -1) throw new Error('CSV is missing a "title" column');
+	// todoist exports use TYPE,CONTENT,DESCRIPTION,PRIORITY,...,DATE,DATE_LANG
+	const todoist = colIndex('content') !== -1 && colIndex('date_lang') !== -1;
+	const titleCol = todoist ? 'content' : 'title';
+	if (colIndex(titleCol) === -1) throw new Error('CSV is missing a "title" column');
 
 	const projects = await findProjects();
 	const labels = await findLabels();
@@ -311,7 +314,8 @@ export async function importCsv(text: string): Promise<number> {
 			const i = colIndex(name);
 			return i === -1 ? '' : cells[i].trim();
 		};
-		const title = get('title');
+		if (todoist && get('type').toLowerCase() === 'note') continue;
+		const title = get(titleCol);
 		if (!title) continue;
 
 		const projectKey = get('project').toLowerCase();
@@ -333,7 +337,7 @@ export async function importCsv(text: string): Promise<number> {
 					? (priority as TaskPriority)
 					: 0,
 			projectId: project?.id ?? null,
-			dueDate: get('due_date') || null,
+			dueDate: (todoist ? get('date') : get('due_date')).slice(0, 10) || null,
 			endDate: get('end_date') || null,
 			estimateMinutes: Number.isInteger(estimate) && estimate > 0 ? estimate : null
 		});

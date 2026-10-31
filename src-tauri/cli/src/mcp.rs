@@ -35,12 +35,29 @@ pub fn serve(conn: &Connection) -> Result<()> {
                 id,
                 json!({
                     "protocolVersion": params["protocolVersion"].as_str().unwrap_or("2024-11-05"),
-                    "capabilities": { "tools": {} },
+                    "capabilities": { "tools": {}, "resources": {}, "prompts": {} },
                     "serverInfo": { "name": "tack", "version": env!("CARGO_PKG_VERSION") }
                 }),
             ),
             "ping" => result(id, json!({})),
             "tools/list" => result(id, json!({ "tools": tools() })),
+            "resources/list" => result(id, json!({ "resources": resources() })),
+            "resources/read" => match read_resource(conn, &params) {
+                Ok(text) => result(
+                    id,
+                    json!({ "contents": [{
+                        "uri": params["uri"].as_str().unwrap_or(""),
+                        "mimeType": "text/plain",
+                        "text": text
+                    }]}),
+                ),
+                Err(e) => error(id, -32602, &e),
+            },
+            "prompts/list" => result(id, json!({ "prompts": prompts() })),
+            "prompts/get" => match get_prompt(&params) {
+                Ok(p) => result(id, p),
+                Err(e) => error(id, -32602, &e),
+            },
             "tools/call" => match call(conn, &params) {
                 Ok(content) => result(id, json!({ "content": content })),
                 Err(e) => result(id, json!({ "content": [{ "type": "text", "text": e }], "isError": true })),
@@ -101,6 +118,58 @@ fn call(conn: &Connection, params: &Value) -> std::result::Result<Vec<Value>, St
             agent::request_json(conn, "POST", "/api/agent/confirm", Some(&body))
                 .map(|v| vec![text(v.to_string())])
         }
+        "tack_task_list" => {
+            let mut qs = Vec::new();
+            for key in ["status", "project", "trash"] {
+                if let Some(v) = args.get(key).and_then(|v| v.as_str()) {
+                    qs.push(format!("{}={}", key, v));
+                }
+            }
+            let path = if qs.is_empty() {
+                "/api/agent/tasks".to_string()
+            } else {
+                format!("/api/agent/tasks?{}", qs.join("&"))
+            };
+            agent::request_json(conn, "GET", &path, None).map(|v| vec![text(v.to_string())])
+        }
+        "tack_task_get" => {
+            let id = args["id"].as_str().unwrap_or_default();
+            agent::request_json(conn, "GET", &format!("/api/agent/tasks/{}", id), None)
+                .map(|v| vec![text(v.to_string())])
+        }
+        "tack_task_create" => {
+            let body = serde_json::to_string(&args).map_err(|e| e.to_string())?;
+            agent::request_json(conn, "POST", "/api/agent/tasks", Some(&body))
+                .map(|v| vec![text(v.to_string())])
+        }
+        "tack_task_update" => {
+            let id = args["id"].as_str().unwrap_or_default().to_string();
+            let mut fields = args.clone();
+            fields.as_object_mut().map(|o| o.remove("id"));
+            let body = serde_json::to_string(&fields).map_err(|e| e.to_string())?;
+            agent::request_json(
+                conn,
+                "PATCH",
+                &format!("/api/agent/tasks/{}", id),
+                Some(&body),
+            )
+            .map(|v| vec![text(v.to_string())])
+        }
+        "tack_task_delete" => {
+            let id = args["id"].as_str().unwrap_or_default();
+            let permanent = args["permanent"].as_bool().unwrap_or(false);
+            let path = if permanent {
+                format!("/api/agent/tasks/{}?permanent=1", id)
+            } else {
+                format!("/api/agent/tasks/{}", id)
+            };
+            agent::request_json(conn, "DELETE", &path, None).map(|v| vec![text(v.to_string())])
+        }
+        "tack_task_restore" => {
+            let id = args["id"].as_str().unwrap_or_default();
+            agent::request_json(conn, "POST", &format!("/api/agent/tasks/{}/restore", id), None)
+                .map(|v| vec![text(v.to_string())])
+        }
         _ => {
             let action = name.strip_prefix("tack_").unwrap_or(name);
             let params = tool_params(action, &args);
@@ -146,6 +215,184 @@ fn base64_encode(data: &[u8]) -> String {
         });
     }
     out
+}
+
+// context resources: plain-text views of the db an agent can pull in before
+// deciding what to do. read straight from sqlite, so they work even while
+// the app itself is closed
+fn resources() -> Vec<Value> {
+    vec![
+        json!({
+            "uri": "tack://tasks/open",
+            "name": "Open tasks",
+            "description": "All non-deleted tasks that are not done or canceled",
+            "mimeType": "text/plain"
+        }),
+        json!({
+            "uri": "tack://projects",
+            "name": "Projects",
+            "description": "Projects with their open task counts",
+            "mimeType": "text/plain"
+        }),
+        json!({
+            "uri": "tack://activity",
+            "name": "Recent activity",
+            "description": "Last 50 activity log entries across all tasks, with the source (gui/cli/agent) of each change",
+            "mimeType": "text/plain"
+        }),
+    ]
+}
+
+fn read_resource(conn: &Connection, params: &Value) -> Result<String> {
+    match params["uri"].as_str().unwrap_or("") {
+        "tack://tasks/open" => {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT p.prefix, t.number, t.title, t.status, t.priority, t.due_date
+                     FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
+                     WHERE t.deleted_at IS NULL AND t.status NOT IN ('done', 'canceled')
+                     ORDER BY t.pinned DESC, t.due_date IS NULL, t.due_date, t.priority",
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map([], |r| {
+                    Ok((
+                        r.get::<_, Option<String>>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, String>(3)?,
+                        r.get::<_, i64>(4)?,
+                        r.get::<_, Option<String>>(5)?,
+                    ))
+                })
+                .map_err(|e| e.to_string())?;
+            let mut out = String::new();
+            for row in rows.flatten() {
+                let (prefix, number, title, status, priority, due) = row;
+                let num = match &prefix {
+                    Some(p) => format!("{}-{}", p, number),
+                    None => format!("#{}", number),
+                };
+                let due = due.map(|d| format!(" due {}", d)).unwrap_or_default();
+                out.push_str(&format!("{} [{} p{}] {}{}\n", num, status, priority, title, due));
+            }
+            if out.is_empty() {
+                out.push_str("(no open tasks)\n");
+            }
+            Ok(out)
+        }
+        "tack://projects" => {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT p.prefix, p.name,
+                     (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id
+                      AND t.deleted_at IS NULL AND t.status NOT IN ('done', 'canceled')) AS open_tasks
+                     FROM projects p ORDER BY p.name",
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map([], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, i64>(2)?,
+                    ))
+                })
+                .map_err(|e| e.to_string())?;
+            let mut out = String::new();
+            for row in rows.flatten() {
+                let (prefix, name, open) = row;
+                out.push_str(&format!("{} {} - {} open tasks\n", prefix, name, open));
+            }
+            if out.is_empty() {
+                out.push_str("(no projects)\n");
+            }
+            Ok(out)
+        }
+        "tack://activity" => {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT a.created_at, COALESCE(p.prefix || '-' || t.number, '#' || t.number),
+                     t.title, a.action, a.old_value, a.new_value, a.source
+                     FROM activity_log a
+                     JOIN tasks t ON t.id = a.task_id
+                     LEFT JOIN projects p ON p.id = t.project_id
+                     ORDER BY a.created_at DESC LIMIT 50",
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map([], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, String>(3)?,
+                        r.get::<_, Option<String>>(4)?,
+                        r.get::<_, Option<String>>(5)?,
+                        r.get::<_, String>(6)?,
+                    ))
+                })
+                .map_err(|e| e.to_string())?;
+            let mut out = String::new();
+            for row in rows.flatten() {
+                let (at, num, title, action, old, new, source) = row;
+                let detail = match (old, new) {
+                    (Some(o), Some(n)) => format!(" {} -> {}", o, n),
+                    (None, Some(n)) => format!(" -> {}", n),
+                    (Some(o), None) => format!(" {} ->", o),
+                    (None, None) => String::new(),
+                };
+                out.push_str(&format!(
+                    "{} {} \"{}\" {}{} ({})\n",
+                    at, num, title, action, detail, source
+                ));
+            }
+            if out.is_empty() {
+                out.push_str("(no activity yet)\n");
+            }
+            Ok(out)
+        }
+        other => Err(format!("unknown resource: {}", other)),
+    }
+}
+
+fn prompts() -> Vec<Value> {
+    vec![
+        json!({
+            "name": "tack_triage",
+            "description": "Review my open tasks and propose a status/priority triage"
+        }),
+        json!({
+            "name": "tack_plan_day",
+            "description": "Look at due and open tasks and propose a plan for today"
+        }),
+    ]
+}
+
+fn get_prompt(params: &Value) -> Result<Value> {
+    let message = |text: &str| -> Value {
+        json!({
+            "description": "tack prompt",
+            "messages": [{
+                "role": "user",
+                "content": { "type": "text", "text": text }
+            }]
+        })
+    };
+    match params["name"].as_str().unwrap_or("") {
+        "tack_triage" => Ok(message(
+            "Fetch my open tasks with the tack_task_list tool, then triage them: \
+             suggest which belong in backlog vs todo vs in_progress and what priority \
+             (0 none, 1 urgent, 2 high, 3 medium, 4 low) each should have. Show me the \
+             proposed changes first; apply them with tack_task_update only after I confirm.",
+        )),
+        "tack_plan_day" => Ok(message(
+            "Fetch my open tasks with tack_task_list, look at due dates and priorities, \
+             and propose a realistic plan for today: what to do first, what to defer, and \
+             what to move to a later date. Ask before changing anything.",
+        )),
+        other => Err(format!("unknown prompt: {}", other)),
+    }
 }
 
 fn pos(desc: &str) -> Value {
@@ -289,6 +536,75 @@ fn tools() -> Vec<Value> {
                 "body": { "type": "string", "description": "what the user is being asked to approve" }
             }),
             &["body"],
+        ),
+        tool(
+            "tack_task_list",
+            "List tasks straight from the database. Prefer this over reading the ui",
+            json!({
+                "status": { "type": "string", "description": "backlog | todo | in_progress | done | canceled" },
+                "project": { "type": "string", "description": "project id or prefix, e.g. TSK" },
+                "trash": { "type": "string", "description": "pass \"1\" to list trashed tasks" }
+            }),
+            &[],
+        ),
+        tool(
+            "tack_task_get",
+            "One task in full, including its labels and subtasks",
+            json!({
+                "id": { "type": "string", "description": "task uuid or display number like TSK-4 or #4" }
+            }),
+            &["id"],
+        ),
+        tool(
+            "tack_task_create",
+            "Create a task. Returns the created task with its id and display number",
+            json!({
+                "title": { "type": "string" },
+                "description": { "type": "string" },
+                "status": { "type": "string", "description": "backlog | todo | in_progress | done | canceled (default: the app's defaultStatus)" },
+                "priority": { "type": "number", "description": "0 none, 1 urgent, 2 high, 3 medium, 4 low" },
+                "project": { "type": "string", "description": "project id or prefix" },
+                "due_date": { "type": "string", "description": "YYYY-MM-DD" },
+                "end_date": { "type": "string", "description": "YYYY-MM-DD" },
+                "estimate_minutes": { "type": "number" },
+                "parent": { "type": "string", "description": "parent task uuid or display number" }
+            }),
+            &["title"],
+        ),
+        tool(
+            "tack_task_update",
+            "Update task fields. Omit a field to keep it; pass null or \"\" to clear nullable fields (description, project, due_date, end_date, estimate_minutes, parent). Setting status to done or canceled banks a running timer",
+            json!({
+                "id": { "type": "string", "description": "task uuid or display number" },
+                "title": { "type": "string" },
+                "description": { "type": "string" },
+                "status": { "type": "string" },
+                "priority": { "type": "number" },
+                "project": { "type": "string" },
+                "due_date": { "type": "string" },
+                "end_date": { "type": "string" },
+                "estimate_minutes": { "type": "number" },
+                "parent": { "type": "string" },
+                "pinned": { "type": "boolean" }
+            }),
+            &["id"],
+        ),
+        tool(
+            "tack_task_delete",
+            "Move a task to trash (recoverable). permanent:true deletes a trashed task forever and asks the user to approve first",
+            json!({
+                "id": { "type": "string", "description": "task uuid or display number" },
+                "permanent": { "type": "boolean", "description": "hard delete; only works on tasks already in the trash" }
+            }),
+            &["id"],
+        ),
+        tool(
+            "tack_task_restore",
+            "Restore a trashed task",
+            json!({
+                "id": { "type": "string", "description": "task uuid or display number" }
+            }),
+            &["id"],
         ),
     ]
 }

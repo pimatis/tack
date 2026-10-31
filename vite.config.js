@@ -18,6 +18,8 @@ export default defineConfig(async () => ({
 		strictPort: true,
 		host: host || false,
 		hmr: host ? { protocol: 'ws', host, port: 1421 } : undefined,
+		// brand logos live outside src; let the dev server serve them
+		fs: { allow: ['assets'] },
 		// 3. dev sourcemaps without embedded sources: smaller dev-server
 		// memory footprint and lighter payloads to the webview
 		sourcemapExcludeSources: true,

@@ -1,6 +1,7 @@
 mod http;
 mod screenshot;
 mod server;
+mod tasks;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};

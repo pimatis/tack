@@ -113,9 +113,7 @@
 						class="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
 						aria-label={`Set priority for ${task.title}`}
 					>
-						{#if task.priority > 0}
-							<PriorityIcon priority={task.priority} size={13} />
-						{/if}
+						<PriorityIcon priority={task.priority} size={13} />
 					</Button>
 				{/snippet}
 			</PriorityMenu>

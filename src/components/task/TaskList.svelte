@@ -86,7 +86,7 @@
 			collapsedTasks.has(task.id) ? collapsedTasks.delete(task.id) : collapsedTasks.add(task.id)}
 	/>
 	{#if !collapsedTasks.has(task.id) && (childrenOf.get(task.id)?.length ?? 0) > 0}
-		<div class="mt-0.5 ml-9 grid gap-px pl-2">
+		<div class="mt-0.5 ml-6 grid gap-px pl-2 [&>.tree-item::after]:w-5">
 			{#each childrenOf.get(task.id) ?? [] as child (child.id)}
 				<div class="tree-item">
 					{@render taskRow(child)}

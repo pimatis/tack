@@ -15,12 +15,15 @@
 	} from '$lib/stores/settings';
 	import { startBackupScheduler } from '$lib/backup/backup.service';
 	import { startReminderScheduler } from '$lib/reminders/reminder.service';
+	import { startTrayService } from '$lib/tray/tray.service';
 	import { startLiveManager } from '$lib/live/live.service';
 	import { startAgentManager } from '$lib/agent/agent.service';
 	import { isLiveAuthRequired } from '$lib/live/auth.service';
 	import LiveAuthDialog from '../components/LiveAuthDialog.svelte';
 	import { isTauri } from '$lib/db/client';
 	import { invoke } from '@tauri-apps/api/core';
+	import { goto } from '$app/navigation';
+	import { TaskPageState } from '$lib/task/taskState.svelte';
 	import { Toaster } from '$lib/components/ui/sonner';
 	import Icon from '$lib/components/Icon.svelte';
 
@@ -37,6 +40,7 @@
 	// live share is password-protected: hide the whole app (including any
 	// data fetched before the server started asking for the password)
 	let authLocked = $state(false);
+	let updateDialogOpen = $state(false);
 
 	onMount(() => {
 		// reveal the window as soon as the shell is mounted; direct ipc works
@@ -54,6 +58,24 @@
 		const stopLive = startLiveManager();
 		const stopAgent = startAgentManager();
 		const stopReminders = startReminderScheduler();
+		const stopTray = startTrayService();
+
+		// the tray's "Check for Updates" lands here app-wide
+		const openUpdateDialog = () => (updateDialogOpen = true);
+		window.addEventListener('open-update-dialog', openUpdateDialog);
+
+		// global hotkey / tray quick-add: focus already happened rust-side, we
+		// just land on the task list and open the create dialog
+		let unlistenQuickAdd: (() => void) | undefined;
+		if (isTauri()) {
+			void import('@tauri-apps/api/event').then(async ({ listen }) => {
+				unlistenQuickAdd = await listen('quick-add', () => {
+					void goto('/').then(() => {
+						TaskPageState.get().dialogOpen = true;
+					});
+				});
+			});
+		}
 
 		const narrowQuery = window.matchMedia('(max-width: 1023px)');
 		const applyNarrow = () => (isNarrow = narrowQuery.matches);
@@ -76,6 +98,9 @@
 			stopLive();
 			stopAgent();
 			stopReminders();
+			stopTray();
+			unlistenQuickAdd?.();
+			window.removeEventListener('open-update-dialog', openUpdateDialog);
 			narrowQuery.removeEventListener('change', applyNarrow);
 			mediaQuery.removeEventListener('change', handleThemeChange);
 			window.removeEventListener('settings-changed', onSettingsChanged);
@@ -131,6 +156,11 @@
 			</div>
 			<CommandPalette />
 		</Shortcuts>
+		{#if updateDialogOpen}
+			{#await import('../components/UpdateDialog.svelte') then { default: UpdateDialogComponent }}
+				<UpdateDialogComponent bind:open={updateDialogOpen} />
+			{/await}
+		{/if}
 		<Toaster position="bottom-right" />
 	</Tooltip.Provider>
 {/if}

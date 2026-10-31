@@ -487,7 +487,11 @@ fn import_csv(conn: &Connection, text: &str) -> Result<usize> {
         None => return Ok(0),
     };
     let idx = |name: &str| header.iter().position(|h| h.trim().eq_ignore_ascii_case(name));
-    if idx("title").is_none() {
+    // todoist exports use TYPE,CONTENT,DESCRIPTION,PRIORITY,...,DATE,DATE_LANG;
+    // detect them by the columns our own layout does not have
+    let todoist = idx("content").is_some() && idx("date_lang").is_some();
+    let title_col = if todoist { "content" } else { "title" };
+    if idx(title_col).is_none() {
         return Err("CSV is missing a \"title\" column".to_string());
     }
 
@@ -500,7 +504,11 @@ fn import_csv(conn: &Connection, text: &str) -> Result<usize> {
                 .map(|s| s.trim().to_string())
                 .unwrap_or_default()
         };
-        let title = get("title");
+        // todoist rows are tasks or notes; only tasks come across
+        if todoist && get("type").eq_ignore_ascii_case("note") {
+            continue;
+        }
+        let title = get(title_col);
         if title.is_empty() {
             continue;
         }
@@ -538,7 +546,9 @@ fn import_csv(conn: &Connection, text: &str) -> Result<usize> {
         }
         .map_err(|e| e.to_string())?;
         let description = get("description");
-        let due_date = get("due_date");
+        // todoist DATE can carry a datetime; keep the YYYY-MM-DD part
+        let due_raw = if todoist { get("date") } else { get("due_date") };
+        let due_date = due_raw.get(..10).unwrap_or(&due_raw).to_string();
         let end_date = get("end_date");
         conn.execute(
             "INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, estimate_minutes, sort_order, pinned, created_at, updated_at)

@@ -5,18 +5,36 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::io::Read;
+use std::net::{IpAddr, Ipv4Addr};
 use std::path::Path;
-use std::time::Duration;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use tiny_http::{Header, Request, Response, StatusCode};
+
+// one configured shared password and the session token derived from it
+pub(super) struct Credential {
+    salt: Vec<u8>,
+    hash: [u8; 32],
+    token: String,
+}
 
 // optional shared-password protection for the live server. hash and salt
 // live in the settings table (written by the settings ui through the
-// hash_live_password command); plaintext is never stored
+// hash_live_password command); plaintext is never stored. two passwords may
+// be configured: the full-access one and a read-only one for view-only
+// visitors
 pub(super) struct LiveAuth {
-    salt: Vec<u8>,
-    hash: [u8; 32],
-    pub(super) token: String,
+    full: Option<Credential>,
+    read_only: Option<Credential>,
+}
+
+// what a presented session token unlocks
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Access {
+    Full,
+    ReadOnly,
 }
 
 // salted kdf for the shared access password. no heavy work factor on
@@ -87,17 +105,47 @@ pub(super) fn pbkdf2_sha256(password: &[u8], salt: &[u8], iterations: u32) -> [u
 // anything unexpected (db error, corrupt values) fails closed with an
 // unmatchable token instead of silently opening the share
 pub(super) fn load_auth(db_path: &Path) -> Option<LiveAuth> {
-    let closed = || {
-        Some(LiveAuth {
-            salt: Vec::new(),
-            hash: [0u8; 32],
-            token: uuid::Uuid::new_v4().to_string(),
-        })
-    };
     let conn = match Connection::open(db_path) {
         Ok(c) => c,
-        Err(_) => return closed(),
+        Err(_) => {
+            return Some(LiveAuth {
+                full: Some(closed_credential()),
+                read_only: None,
+            })
+        }
     };
+    let full = load_credential(&conn, "livePasswordHash", "livePasswordSalt", b"tack-live-token");
+    let read_only = load_credential(
+        &conn,
+        "liveReadPasswordHash",
+        "liveReadPasswordSalt",
+        b"tack-live-token-ro",
+    );
+    if full.is_none() && read_only.is_none() {
+        // no shared secret configured
+        return None;
+    }
+    Some(LiveAuth { full, read_only })
+}
+
+// a credential nobody can log in as: a random token that no client can
+// present, plus a hash no password matches
+fn closed_credential() -> Credential {
+    Credential {
+        salt: Vec::new(),
+        hash: [0u8; 32],
+        token: uuid::Uuid::new_v4().to_string(),
+    }
+}
+
+// one configured password pair -> one credential. missing or cleared values
+// mean the credential simply does not exist; corrupt rows fail closed
+fn load_credential(
+    conn: &Connection,
+    hash_key: &str,
+    salt_key: &str,
+    domain: &[u8],
+) -> Option<Credential> {
     let read = |key: &str| -> std::result::Result<Option<String>, ()> {
         match conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
             r.get(0)
@@ -107,39 +155,40 @@ pub(super) fn load_auth(db_path: &Path) -> Option<LiveAuth> {
             Err(_) => Err(()),
         }
     };
-    let hash_b64 = match read("livePasswordHash") {
+    let hash_b64 = match read(hash_key) {
         Ok(Some(v)) => v,
-        // no shared secret configured
         Ok(None) => return None,
-        Err(_) => return closed(),
+        Err(_) => return Some(closed_credential()),
     };
-    let salt_b64 = match read("livePasswordSalt") {
-        Ok(Some(v)) => v,
-        Ok(None) => return closed(),
-        Err(_) => return closed(),
-    };
-    if hash_b64.is_empty() || salt_b64.is_empty() {
+    if hash_b64.is_empty() {
         // password cleared
         return None;
     }
+    let salt_b64 = match read(salt_key) {
+        Ok(Some(v)) => v,
+        Ok(None) => return Some(closed_credential()),
+        Err(_) => return Some(closed_credential()),
+    };
     let (Some(hash), Some(salt)) = (base64_decode(&hash_b64), base64_decode(&salt_b64)) else {
-        return closed();
+        return Some(closed_credential());
     };
     if hash.len() != 32 || salt.is_empty() {
-        return closed();
+        return Some(closed_credential());
     }
     let mut hash_arr = [0u8; 32];
     hash_arr.copy_from_slice(&hash);
     // session token derived from the stored hash: stable across requests
-    // without server state, and rotates whenever the password changes
+    // without server state, and rotates whenever the password changes. the
+    // domain differs per role so identical passwords still mint distinct
+    // tokens
     let token = base64_encode(
         &Sha256::new()
-            .chain_update(b"tack-live-token")
+            .chain_update(domain)
             .chain_update(hash_arr)
             .chain_update(&salt)
             .finalize(),
     );
-    Some(LiveAuth {
+    Some(Credential {
         salt,
         hash: hash_arr,
         token,
@@ -160,9 +209,24 @@ fn ct_eq(a: &[u8], b: &[u8]) -> bool {
 }
 
 // session token from the tack_live cookie, an Authorization bearer header,
-// or a ?token= query param (agents streaming events with curl)
-pub(super) fn authorized(request: &Request, query: &str, auth: &LiveAuth) -> bool {
-    let token = auth.token.as_bytes();
+// or a ?token= query param (agents streaming events with curl). the full
+// token wins over the read-only one
+pub(super) fn authorized(request: &Request, query: &str, auth: &LiveAuth) -> Option<Access> {
+    if let Some(c) = &auth.full {
+        if token_matches(request, query, &c.token) {
+            return Some(Access::Full);
+        }
+    }
+    if let Some(c) = &auth.read_only {
+        if token_matches(request, query, &c.token) {
+            return Some(Access::ReadOnly);
+        }
+    }
+    None
+}
+
+fn token_matches(request: &Request, query: &str, token: &str) -> bool {
+    let token = token.as_bytes();
     for header in request.headers() {
         let name = header.field.as_str().as_str();
         let value = header.value.as_str();
@@ -195,38 +259,130 @@ pub(super) fn authorized(request: &Request, query: &str, auth: &LiveAuth) -> boo
     false
 }
 
+// login throttling per client ip: AUTH_MAX_FAILURES wrong passwords inside
+// AUTH_WINDOW lock the source out for AUTH_LOCKOUT. the map lives in memory
+// only, so restarting the live server clears every lockout
+const AUTH_MAX_FAILURES: u32 = 5;
+const AUTH_WINDOW: Duration = Duration::from_secs(300);
+const AUTH_LOCKOUT: Duration = Duration::from_secs(300);
+
+struct Attempt {
+    failures: u32,
+    window_start: Instant,
+    locked_until: Option<Instant>,
+}
+
+pub(super) struct AuthLimiter {
+    attempts: Mutex<HashMap<IpAddr, Attempt>>,
+}
+
+impl AuthLimiter {
+    pub(super) fn new() -> Self {
+        Self {
+            attempts: Mutex::new(HashMap::new()),
+        }
+    }
+
+    // remaining lockout for this ip, if any
+    pub(super) fn locked(&self, ip: IpAddr) -> Option<Duration> {
+        let mut map = self.attempts.lock().unwrap();
+        let until = map.get(&ip)?.locked_until?;
+        let now = Instant::now();
+        if now < until {
+            return Some(until - now);
+        }
+        // lockout expired: start this client fresh
+        map.remove(&ip);
+        None
+    }
+
+    pub(super) fn failure(&self, ip: IpAddr) {
+        let now = Instant::now();
+        let mut map = self.attempts.lock().unwrap();
+        // drop stale entries here so a flood of distinct source ips cannot
+        // grow the map forever
+        map.retain(|_, a| {
+            a.locked_until.is_some_and(|u| u > now)
+                || now.duration_since(a.window_start) < AUTH_WINDOW
+        });
+        let attempt = map.entry(ip).or_insert(Attempt {
+            failures: 0,
+            window_start: now,
+            locked_until: None,
+        });
+        attempt.failures += 1;
+        if attempt.failures >= AUTH_MAX_FAILURES {
+            attempt.locked_until = Some(now + AUTH_LOCKOUT);
+        }
+    }
+
+    pub(super) fn success(&self, ip: IpAddr) {
+        self.attempts.lock().unwrap().remove(&ip);
+    }
+}
+
 #[derive(Deserialize)]
 struct AuthPayload {
     password: String,
 }
 
 // verifies the shared password and issues the session cookie. wrong
-// attempts pay an extra delay on top of pbkdf2 to blunt brute force
+// attempts pay an extra delay on top of pbkdf2, and repeated failures lock
+// the source ip out entirely
 pub(super) fn handle_auth(request: &mut Request, ctx: &Ctx) -> Response<std::io::Cursor<Vec<u8>>> {
+    let ip = request
+        .remote_addr()
+        .map(|a| a.ip())
+        .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
+    if let Some(remaining) = ctx.auth_limiter.locked(ip) {
+        return json_response(
+            StatusCode(429),
+            json!({ "error": "Too many attempts", "retry_after": remaining.as_secs() }),
+        );
+    }
     let Some(auth) = load_auth(&ctx.db_path) else {
         return json_response(StatusCode(400), json!({ "error": "No password is set" }));
     };
     let mut body = String::new();
     let _ = request.as_reader().take(1024).read_to_string(&mut body);
     let payload: Option<AuthPayload> = serde_json::from_str(&body).ok();
-    let ok = payload
+    let password = payload
         .as_ref()
-        .map(|p| {
-            ct_eq(
-                &pbkdf2_sha256(p.password.as_bytes(), &auth.salt, PBKDF2_ITERATIONS),
-                &auth.hash,
-            )
-        })
-        .unwrap_or(false);
-    if !ok {
+        .map(|p| p.password.as_bytes())
+        .unwrap_or_default();
+    // the full-access password is checked first: the same string set for
+    // both roles must not silently downgrade the owner to read-only
+    let matched = auth
+        .full
+        .as_ref()
+        .filter(|c| ct_eq(&pbkdf2_sha256(password, &c.salt, PBKDF2_ITERATIONS), &c.hash))
+        .map(|c| (Access::Full, c.token.clone()))
+        .or_else(|| {
+            auth.read_only
+                .as_ref()
+                .filter(|c| {
+                    ct_eq(
+                        &pbkdf2_sha256(password, &c.salt, PBKDF2_ITERATIONS),
+                        &c.hash,
+                    )
+                })
+                .map(|c| (Access::ReadOnly, c.token.clone()))
+        });
+    let Some((access, token)) = matched else {
+        ctx.auth_limiter.failure(ip);
         std::thread::sleep(Duration::from_millis(500));
         return json_response(StatusCode(401), json!({ "error": "Wrong password" }));
-    }
+    };
+    ctx.auth_limiter.success(ip);
     let cookie = format!(
         "tack_live={}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800",
-        auth.token
+        token
     );
-    let data = b"{\"ok\":true}".to_vec();
+    let scope = match access {
+        Access::Full => "full",
+        Access::ReadOnly => "read",
+    };
+    let data = format!("{{\"ok\":true,\"scope\":\"{}\"}}", scope).into_bytes();
     let headers = vec![
         Header::from_bytes(b"Content-Type", b"application/json; charset=utf-8").unwrap(),
         Header::from_bytes(b"Set-Cookie", cookie.as_bytes()).unwrap(),
@@ -241,4 +397,49 @@ pub(super) fn handle_auth(request: &mut Request, ctx: &Ctx) -> Response<std::io:
         Some(len),
         None,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ip() -> IpAddr {
+        IpAddr::V4(Ipv4Addr::new(192, 168, 1, 10))
+    }
+
+    #[test]
+    fn locks_out_after_max_failures() {
+        let limiter = AuthLimiter::new();
+        for _ in 0..AUTH_MAX_FAILURES - 1 {
+            limiter.failure(ip());
+            assert!(limiter.locked(ip()).is_none());
+        }
+        limiter.failure(ip());
+        assert!(limiter.locked(ip()).is_some());
+    }
+
+    #[test]
+    fn success_clears_failures() {
+        let limiter = AuthLimiter::new();
+        for _ in 0..AUTH_MAX_FAILURES - 1 {
+            limiter.failure(ip());
+        }
+        limiter.success(ip());
+        // the counter reset, so the same number of failures fits again
+        for _ in 0..AUTH_MAX_FAILURES - 1 {
+            limiter.failure(ip());
+        }
+        assert!(limiter.locked(ip()).is_none());
+    }
+
+    #[test]
+    fn failures_of_other_ips_do_not_matter() {
+        let limiter = AuthLimiter::new();
+        let other = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1));
+        for _ in 0..AUTH_MAX_FAILURES {
+            limiter.failure(other);
+        }
+        assert!(limiter.locked(other).is_some());
+        assert!(limiter.locked(ip()).is_none());
+    }
 }

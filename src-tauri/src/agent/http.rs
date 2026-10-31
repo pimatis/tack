@@ -1,11 +1,14 @@
-use super::{act, screenshot, Result};
+use super::{act, screenshot, tasks, Result};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::io::Read;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tiny_http::{Header, Method, Request, Response, StatusCode};
 
-fn json_response<T: Serialize>(status: StatusCode, body: T) -> Response<std::io::Cursor<Vec<u8>>> {
+pub(super) fn json_response<T: Serialize>(
+    status: StatusCode,
+    body: T,
+) -> Response<std::io::Cursor<Vec<u8>>> {
     let data = serde_json::to_vec(&body).unwrap_or_default();
     let headers = vec![
         Header::from_bytes(b"Content-Type", b"application/json; charset=utf-8").unwrap(),
@@ -15,14 +18,14 @@ fn json_response<T: Serialize>(status: StatusCode, body: T) -> Response<std::io:
     Response::new(status, headers, std::io::Cursor::new(data), Some(len), None)
 }
 
-fn err(status: u16, msg: impl Into<String>) -> Response<std::io::Cursor<Vec<u8>>> {
+pub(super) fn err(status: u16, msg: impl Into<String>) -> Response<std::io::Cursor<Vec<u8>>> {
     json_response(
         StatusCode(status),
         json!({ "ok": false, "error": msg.into() }),
     )
 }
 
-fn read_body(request: &mut Request) -> Result<Value> {
+pub(super) fn read_body(request: &mut Request) -> Result<Value> {
     let mut body = String::new();
     request
         .as_reader()
@@ -57,6 +60,20 @@ pub(super) fn handle_request(request: Request, app: &tauri::AppHandle) {
             Ok(body) => confirm_response(app, &body),
             Err(e) => err(400, e),
         },
+        // structured data api: task crud straight to sqlite, so agents do not
+        // have to depend on what the ui happens to look like
+        (Method::Get, "/api/agent/tasks") => tasks::list(app, query),
+        (Method::Post, "/api/agent/tasks") => tasks::create(&mut request, app),
+        (Method::Get, "/api/agent/projects") => tasks::projects(app),
+        (Method::Get, "/api/agent/labels") => tasks::labels(app),
+        (Method::Post, p) if p.starts_with("/api/agent/tasks/") && p.ends_with("/restore") => {
+            tasks::restore(app, p)
+        }
+        (Method::Get, p) if p.starts_with("/api/agent/tasks/") => tasks::get(app, p),
+        (Method::Patch, p) if p.starts_with("/api/agent/tasks/") => {
+            tasks::update(&mut request, app, p)
+        }
+        (Method::Delete, p) if p.starts_with("/api/agent/tasks/") => tasks::delete(app, p, query),
         _ => err(404, "not found - try /api/agent/help"),
     };
     let _ = request.respond(response);
@@ -207,7 +224,7 @@ fn confirm_response(app: &tauri::AppHandle, body: &Value) -> Response<std::io::C
 // native modal attached to the app window; rfd handles the main-thread hop
 // internally, so it is safe to block this request thread until the user
 // decides. true when "Allow" is pressed
-fn ask_user(app: &tauri::AppHandle, title: &str, body: &str) -> bool {
+pub(super) fn ask_user(app: &tauri::AppHandle, title: &str, body: &str) -> bool {
     app.dialog()
         .message(body)
         .title(title)
@@ -229,6 +246,14 @@ fn help() -> Value {
             "GET /api/agent/screenshot": "png of the app window",
             "POST /api/agent/action": "{\"action\":name,\"params\":{...}} - see actions",
             "POST /api/agent/confirm": "{\"title\":...,\"body\":...} -> {approved} - asks the user in a native dialog; call before any irreversible action",
+            "GET /api/agent/tasks": "list tasks (?status=, ?project=prefix-or-id, ?trash=1)",
+            "POST /api/agent/tasks": "create task {title, description?, status?, priority?, project?, due_date?, end_date?, estimate_minutes?, parent?}",
+            "GET /api/agent/tasks/{id}": "one task with labels and subtasks; id is a uuid or display number (TSK-4, #4)",
+            "PATCH /api/agent/tasks/{id}": "update fields; null or \"\" clears nullable fields",
+            "DELETE /api/agent/tasks/{id}": "move to trash; ?permanent=1 deletes forever (asks the user first)",
+            "POST /api/agent/tasks/{id}/restore": "restore a trashed task",
+            "GET /api/agent/projects": "projects with open task counts",
+            "GET /api/agent/labels": "all labels",
             "GET /api/agent/help": "this document"
         },
         "actions": {

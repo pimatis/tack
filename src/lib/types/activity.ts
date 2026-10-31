@@ -33,6 +33,6 @@ export type ActivityLog = {
 	field?: string | null;
 	oldValue?: string | null;
 	newValue?: string | null;
-	source?: 'gui' | 'cli';
+	source?: 'gui' | 'cli' | 'agent';
 	createdAt: string;
 };

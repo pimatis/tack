@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:ital,wght@0,100..900;1,100..900&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn-svelte/tailwind.css';
@@ -92,7 +93,7 @@ body {
 
 /* shared */
 :root {
-	font-family: 'SF Pro Display', sans-serif;
+	font-family: 'Geist', sans-serif;
 	--radius: 0.75rem;
 	--shadow-x: 0px;
 	--shadow-y: 1px;
@@ -990,7 +991,7 @@ body {
 
 /* floating ghost preview - follows cursor during drag */
 .dnd-ghost {
-	font-family: 'SF Pro Display', sans-serif;
+	font-family: 'Geist', sans-serif;
 	font-size: 13px;
 	color: var(--foreground);
 	line-height: 1.5;

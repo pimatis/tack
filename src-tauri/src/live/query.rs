@@ -1,3 +1,4 @@
+use super::auth::Access;
 use super::http::json_response;
 use super::Ctx;
 use crate::attachments::base64_encode;
@@ -94,14 +95,34 @@ fn classify(sql: &str) -> Result<Statement, String> {
     Ok(Statement::Write)
 }
 
-pub(super) fn run_query(request: &mut Request, ctx: &Ctx) -> Response<std::io::Cursor<Vec<u8>>> {
-    match execute_query(request, ctx) {
-        Ok(body) => json_response(StatusCode(200), body),
-        Err(e) => json_response(StatusCode(400), json!({ "error": e })),
+pub(super) enum QueryError {
+    Bad(String),
+    Forbidden(String),
+}
+
+impl From<String> for QueryError {
+    fn from(e: String) -> Self {
+        QueryError::Bad(e)
     }
 }
 
-pub(super) fn execute_query(request: &mut Request, ctx: &Ctx) -> super::Result<Value> {
+pub(super) fn run_query(
+    request: &mut Request,
+    ctx: &Ctx,
+    access: Access,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    match execute_query(request, ctx, access) {
+        Ok(body) => json_response(StatusCode(200), body),
+        Err(QueryError::Forbidden(e)) => json_response(StatusCode(403), json!({ "error": e })),
+        Err(QueryError::Bad(e)) => json_response(StatusCode(400), json!({ "error": e })),
+    }
+}
+
+pub(super) fn execute_query(
+    request: &mut Request,
+    ctx: &Ctx,
+    access: Access,
+) -> std::result::Result<Value, QueryError> {
     let mut body = String::new();
     request
         .as_reader()
@@ -116,6 +137,11 @@ pub(super) fn execute_query(request: &mut Request, ctx: &Ctx) -> super::Result<V
     let values: Vec<rusqlite::types::Value> = payload.params.iter().map(to_sqlite_value).collect();
 
     let read = matches!(classify(&sql)?, Statement::Read);
+    // read-only sessions are refused at the statement level too: a write
+    // posted to /api/select must not sneak past the route gate
+    if !read && access == Access::ReadOnly {
+        return Err(QueryError::Forbidden("Read-only access".to_string()));
+    }
 
     let conn = open_conn(&ctx.db_path)?;
     if read {

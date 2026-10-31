@@ -4,14 +4,16 @@ import { goto } from '$app/navigation';
 import { tick } from 'svelte';
 import { isTauri } from '$lib/db/client';
 import { notificationPermission } from '$lib/permissions/permissions.service';
+import { getSettings } from '$lib/stores/settings';
 import { findById, findDueReminders, markReminderSent } from '$lib/repositories/task.repository';
 
 // reminders are checked on a coarse timer; a few seconds of latency is fine
 const POLL_MS = 30_000;
 
 // clicking a notification brings the window forward and emits the task id;
-// switch to the tasks tab, make sure the home view is mounted, then open it
-async function openTaskById(taskId: string): Promise<void> {
+// switch to the tasks tab, make sure the home view is mounted, then open it.
+// the tray's task submenu uses the same flow
+export async function openTaskById(taskId: string): Promise<void> {
 	const task = await findById(taskId).catch(() => null);
 	if (!task) return;
 	if (window.location.pathname !== '/') {
@@ -22,6 +24,7 @@ async function openTaskById(taskId: string): Promise<void> {
 }
 
 async function checkReminders(): Promise<void> {
+	if (getSettings().remindersMuted) return;
 	const due = await findDueReminders(new Date().toISOString()).catch(() => []);
 	if (due.length === 0) return;
 	// a denied or not-yet-granted permission would swallow the banner; leave

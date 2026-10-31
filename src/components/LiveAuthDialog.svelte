@@ -40,10 +40,10 @@
 		if (!password || busy) return;
 		busy = true;
 		error = '';
-		const ok = await loginLive(password);
+		const result = await loginLive(password);
 		busy = false;
-		if (!ok) {
-			error = 'Wrong password';
+		if (!result.ok) {
+			error = result.error ?? 'Wrong password';
 			return;
 		}
 		// the session cookie is set; a fresh load re-runs every query and

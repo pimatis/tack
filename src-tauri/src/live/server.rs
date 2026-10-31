@@ -99,6 +99,7 @@ pub(super) fn start(app: &tauri::AppHandle, port: u16) -> Result<LiveStatus> {
             "Frontend build not found - run `bun run build` and try again".to_string()
         })?,
         hub: state.hub.clone(),
+        auth_limiter: Arc::new(super::auth::AuthLimiter::new()),
         events_timeout: Duration::from_secs(20),
         sse: sse.clone(),
     };
