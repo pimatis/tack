@@ -55,6 +55,12 @@ export const settingsSections: SettingsSection[] = [
 		icon: 'share'
 	},
 	{
+		value: 'agents',
+		label: 'Agents',
+		description: 'Let AI agents see and control the app',
+		icon: 'magic'
+	},
+	{
 		value: 'permissions',
 		label: 'Permissions',
 		description: 'System permissions tack can use',

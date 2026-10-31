@@ -17,6 +17,12 @@ export type ActivityAction =
 	| 'subtask_completed'
 	| 'subtask_uncompleted'
 	| 'subtask_removed'
+	| 'estimate_changed'
+	| 'parent_changed'
+	| 'timer_started'
+	| 'timer_stopped'
+	| 'relation_added'
+	| 'relation_removed'
 	| 'trashed'
 	| 'restored';
 

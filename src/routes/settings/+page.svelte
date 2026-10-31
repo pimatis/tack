@@ -26,6 +26,7 @@
 	import ShortcutsSection from '../../components/settings/ShortcutsSection.svelte';
 	import WorkspaceSection from '../../components/settings/WorkspaceSection.svelte';
 	import LiveSection from '../../components/settings/LiveSection.svelte';
+	import AgentSection from '../../components/settings/AgentSection.svelte';
 	import PermissionsSection from '../../components/settings/PermissionsSection.svelte';
 	import CliSection from '../../components/settings/CliSection.svelte';
 	import AboutSection from '../../components/settings/AboutSection.svelte';
@@ -220,6 +221,19 @@
 				label: 'Port',
 				description: 'Where the server listens on this device',
 				keywords: ['network', 'address', 'http', s.livePort]
+			},
+			{
+				tab: 'agents',
+				label: 'Agent control',
+				description: 'Let AI agents see the app, click and type on your behalf',
+				keywords: ['ai', 'agent', 'automation', 'mcp', 'control', s.agentPort],
+				switchValue: s.agentEnabled
+			},
+			{
+				tab: 'agents',
+				label: 'Port',
+				description: 'Loopback address agents connect to',
+				keywords: ['agent', 'api', 'loopback', 'http', s.agentPort]
 			},
 			{
 				tab: 'permissions',
@@ -500,11 +514,6 @@
 							</Select.Root>
 						</div>
 
-						<div class="mb-4">
-							<h2 class="text-sm font-semibold tracking-tight">{activeSection.label}</h2>
-							<p class="text-xs text-muted-foreground">{activeSection.description}</p>
-						</div>
-
 						<Tabs.Content value="appearance" class="flex flex-col gap-5">
 							<AppearanceSection {settings} update={updateSetting} />
 						</Tabs.Content>
@@ -535,6 +544,10 @@
 
 						<Tabs.Content value="live" class="flex flex-col gap-5">
 							<LiveSection {settings} update={updateSetting} />
+						</Tabs.Content>
+
+						<Tabs.Content value="agents" class="flex flex-col gap-5">
+							<AgentSection {settings} update={updateSetting} />
 						</Tabs.Content>
 
 						<Tabs.Content value="permissions" class="flex flex-col gap-5">

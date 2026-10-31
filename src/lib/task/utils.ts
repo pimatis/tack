@@ -102,6 +102,7 @@ export function groupedTasks(
 	statusOrderList: TaskStatus[] = statusOrder
 ): Record<TaskStatus, Task[]> {
 	const groups: Record<TaskStatus, Task[]> = {
+		backlog: [],
 		todo: [],
 		in_progress: [],
 		done: [],

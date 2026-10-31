@@ -23,7 +23,8 @@
 		onToggleProjectFilter,
 		onToggleLabelFilter,
 		onSetUpdatedSince,
-		onClearFilters
+		onClearFilters,
+		onSaveView
 	}: {
 		searchQuery: string;
 		statusFilters: Set<TaskStatus>;
@@ -38,6 +39,7 @@
 		onToggleLabelFilter: (labelId: string) => void;
 		onSetUpdatedSince: (days: number | null) => void;
 		onClearFilters: () => void;
+		onSaveView?: (name: string) => void;
 	} = $props();
 
 	// each filter opens on left-click and on right-click
@@ -70,6 +72,17 @@
 	function openUpdated(event: MouseEvent) {
 		event.preventDefault();
 		updatedOpen = true;
+	}
+
+	let saveViewOpen = $state(false);
+	let viewName = $state('');
+
+	function submitViewName() {
+		const name = viewName.trim();
+		if (!name) return;
+		onSaveView?.(name);
+		viewName = '';
+		saveViewOpen = false;
 	}
 </script>
 
@@ -277,11 +290,39 @@
 		<Button
 			variant="ghost"
 			size="sm"
+			onclick={() => (saveViewOpen = !saveViewOpen)}
+			class="flex h-8 items-center gap-1 rounded-lg px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
+		>
+			<Icon icon="add" size={13} />
+			<span>Save view</span>
+		</Button>
+		<Button
+			variant="ghost"
+			size="sm"
 			onclick={onClearFilters}
 			class="flex h-8 items-center gap-1 rounded-lg px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
 		>
 			<Icon icon="close" size={13} />
 			<span>Clear</span>
 		</Button>
+	{/if}
+
+	{#if saveViewOpen}
+		<form
+			class="flex items-center gap-1.5"
+			onsubmit={(e) => {
+				e.preventDefault();
+				submitViewName();
+			}}
+		>
+			<Input
+				bind:value={viewName}
+				placeholder="View name..."
+				class="h-8 w-40 rounded-lg border-input bg-transparent px-2.5 text-[12px] text-foreground outline-none placeholder:text-muted-foreground/50 dark:bg-input/30"
+			/>
+			<Button type="submit" variant="outline" size="sm" class="h-8 rounded-lg text-[12px]">
+				Save
+			</Button>
+		</form>
 	{/if}
 </div>

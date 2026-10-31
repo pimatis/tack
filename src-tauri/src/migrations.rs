@@ -107,6 +107,11 @@ pub(crate) fn run_migrations(conn: &Connection) -> Result<(), String> {
             "index_task_recurrence_parent",
             include_str!("../migrations/023_task_recurrence_index.sql"),
         ),
+        (
+            24,
+            "backlog_estimates_relations_views",
+            include_str!("../migrations/024_backlog_estimates_relations_views.sql"),
+        ),
     ];
     let known: std::collections::HashSet<i64> =
         migrations.iter().map(|(v, _, _)| *v as i64).collect();

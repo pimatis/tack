@@ -1,4 +1,4 @@
-export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'canceled';
+export type TaskStatus = 'backlog' | 'todo' | 'in_progress' | 'done' | 'canceled';
 
 export type TaskPriority = 0 | 1 | 2 | 3 | 4;
 
@@ -20,6 +20,18 @@ export type Task = {
 	recurrenceRule?: string | null;
 	// the occurrence this task was spawned from
 	recurrenceParentId?: string | null;
+	// parent task in the hierarchy; null when top-level
+	parentId?: string | null;
+	// planned effort in minutes, null when unset
+	estimateMinutes?: number | null;
+	// accumulated timer time in seconds
+	trackedSeconds?: number;
+	// utc iso timestamp while the timer is running, null when stopped
+	timerStartedAt?: string | null;
+	// computed in the list queries: an open task blocks this one / own children
+	blocked?: boolean;
+	childrenTotal?: number;
+	childrenDone?: number;
 	sortOrder?: number;
 	pinned?: boolean;
 	labelIds?: string[];

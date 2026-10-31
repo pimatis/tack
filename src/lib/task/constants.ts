@@ -1,13 +1,14 @@
 import type { TaskStatus } from '$lib/types/task';
 
 export const statusConfig: Record<TaskStatus, { label: string }> = {
+	backlog: { label: 'Backlog' },
 	todo: { label: 'Todo' },
 	in_progress: { label: 'In progress' },
 	done: { label: 'Done' },
 	canceled: { label: 'Canceled' }
 };
 
-export const statusOrder: TaskStatus[] = ['todo', 'in_progress', 'done', 'canceled'];
+export const statusOrder: TaskStatus[] = ['backlog', 'todo', 'in_progress', 'done', 'canceled'];
 
 export const priorityConfig: Record<number, { label: string; bars: number; color: string }> = {
 	0: { label: 'No priority', bars: 0, color: 'text-muted-foreground' },

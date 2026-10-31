@@ -22,14 +22,16 @@ const MAX_ROWS: usize = 10_000;
 
 // tables the app writes through the live server. tasks_fts is missing on
 // purpose: triggers own that index and a direct write desyncs search
-const WRITABLE_TABLES: [&str; 8] = [
+const WRITABLE_TABLES: [&str; 10] = [
     "activity_log",
     "labels",
     "projects",
+    "saved_views",
     "settings",
     "subtasks",
     "task_attachments",
     "task_labels",
+    "task_relations",
     "tasks",
 ];
 

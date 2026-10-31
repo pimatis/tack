@@ -32,6 +32,8 @@ type CreateTaskInput = Pick<Task, 'title'> &
 			| 'reminderAt'
 			| 'recurrenceRule'
 			| 'recurrenceParentId'
+			| 'parentId'
+			| 'estimateMinutes'
 		>
 	>;
 
@@ -47,6 +49,8 @@ type UpdateTaskInput = Partial<
 		| 'pinned'
 		| 'reminderAt'
 		| 'recurrenceRule'
+		| 'parentId'
+		| 'estimateMinutes'
 	>
 >;
 
@@ -64,11 +68,23 @@ const TASK_LIST_COLUMNS = `
 	reminder_sent_at AS reminderSentAt,
 	recurrence_rule AS recurrenceRule,
 	recurrence_parent_id AS recurrenceParentId,
+	parent_id AS parentId,
+	estimate_minutes AS estimateMinutes,
+	tracked_seconds AS trackedSeconds,
+	timer_started_at AS timerStartedAt,
 	sort_order AS sortOrder,
 	pinned,
 	created_at AS createdAt,
 	updated_at AS updatedAt,
-	deleted_at AS deletedAt
+	deleted_at AS deletedAt,
+	EXISTS (
+		SELECT 1 FROM task_relations r
+		JOIN tasks b ON b.id = r.task_id
+		WHERE r.related_task_id = tasks.id AND r.type = 'blocks'
+			AND b.status NOT IN ('done', 'canceled') AND b.deleted_at IS NULL
+	) AS blocked,
+	(SELECT COUNT(*) FROM tasks c WHERE c.parent_id = tasks.id AND c.deleted_at IS NULL) AS childrenTotal,
+	(SELECT COUNT(*) FROM tasks c WHERE c.parent_id = tasks.id AND c.deleted_at IS NULL AND c.status = 'done') AS childrenDone
 `;
 
 // full columns: list columns + description, for detail views
@@ -107,6 +123,10 @@ export async function create(input: CreateTaskInput): Promise<Task> {
 			reminderAt: input.reminderAt ?? null,
 			recurrenceRule: input.recurrenceRule ?? null,
 			recurrenceParentId: input.recurrenceParentId ?? null,
+			parentId: input.parentId ?? null,
+			estimateMinutes: input.estimateMinutes ?? null,
+			trackedSeconds: 0,
+			timerStartedAt: null,
 			sortOrder: 0,
 			createdAt: now,
 			updatedAt: now,
@@ -114,8 +134,8 @@ export async function create(input: CreateTaskInput): Promise<Task> {
 		};
 
 		await db.execute(
-			`INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, reminder_at, recurrence_rule, recurrence_parent_id, sort_order, created_at, updated_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 0, $13, $14)`,
+			`INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, reminder_at, recurrence_rule, recurrence_parent_id, parent_id, estimate_minutes, sort_order, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 0, $15, $16)`,
 			[
 				task.id,
 				task.number,
@@ -129,6 +149,8 @@ export async function create(input: CreateTaskInput): Promise<Task> {
 				task.reminderAt,
 				task.recurrenceRule,
 				task.recurrenceParentId,
+				task.parentId,
+				task.estimateMinutes,
 				task.createdAt,
 				task.updatedAt
 			]
@@ -271,6 +293,35 @@ export async function update(id: string, input: UpdateTaskInput): Promise<Task |
 			});
 		}
 
+		if (
+			input.estimateMinutes !== undefined &&
+			(current.estimateMinutes ?? null) !== input.estimateMinutes
+		) {
+			values.push(input.estimateMinutes);
+			assignments.push(`estimate_minutes = $${values.length}`);
+			activityEntries.push({
+				action: 'estimate_changed',
+				field: 'estimate_minutes',
+				oldValue: current.estimateMinutes != null ? `${current.estimateMinutes}m` : null,
+				newValue: input.estimateMinutes != null ? `${input.estimateMinutes}m` : null
+			});
+		}
+
+		if (input.parentId !== undefined && (current.parentId ?? null) !== input.parentId) {
+			// a cycle would orphan the whole subtree in any tree walk
+			if (input.parentId && (await isAncestorOf(id, input.parentId))) {
+				throw new Error('Cannot set parent: it would create a cycle');
+			}
+			values.push(input.parentId);
+			assignments.push(`parent_id = $${values.length}`);
+			activityEntries.push({
+				action: 'parent_changed',
+				field: 'parent_id',
+				oldValue: current.parentId ?? null,
+				newValue: input.parentId ?? null
+			});
+		}
+
 		if (assignments.length === 0) return current;
 
 		values.push(new Date().toISOString());
@@ -282,6 +333,9 @@ export async function update(id: string, input: UpdateTaskInput): Promise<Task |
 			`UPDATE tasks SET ${assignments.join(', ')} WHERE id = $${values.length}`,
 			values
 		);
+		if (input.status === 'done' || input.status === 'canceled') {
+			await bankTerminalTimers([id]);
+		}
 
 		if (result.rowsAffected === 0) return null;
 
@@ -308,6 +362,23 @@ export async function update(id: string, input: UpdateTaskInput): Promise<Task |
 	} catch (error) {
 		throw new Error('Failed to update task', { cause: error });
 	}
+}
+
+// walk the ancestor chain of candidateParent; true when taskId is in it, which
+// would make "taskId's parent = candidateParent" a cycle
+async function isAncestorOf(taskId: string, candidateParent: string): Promise<boolean> {
+	const db = await getDb();
+	let current: string | null = candidateParent;
+	for (let i = 0; i < 100; i++) {
+		if (current === taskId) return true;
+		const rows: { parent_id: string | null }[] = await db.select(
+			'SELECT parent_id FROM tasks WHERE id = $1',
+			[current]
+		);
+		current = rows[0]?.parent_id ?? null;
+		if (!current) return false;
+	}
+	return true;
 }
 
 // copy a completed occurrence forward on its schedule; the recurrence parent
@@ -398,6 +469,22 @@ export async function bulkDelete(ids: string[]): Promise<void> {
 	}
 }
 
+// a terminal status must not leave a timer running: bank the elapsed segment
+// and clear the start marker. runs after the status write so the stored
+// status is the source of truth
+async function bankTerminalTimers(ids: string[]): Promise<void> {
+	const db = await getDb();
+	const now = new Date().toISOString();
+	const placeholders = ids.map((_, i) => `$${i + 2}`).join(', ');
+	await db.execute(
+		`UPDATE tasks SET
+			tracked_seconds = tracked_seconds + MAX(0, CAST((julianday($1) - julianday(timer_started_at)) * 86400 AS INTEGER)),
+			timer_started_at = NULL
+		 WHERE id IN (${placeholders}) AND timer_started_at IS NOT NULL AND status IN ('done', 'canceled')`,
+		[now, ...ids]
+	);
+}
+
 export async function bulkUpdateStatus(ids: string[], status: TaskStatus): Promise<void> {
 	if (ids.length === 0) return;
 	try {
@@ -421,6 +508,9 @@ export async function bulkUpdateStatus(ids: string[], status: TaskStatus): Promi
 			`UPDATE tasks SET status = $1, updated_at = $2 WHERE id IN (${placeholders})`,
 			[status, now, ...ids]
 		);
+		if (status === 'done' || status === 'canceled') {
+			await bankTerminalTimers(ids);
+		}
 		for (const id of ids) {
 			void logActivity(id, 'status_changed', 'status', undefined, statusConfig[status].label);
 		}
@@ -548,6 +638,49 @@ export async function emptyTrash(): Promise<void> {
 		await db.execute('DELETE FROM tasks WHERE deleted_at IS NOT NULL');
 	} catch (error) {
 		throw new Error('Failed to empty trash', { cause: error });
+	}
+}
+
+// ---- time tracking ----
+
+// one running timer at a time: starting banks any other timer's elapsed first
+export async function startTimer(id: string): Promise<void> {
+	try {
+		const db = await getDb();
+		const now = new Date().toISOString();
+		await db.execute(
+			`UPDATE tasks SET
+				tracked_seconds = tracked_seconds + MAX(0, CAST((julianday($1) - julianday(timer_started_at)) * 86400 AS INTEGER)),
+				timer_started_at = NULL,
+				updated_at = $1
+			 WHERE timer_started_at IS NOT NULL`,
+			[now]
+		);
+		await db.execute('UPDATE tasks SET timer_started_at = $1, updated_at = $1 WHERE id = $2', [
+			now,
+			id
+		]);
+		void logActivity(id, 'timer_started');
+	} catch (error) {
+		throw new Error('Failed to start timer', { cause: error });
+	}
+}
+
+export async function stopTimer(id: string): Promise<void> {
+	try {
+		const db = await getDb();
+		const now = new Date().toISOString();
+		await db.execute(
+			`UPDATE tasks SET
+				tracked_seconds = tracked_seconds + MAX(0, CAST((julianday($1) - julianday(timer_started_at)) * 86400 AS INTEGER)),
+				timer_started_at = NULL,
+				updated_at = $1
+			 WHERE id = $2 AND timer_started_at IS NOT NULL`,
+			[now, id]
+		);
+		void logActivity(id, 'timer_stopped');
+	} catch (error) {
+		throw new Error('Failed to stop timer', { cause: error });
 	}
 }
 

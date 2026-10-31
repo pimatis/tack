@@ -58,7 +58,13 @@ fn query_all(
     Ok(rows)
 }
 
-pub fn export(conn: &Connection, json: bool, output_path: &str) -> Result<()> {
+pub fn export(conn: &Connection, json: bool, output_path: &str, format: &str) -> Result<()> {
+    match format {
+        "csv" => return export_csv(conn, output_path),
+        "markdown" | "md" => return export_markdown(conn, output_path),
+        "json" => {}
+        other => return Err(format!("Unknown format '{}': use json, csv or markdown", other)),
+    }
     let data = ExportData {
         projects: query_all(conn, "projects", "*")?,
         tasks: query_all(conn, "tasks", "*")?,
@@ -100,6 +106,15 @@ pub fn export(conn: &Connection, json: bool, output_path: &str) -> Result<()> {
 pub fn import(conn: &Connection, json: bool, file_path: &str) -> Result<()> {
     let content =
         std::fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
+    if !content.trim_start().starts_with('{') {
+        let count = import_csv(conn, &content)?;
+        if json {
+            println!("{}", json!({ "success": true, "action": "imported", "tasks": count }));
+        } else {
+            println!("Imported {} task(s)", count);
+        }
+        return Ok(());
+    }
     let data: ExportData =
         serde_json::from_str(&content).map_err(|e| format!("Failed to parse JSON: {}", e))?;
 
@@ -327,4 +342,230 @@ pub fn backup_delete(json: bool, db_path: &Path, name: &str) -> Result<()> {
         println!("Deleted backup: {}", name);
     }
     Ok(())
+}
+
+// ---- csv + markdown export, csv import ----
+
+fn csv_cell(value: &serde_json::Value) -> String {
+    let s = match value {
+        serde_json::Value::Null => String::new(),
+        serde_json::Value::String(s) => s.clone(),
+        other => other.to_string(),
+    };
+    if s.contains([',', '"', '\n']) {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s
+    }
+}
+
+fn export_csv(conn: &Connection, output_path: &str) -> Result<()> {
+    let rows = query_all(
+        conn,
+        "tasks t LEFT JOIN projects p ON p.id = t.project_id WHERE t.deleted_at IS NULL",
+        "t.title, t.description, t.status, t.priority, p.prefix AS project, (SELECT GROUP_CONCAT(l.name, ';') FROM task_labels tl JOIN labels l ON l.id = tl.label_id WHERE tl.task_id = t.id) AS labels, t.due_date, t.end_date, t.estimate_minutes",
+    )?;
+    let mut out = String::from(
+        "title,description,status,priority,project,labels,due_date,end_date,estimate_minutes\n",
+    );
+    for row in &rows {
+        let cells: Vec<String> = [
+            "title",
+            "description",
+            "status",
+            "priority",
+            "project",
+            "labels",
+            "due_date",
+            "end_date",
+            "estimate_minutes",
+        ]
+        .iter()
+        .map(|c| csv_cell(row.get(*c).unwrap_or(&serde_json::Value::Null)))
+        .collect();
+        out.push_str(&cells.join(","));
+        out.push('\n');
+    }
+    let path = if output_path.is_empty() {
+        "tack-export.csv"
+    } else {
+        output_path
+    };
+    std::fs::write(path, out).map_err(|e| format!("Failed to write file: {}", e))?;
+    println!("Exported {} tasks to {}", rows.len(), path);
+    Ok(())
+}
+
+fn export_markdown(conn: &Connection, output_path: &str) -> Result<()> {
+    let rows = query_all(
+        conn,
+        "tasks t LEFT JOIN projects p ON p.id = t.project_id WHERE t.deleted_at IS NULL",
+        "t.title, t.status, t.due_date, t.number, p.prefix AS project",
+    )?;
+    let mut out = String::from("# Tasks\n\n");
+    let mut last_status = String::new();
+    for row in &rows {
+        let status = row.get("status").and_then(|v| v.as_str()).unwrap_or("todo");
+        if status != last_status {
+            out.push_str(&format!("## {}\n\n", status.replace('_', " ")));
+            last_status = status.to_string();
+        }
+        let checkbox = match status {
+            "done" => "[x]",
+            "canceled" => "[-]",
+            _ => "[ ]",
+        };
+        let id = format!(
+            "{}-{}",
+            row.get("project").and_then(|v| v.as_str()).unwrap_or("TSK"),
+            row.get("number").and_then(|v| v.as_i64()).unwrap_or(0)
+        );
+        let due = row
+            .get("due_date")
+            .and_then(|v| v.as_str())
+            .map(|d| format!(" (due {})", d))
+            .unwrap_or_default();
+        let title = row.get("title").and_then(|v| v.as_str()).unwrap_or("");
+        out.push_str(&format!("- {} **{}** {}{}\n", checkbox, id, title, due));
+    }
+    let path = if output_path.is_empty() {
+        "tack-export.md"
+    } else {
+        output_path
+    };
+    std::fs::write(path, out).map_err(|e| format!("Failed to write file: {}", e))?;
+    println!("Exported {} tasks to {}", rows.len(), path);
+    Ok(())
+}
+
+fn parse_csv_line(line: &str) -> Vec<String> {
+    let mut cells = Vec::new();
+    let mut cur = String::new();
+    let mut in_quotes = false;
+    let mut chars = line.chars().peekable();
+    while let Some(c) = chars.next() {
+        if in_quotes {
+            if c == '"' {
+                if chars.peek() == Some(&'"') {
+                    cur.push('"');
+                    chars.next();
+                } else {
+                    in_quotes = false;
+                }
+            } else {
+                cur.push(c);
+            }
+        } else if c == '"' {
+            in_quotes = true;
+        } else if c == ',' {
+            cells.push(std::mem::take(&mut cur));
+        } else {
+            cur.push(c);
+        }
+    }
+    cells.push(cur);
+    cells
+}
+
+// import task rows in the same column layout export_csv writes; ids/numbers
+// are assigned fresh, projects and labels match by name or prefix
+fn import_csv(conn: &Connection, text: &str) -> Result<usize> {
+    let mut lines = text.lines().filter(|l| !l.trim().is_empty());
+    let header = match lines.next() {
+        Some(h) => parse_csv_line(h),
+        None => return Ok(0),
+    };
+    let idx = |name: &str| header.iter().position(|h| h.trim().eq_ignore_ascii_case(name));
+    if idx("title").is_none() {
+        return Err("CSV is missing a \"title\" column".to_string());
+    }
+
+    let mut imported = 0;
+    for line in lines {
+        let cells = parse_csv_line(line);
+        let get = |name: &str| -> String {
+            idx(name)
+                .and_then(|i| cells.get(i))
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default()
+        };
+        let title = get("title");
+        if title.is_empty() {
+            continue;
+        }
+        let project_key = get("project").to_lowercase();
+        let project_id: Option<String> = if project_key.is_empty() {
+            None
+        } else {
+            let mut stmt = conn
+                .prepare("SELECT id FROM projects WHERE prefix = ?1 COLLATE NOCASE OR name = ?1 COLLATE NOCASE")
+                .map_err(|e| e.to_string())?;
+            stmt.query_row(params![project_key], |r| r.get(0)).ok()
+        };
+        let status = get("status").to_lowercase();
+        let status = if ["backlog", "todo", "in_progress", "done", "canceled"].contains(&status.as_str()) {
+            status
+        } else {
+            "todo".to_string()
+        };
+        let priority: i32 = get("priority").parse().unwrap_or(0);
+        let estimate: Option<i64> = get("estimate_minutes").parse().ok();
+        let id = new_id();
+        let now = now_iso();
+        let number: i32 = match &project_id {
+            Some(pid) => conn
+                .query_row(
+                    "SELECT COALESCE(MAX(number), 0) + 1 FROM tasks WHERE project_id = ?1",
+                    params![pid],
+                    |r| r.get(0),
+                ),
+            None => conn.query_row(
+                "SELECT COALESCE(MAX(number), 0) + 1 FROM tasks WHERE project_id IS NULL",
+                [],
+                |r| r.get(0),
+            ),
+        }
+        .map_err(|e| e.to_string())?;
+        let description = get("description");
+        let due_date = get("due_date");
+        let end_date = get("end_date");
+        conn.execute(
+            "INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, estimate_minutes, sort_order, pinned, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0, 0, ?11, ?12)",
+            params![
+                id,
+                number,
+                project_id,
+                title,
+                (!description.is_empty()).then_some(description),
+                status,
+                priority.clamp(0, 4),
+                (!due_date.is_empty()).then_some(due_date),
+                (!end_date.is_empty()).then_some(end_date),
+                estimate,
+                now,
+                now
+            ],
+        )
+        .map_err(|e| format!("Failed to import task: {}", e))?;
+        let label_names = get("labels");
+        for name in label_names.split(';').map(|n| n.trim()).filter(|n| !n.is_empty()) {
+            let label_id: Option<String> = conn
+                .query_row(
+                    "SELECT id FROM labels WHERE name = ?1 COLLATE NOCASE",
+                    params![name],
+                    |r| r.get(0),
+                )
+                .ok();
+            if let Some(lid) = label_id {
+                conn.execute(
+                    "INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?1, ?2)",
+                    params![id, lid],
+                )
+                .ok();
+            }
+        }
+        imported += 1;
+    }
+    Ok(imported)
 }

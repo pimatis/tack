@@ -11,6 +11,7 @@
 	import EndDateBadge from './EndDateBadge.svelte';
 	import ReminderBadge from './ReminderBadge.svelte';
 	import RecurrenceBadge from './RecurrenceBadge.svelte';
+	import TimerBadge from './TimerBadge.svelte';
 	import TaskMenu from './TaskMenu.svelte';
 	import { sortableItem, type DragDropState } from '$lib/dnd';
 	import type { Task, TaskPriority, TaskStatus } from '$lib/types/task';
@@ -33,9 +34,13 @@
 		onTogglePin,
 		onDuplicate,
 		onDelete,
-		onListDrop
+		onListDrop,
+		childrenExpanded = false,
+		onToggleChildren = undefined
 	}: {
 		task: Task;
+		childrenExpanded?: boolean;
+		onToggleChildren?: () => void;
 		projects: Project[];
 		appSettings: Settings;
 		labelMap: Map<string, Label>;
@@ -150,37 +155,79 @@
 			</span>
 		</Button>
 
-		<!-- due date -->
-		<div class="hidden w-24 shrink-0 justify-end md:flex">
-			<DueDateBadge dueDate={task.dueDate} />
-		</div>
-
-		<!-- end date -->
-		<div class="hidden w-24 shrink-0 justify-end md:flex">
-			<EndDateBadge endDate={task.endDate} />
-		</div>
-
-		<!-- date -->
-		<span class="hidden w-16 shrink-0 text-right text-[11px] text-muted-foreground/40 md:block">
-			{formatDate(task.updatedAt)}
-		</span>
-
 		<!-- recurrence indicator -->
-		<div class="flex w-5 shrink-0 justify-center">
-			<RecurrenceBadge rule={task.recurrenceRule} />
-		</div>
+		{#if task.recurrenceRule}
+			<div class="flex w-5 shrink-0 justify-center">
+				<RecurrenceBadge rule={task.recurrenceRule} />
+			</div>
+		{/if}
 
 		<!-- reminder indicator -->
-		<div class="flex w-5 shrink-0 justify-center">
-			<ReminderBadge reminderAt={task.reminderAt} sentAt={task.reminderSentAt} />
-		</div>
+		{#if task.reminderAt}
+			<div class="flex w-5 shrink-0 justify-center">
+				<ReminderBadge reminderAt={task.reminderAt} sentAt={task.reminderSentAt} />
+			</div>
+		{/if}
+
+		<!-- tracked time (badge self-hides) -->
+		<TimerBadge {task} />
+
+		<!-- blocked + children -->
+		{#if task.blocked || (task.childrenTotal ?? 0) > 0}
+			<div class="hidden shrink-0 items-center gap-1.5 md:flex">
+				{#if task.blocked}
+					<span class="text-red-400" title="Blocked">
+						<Icon icon="blocked" size={13} />
+					</span>
+				{/if}
+				{#if (task.childrenTotal ?? 0) > 0}
+					<button
+						class="flex shrink-0 items-center gap-0.5 rounded-sm text-[11px] text-muted-foreground/50 tabular-nums transition-colors hover:text-foreground"
+						title="Toggle child tasks"
+						onpointerdown={(e) => e.stopPropagation()}
+						onclick={(e) => {
+							e.stopPropagation();
+							onToggleChildren?.();
+						}}
+					>
+						<Icon
+							icon="arrow-down"
+							size={10}
+							class="transition-transform {childrenExpanded ? '' : '-rotate-90'}"
+						/>
+						{task.childrenDone ?? 0}/{task.childrenTotal}
+					</button>
+				{/if}
+			</div>
+		{/if}
 
 		<!-- pinned indicator -->
-		<div class="flex w-5 shrink-0 justify-center">
-			{#if task.pinned}
+		{#if task.pinned}
+			<div class="flex w-5 shrink-0 justify-center">
 				<Icon icon="pin" size={13} class="text-foreground/60" />
-			{/if}
-		</div>
+			</div>
+		{/if}
+
+		<!-- due date -->
+		{#if task.dueDate}
+			<div class="hidden shrink-0 justify-end md:flex">
+				<DueDateBadge dueDate={task.dueDate} />
+			</div>
+		{/if}
+
+		<!-- end date -->
+		{#if task.endDate}
+			<div class="hidden shrink-0 justify-end md:flex">
+				<EndDateBadge endDate={task.endDate} />
+			</div>
+		{/if}
+
+		<!-- date -->
+		<span
+			class="hidden w-[86px] shrink-0 text-right text-[11px] text-muted-foreground/40 tabular-nums md:block"
+		>
+			{formatDate(task.updatedAt)}
+		</span>
 	</article>
 </div>
 <DropdownMenu.Root bind:open={menuOpen}>

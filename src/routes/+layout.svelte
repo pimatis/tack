@@ -16,6 +16,7 @@
 	import { startBackupScheduler } from '$lib/backup/backup.service';
 	import { startReminderScheduler } from '$lib/reminders/reminder.service';
 	import { startLiveManager } from '$lib/live/live.service';
+	import { startAgentManager } from '$lib/agent/agent.service';
 	import { isLiveAuthRequired } from '$lib/live/auth.service';
 	import LiveAuthDialog from '../components/LiveAuthDialog.svelte';
 	import { isTauri } from '$lib/db/client';
@@ -51,6 +52,7 @@
 		const syncInterval = window.setInterval(() => void loadSettingsFromDb(), 30000);
 		const stopBackups = startBackupScheduler();
 		const stopLive = startLiveManager();
+		const stopAgent = startAgentManager();
 		const stopReminders = startReminderScheduler();
 
 		const narrowQuery = window.matchMedia('(max-width: 1023px)');
@@ -72,6 +74,7 @@
 			window.clearInterval(syncInterval);
 			stopBackups();
 			stopLive();
+			stopAgent();
 			stopReminders();
 			narrowQuery.removeEventListener('change', applyNarrow);
 			mediaQuery.removeEventListener('change', handleThemeChange);

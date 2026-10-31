@@ -23,6 +23,7 @@
 	import RecurrencePicker from './RecurrencePicker.svelte';
 	import ReminderPicker from './ReminderPicker.svelte';
 	import { getSettings } from '$lib/stores/settings';
+	import { parseEstimate } from '$lib/task/time';
 	import Icon from '$lib/components/Icon.svelte';
 
 	type PendingAttachment = {
@@ -38,6 +39,7 @@
 		labels: Label[];
 		initialDueDate?: string | null;
 		initialTitle?: string | null;
+		initialParentId?: string | null;
 		onCreated?: (task: Task) => void;
 		onLabelCreated?: (label: Label) => void;
 		onLabelUpdated?: (label: Label) => void;
@@ -50,6 +52,7 @@
 		labels,
 		initialDueDate = null,
 		initialTitle = null,
+		initialParentId = null,
 		onCreated,
 		onLabelCreated,
 		onLabelUpdated,
@@ -65,6 +68,7 @@
 	let endDate = $state<string>('');
 	let reminderAt = $state<string>('');
 	let recurrenceRule = $state('');
+	let estimateText = $state('');
 	let selectedLabelIds = $state<string[]>([]);
 	let error = $state<string | null>(null);
 	let submitting = $state(false);
@@ -87,6 +91,7 @@
 	}
 
 	const statusLabels: Record<TaskStatus, string> = {
+		backlog: 'Backlog',
 		todo: 'Todo',
 		in_progress: 'In progress',
 		done: 'Done',
@@ -115,6 +120,77 @@
 		if (open) requestAnimationFrame(() => titleRef?.focus());
 	});
 
+	// draft autosave: a dialog closed without submitting keeps its fields in
+	// localStorage; an explicit opener (palette prefill, calendar "+", new
+	// sub-task) starts a draftless session and clears any older draft
+	const DRAFT_KEY = 'tack-create-task-draft';
+	let draftEnabled = $state(false);
+	let draftTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function clearDraft() {
+		try {
+			localStorage.removeItem(DRAFT_KEY);
+		} catch {
+			// localStorage unavailable
+		}
+	}
+
+	$effect(() => {
+		if (!open) {
+			draftEnabled = false;
+			return;
+		}
+		if (initialTitle || initialDueDate || initialParentId) {
+			clearDraft();
+			return;
+		}
+		try {
+			const raw = localStorage.getItem(DRAFT_KEY);
+			if (raw) {
+				const d = JSON.parse(raw) as Record<string, never>;
+				title = d.title ?? title;
+				description = d.description ?? description;
+				status = d.status ?? status;
+				priority = d.priority ?? priority;
+				projectId = d.projectId ?? projectId;
+				dueDate = d.dueDate ?? dueDate;
+				endDate = d.endDate ?? endDate;
+				reminderAt = d.reminderAt ?? reminderAt;
+				recurrenceRule = d.recurrenceRule ?? recurrenceRule;
+				estimateText = d.estimateText ?? estimateText;
+				selectedLabelIds = d.selectedLabelIds ?? selectedLabelIds;
+			}
+		} catch {
+			// corrupt or missing draft: start empty
+		}
+		draftEnabled = true;
+	});
+
+	$effect(() => {
+		if (!open || !draftEnabled) return;
+		const snapshot = JSON.stringify({
+			title,
+			description,
+			status,
+			priority,
+			projectId,
+			dueDate,
+			endDate,
+			reminderAt,
+			recurrenceRule,
+			estimateText,
+			selectedLabelIds
+		});
+		if (draftTimer) clearTimeout(draftTimer);
+		draftTimer = setTimeout(() => {
+			try {
+				localStorage.setItem(DRAFT_KEY, snapshot);
+			} catch {
+				// ignore quota errors
+			}
+		}, 300);
+	});
+
 	function reset() {
 		title = '';
 		description = '';
@@ -124,6 +200,7 @@
 		dueDate = '';
 		endDate = '';
 		recurrenceRule = '';
+		estimateText = '';
 		error = null;
 		createMore = false;
 		attachments = [];
@@ -195,6 +272,11 @@
 			return;
 		}
 
+		if (estimateText.trim() && parseEstimate(estimateText) === null) {
+			error = 'Invalid estimate (try 90m, 2h or 1h30m)';
+			return;
+		}
+
 		error = null;
 		submitting = true;
 
@@ -208,8 +290,12 @@
 				dueDate: dueDate || null,
 				endDate: endDate || null,
 				reminderAt: reminderAt || null,
-				recurrenceRule: recurrenceRule || null
+				recurrenceRule: recurrenceRule || null,
+				parentId: initialParentId ?? null,
+				estimateMinutes: parseEstimate(estimateText)
 			});
+
+			clearDraft();
 
 			for (const att of attachments) {
 				await createAttachment({
@@ -235,6 +321,7 @@
 				dueDate = '';
 				endDate = '';
 				recurrenceRule = '';
+				estimateText = '';
 				previewMode = false;
 				requestAnimationFrame(() => titleRef?.focus());
 			} else {
@@ -456,6 +543,19 @@
 							value={reminderAt}
 							onSelect={(iso) => (reminderAt = iso)}
 							onClear={() => (reminderAt = '')}
+						/>
+					</div>
+
+					<div class="relative">
+						<Icon
+							icon="stopwatch"
+							size={13}
+							class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground/50"
+						/>
+						<Input
+							bind:value={estimateText}
+							placeholder="Estimate (90m, 2h, 1h30m)"
+							class="h-8 w-full rounded-lg border-input bg-transparent pr-3 pl-8 text-[12px] text-foreground outline-none placeholder:text-muted-foreground/50 dark:bg-input/30"
 						/>
 					</div>
 				</div>

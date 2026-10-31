@@ -23,6 +23,19 @@
 	} from '$lib/repositories/subtask.repository';
 	import { findByTaskId as findActivity } from '$lib/repositories/activity.repository';
 	import { log as logActivity } from '$lib/repositories/activity.repository';
+	import {
+		findForTask as findRelations,
+		findChildren,
+		add as addRelation,
+		remove as removeRelation,
+		type ChildTask
+	} from '$lib/repositories/relation.repository';
+	import { startTimer, stopTimer } from '$lib/repositories/task.repository';
+	import type { TaskRelation, RelationType } from '$lib/types/relation';
+	import { relationLabels } from '$lib/types/relation';
+	import { parseEstimate, formatMinutes, trackedSeconds, formatSeconds } from '$lib/task/time';
+	import RelationPicker from './RelationPicker.svelte';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import type { Label } from '$lib/types/label';
 	import type { TaskAttachment } from '$lib/types/attachment';
 	import type { Subtask } from '$lib/types/subtask';
@@ -93,6 +106,16 @@
 	let endDate = $state<string>('');
 	let reminderAt = $state<string>('');
 	let recurrenceRule = $state<string>('');
+	let estimateText = $state<string>('');
+	// relations, children and timer apply instantly like pin/delete do, not
+	// through the staged save form
+	let relations = $state<TaskRelation[]>([]);
+	let children = $state<ChildTask[]>([]);
+	let parentTask = $state<ChildTask | null>(null);
+	let timerRunning = $state(false);
+	let trackedNow = $state(0);
+	let timerTick = $state(Date.now());
+	let relationType = $state<RelationType>('relates');
 	let error = $state<string | null>(null);
 	let submitting = $state(false);
 	let previewMode = $state(false);
@@ -127,6 +150,7 @@
 		endDate: string;
 		reminderAt: string;
 		recurrenceRule: string;
+		estimateText: string;
 		labelIds: string[];
 		pendingCount: number;
 	} | null>(null);
@@ -140,6 +164,7 @@
 				original.endDate !== endDate ||
 				original.reminderAt !== reminderAt ||
 				original.recurrenceRule !== recurrenceRule ||
+				original.estimateText !== estimateText ||
 				original.pendingCount !== pendingAttachments.length ||
 				original.labelIds.length !== selectedLabelIds.length ||
 				selectedLabelIds.some((id) => !original!.labelIds.includes(id)))
@@ -149,6 +174,7 @@
 	let activities = $state<ActivityLog[]>([]);
 
 	const statusLabels: Record<TaskStatus, string> = {
+		backlog: 'Backlog',
 		todo: 'Todo',
 		in_progress: 'In progress',
 		done: 'Done',
@@ -179,6 +205,14 @@
 		endDate = task.endDate ?? '';
 		reminderAt = task.reminderAt ?? '';
 		recurrenceRule = task.recurrenceRule ?? '';
+		estimateText = formatMinutes(task.estimateMinutes);
+		timerRunning = !!task.timerStartedAt;
+		trackedNow = task.trackedSeconds ?? 0;
+		startedAtMs = task.timerStartedAt ? new Date(task.timerStartedAt).getTime() : 0;
+		timerTick = Date.now();
+		relations = [];
+		children = [];
+		parentTask = null;
 		error = null;
 		previewMode = false;
 		pendingAttachments = [];
@@ -195,6 +229,7 @@
 			endDate: task.endDate ?? '',
 			reminderAt: task.reminderAt ?? '',
 			recurrenceRule: task.recurrenceRule ?? '',
+			estimateText: formatMinutes(task.estimateMinutes),
 			labelIds: [],
 			pendingCount: 0
 		};
@@ -202,6 +237,9 @@
 		void loadTaskLabels(task.id);
 		void loadSubtasks(task.id);
 		void loadActivity(task.id);
+		void loadRelations(task.id);
+		void loadChildren(task.id);
+		void loadParent(task);
 		// the list view omits the description column; fetch the full task so
 		// existing descriptions show up
 		void loadFullTask(task.id);
@@ -263,6 +301,121 @@
 			subtasks = [];
 		} finally {
 			loadingSubtasks = false;
+		}
+	}
+
+	let startedAtMs = $state(0);
+
+	// ticking clock for the running-timer display in the rail
+	$effect(() => {
+		if (!timerRunning) return;
+		const t = setInterval(() => (timerTick = Date.now()), 30_000);
+		return () => clearInterval(t);
+	});
+	const trackedDisplay = $derived(
+		formatSeconds(
+			trackedNow + (timerRunning ? Math.max(0, Math.floor((timerTick - startedAtMs) / 1000)) : 0)
+		)
+	);
+
+	async function loadRelations(taskId: string) {
+		try {
+			relations = await findRelations(taskId);
+		} catch {
+			relations = [];
+		}
+	}
+
+	async function loadChildren(taskId: string) {
+		try {
+			children = await findChildren(taskId);
+		} catch {
+			children = [];
+		}
+	}
+
+	async function loadParent(t: Task) {
+		if (!t.parentId) return;
+		try {
+			const full = await findById(t.parentId);
+			if (!full) return;
+			parentTask = {
+				id: full.id,
+				number: full.number,
+				title: full.title,
+				status: full.status,
+				prefix
+			};
+		} catch {
+			parentTask = null;
+		}
+	}
+
+	// open another task in this same panel
+	async function openTask(id: string) {
+		const full = await findById(id).catch(() => null);
+		if (!full) return;
+		window.dispatchEvent(new CustomEvent('edit-task-from-command', { detail: full }));
+	}
+
+	async function handleAddRelation(otherId: string) {
+		if (!task) return;
+		try {
+			await addRelation(task.id, otherId, relationType);
+			await loadRelations(task.id);
+			void loadActivity(task.id);
+		} catch {
+			error = 'Failed to add relation';
+		}
+	}
+
+	async function handleRemoveRelation(rel: TaskRelation) {
+		if (!task) return;
+		try {
+			await removeRelation(task.id, rel.otherId, rel.type);
+			relations = relations.filter(
+				(r) => !(r.otherId === rel.otherId && r.type === rel.type && r.direction === rel.direction)
+			);
+			void loadActivity(task.id);
+		} catch {
+			error = 'Failed to remove relation';
+		}
+	}
+
+	async function handleSetParent(parentId: string | null) {
+		if (!task) return;
+		try {
+			await update(task.id, { parentId });
+			if (parentId) {
+				const full = await findById(parentId);
+				parentTask = full
+					? { id: full.id, number: full.number, title: full.title, status: full.status, prefix }
+					: null;
+			} else {
+				parentTask = null;
+			}
+			void loadActivity(task.id);
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to set parent';
+		}
+	}
+
+	async function handleToggleTimer() {
+		if (!task) return;
+		try {
+			if (timerRunning) {
+				await stopTimer(task.id);
+				trackedNow += Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000));
+				timerRunning = false;
+			} else {
+				await startTimer(task.id);
+				startedAtMs = Date.now();
+				timerTick = Date.now();
+				timerRunning = true;
+			}
+			void loadActivity(task.id);
+		} catch {
+			error = 'Failed to toggle timer';
 		}
 	}
 
@@ -498,6 +651,10 @@
 			error = 'Title is required';
 			return;
 		}
+		if (estimateText.trim() && parseEstimate(estimateText) === null) {
+			error = 'Invalid estimate (try 90m, 2h or 1h30m)';
+			return;
+		}
 		submitting = true;
 		try {
 			const updated = await update(task.id, {
@@ -508,7 +665,8 @@
 				dueDate: dueDate || null,
 				endDate: endDate || null,
 				reminderAt: reminderAt || null,
-				recurrenceRule: recurrenceRule || null
+				recurrenceRule: recurrenceRule || null,
+				estimateMinutes: parseEstimate(estimateText)
 			});
 
 			for (const att of pendingAttachments) {
@@ -600,6 +758,18 @@
 				return `reopened subtask "${entry.newValue}"`;
 			case 'subtask_removed':
 				return 'removed a subtask';
+			case 'estimate_changed':
+				return entry.newValue ? `set estimate to ${entry.newValue}` : 'removed the estimate';
+			case 'parent_changed':
+				return entry.newValue ? 'set a parent task' : 'removed the parent task';
+			case 'timer_started':
+				return 'started the timer';
+			case 'timer_stopped':
+				return 'stopped the timer';
+			case 'relation_added':
+				return 'added a relation';
+			case 'relation_removed':
+				return 'removed a relation';
 			case 'trashed':
 				return 'moved this task to trash';
 			case 'restored':
@@ -868,6 +1038,135 @@
 							{/if}
 						</section>
 
+						<!-- relations + child tasks -->
+						<section class="pt-6">
+							<div
+								class="flex items-center gap-1.5 pb-2 text-[11px] font-medium text-muted-foreground/60"
+							>
+								<Icon icon="link" size={12} />
+								<span>Relations</span>
+							</div>
+
+							{#if relations.length > 0}
+								<div class="flex flex-col gap-0.5">
+									{#each relations as rel (rel.direction + rel.type + rel.otherId)}
+										<div
+											class="group/rel flex items-center gap-2 rounded-md py-1 pr-1 transition-colors hover:bg-muted/30"
+										>
+											<span class="w-20 shrink-0 text-[11px] text-muted-foreground/50">
+												{relationLabels[rel.type][rel.direction === 'out' ? 'out' : 'in']}
+											</span>
+											<StatusIcon status={rel.otherStatus as TaskStatus} size={13} />
+											<button
+												type="button"
+												class="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+												onclick={() => void openTask(rel.otherId)}
+											>
+												<span class="shrink-0 font-mono text-[11px] text-muted-foreground/50">
+													{rel.otherPrefix ?? 'TSK'}-{rel.otherNumber}
+												</span>
+												<span class="min-w-0 flex-1 truncate text-[13px] text-foreground/90">
+													{rel.otherTitle}
+												</span>
+											</button>
+											<Button
+												variant="ghost"
+												size="icon-xs"
+												class="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/30 opacity-0 transition-all group-hover/rel:opacity-100 hover:text-destructive"
+												onclick={() => void handleRemoveRelation(rel)}
+												aria-label="Remove relation"
+											>
+												<Icon icon="close" size={12} />
+											</Button>
+										</div>
+									{/each}
+								</div>
+							{/if}
+
+							<div class="flex items-center gap-1.5 pt-1">
+								<DropdownMenu.Root>
+									<DropdownMenu.Trigger>
+										{#snippet child({ props })}
+											<Button
+												{...props}
+												variant="outline"
+												size="sm"
+												class="h-8 shrink-0 rounded-lg border-border bg-muted/30 px-2.5 text-[12px] font-normal shadow-none hover:bg-muted/50"
+											>
+												{relationLabels[relationType].out}
+											</Button>
+										{/snippet}
+									</DropdownMenu.Trigger>
+									<DropdownMenu.Content class="w-40 p-1.5" align="start">
+										{#each ['blocks', 'relates', 'duplicates'] as const as t (t)}
+											<DropdownMenu.Item
+												class="gap-2.5 py-1.5 text-[13px]"
+												onclick={() => (relationType = t)}
+											>
+												{relationLabels[t].out}
+												{#if relationType === t}
+													<Icon icon="check" size={14} class="ml-auto text-muted-foreground" />
+												{/if}
+											</DropdownMenu.Item>
+										{/each}
+									</DropdownMenu.Content>
+								</DropdownMenu.Root>
+								<div class="min-w-0 flex-1">
+									<RelationPicker
+										excludeId={task.id}
+										placeholder="Add relation..."
+										onPick={(t) => void handleAddRelation(t.id)}
+									/>
+								</div>
+							</div>
+						</section>
+
+						<!-- child tasks -->
+						<section class="pt-6">
+							<div
+								class="flex items-center gap-1.5 pb-2 text-[11px] font-medium text-muted-foreground/60"
+							>
+								<Icon icon="list" size={12} />
+								<span>Child tasks</span>
+								{#if children.length > 0}
+									<span>{children.length}</span>
+								{/if}
+								<div class="flex-1"></div>
+								<button
+									type="button"
+									class="flex items-center gap-1 text-[11px] text-muted-foreground/60 transition-colors hover:text-foreground"
+									onclick={() =>
+										window.dispatchEvent(
+											new CustomEvent('open-task-dialog', {
+												detail: { parentId: task.id }
+											})
+										)}
+								>
+									<Icon icon="add" size={10} />
+									<span>Add</span>
+								</button>
+							</div>
+							{#if children.length > 0}
+								<div class="flex flex-col gap-0.5">
+									{#each children as child (child.id)}
+										<button
+											type="button"
+											class="flex items-center gap-2 rounded-md py-1 text-left transition-colors hover:bg-muted/30"
+											onclick={() => void openTask(child.id)}
+										>
+											<StatusIcon status={child.status as TaskStatus} size={13} />
+											<span class="shrink-0 font-mono text-[11px] text-muted-foreground/50">
+												{child.prefix ?? 'TSK'}-{child.number}
+											</span>
+											<span class="min-w-0 flex-1 truncate text-[13px] text-foreground/90">
+												{child.title}
+											</span>
+										</button>
+									{/each}
+								</div>
+							{/if}
+						</section>
+
 						<!-- attachments -->
 						{#if loadingAttachments}
 							<div class="flex items-center gap-2 pt-6 text-[12px] text-muted-foreground">
@@ -1095,6 +1394,72 @@
 							onSelect={(iso) => (reminderAt = iso)}
 							onClear={() => (reminderAt = '')}
 						/>
+
+						<Separator class="my-1.5" />
+
+						<!-- estimate + timer -->
+						<div class="flex items-center gap-1.5">
+							<div class="relative min-w-0 flex-1">
+								<Icon
+									icon="stopwatch"
+									size={13}
+									class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground/50"
+								/>
+								<Input
+									bind:value={estimateText}
+									placeholder="Estimate"
+									class="h-8 w-full rounded-lg border-border bg-muted/30 pr-3 pl-8 text-[12px] text-foreground shadow-none outline-none placeholder:text-muted-foreground/50"
+								/>
+							</div>
+							<Button
+								variant="outline"
+								size="sm"
+								class="h-8 shrink-0 gap-1.5 rounded-lg border-border bg-muted/30 px-2.5 text-[12px] font-normal shadow-none transition-colors hover:bg-muted/50 {timerRunning
+									? 'text-amber-400'
+									: 'text-muted-foreground'}"
+								onclick={() => void handleToggleTimer()}
+								aria-label={timerRunning ? 'Stop timer' : 'Start timer'}
+							>
+								<Icon icon={timerRunning ? 'stop' : 'play'} size={13} />
+								{#if timerRunning || trackedNow > 0}
+									<span class="tabular-nums">{trackedDisplay}</span>
+								{/if}
+							</Button>
+						</div>
+
+						<!-- parent task -->
+						<div class="flex items-center gap-1.5">
+							{#if parentTask}
+								<button
+									type="button"
+									class="flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-2.5 text-[12px] transition-colors hover:bg-muted/50"
+									onclick={() => void openTask(parentTask!.id)}
+								>
+									<Icon icon="arrow-up" size={13} class="shrink-0 text-muted-foreground/50" />
+									<span class="shrink-0 font-mono text-[11px] text-muted-foreground/50">
+										{parentTask.prefix ?? 'TSK'}-{parentTask.number}
+									</span>
+									<span class="min-w-0 flex-1 truncate text-left">{parentTask.title}</span>
+								</button>
+								<Button
+									variant="ghost"
+									size="icon-sm"
+									class="shrink-0 text-muted-foreground hover:text-destructive"
+									aria-label="Remove parent"
+									onclick={() => void handleSetParent(null)}
+								>
+									<Icon icon="close" size={14} />
+								</Button>
+							{:else}
+								<div class="min-w-0 flex-1">
+									<RelationPicker
+										excludeId={task.id}
+										placeholder="Set parent task..."
+										onPick={(t) => void handleSetParent(t.id)}
+									/>
+								</div>
+							{/if}
+						</div>
 
 						<Separator class="my-1.5" />
 

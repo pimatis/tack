@@ -121,6 +121,11 @@ fn run_migrations(conn: &Connection) -> Result<()> {
             "index_task_recurrence_parent",
             include_str!("../../migrations/023_task_recurrence_index.sql"),
         ),
+        (
+            24,
+            "backlog_estimates_relations_views",
+            include_str!("../../migrations/024_backlog_estimates_relations_views.sql"),
+        ),
     ];
 
     let known: std::collections::HashSet<i64> =
@@ -302,6 +307,7 @@ pub fn print_table(headers: &[&str], rows: &[Vec<String>]) {
 
 pub fn status_label(status: &str) -> &'static str {
     match status {
+        "backlog" => "Backlog",
         "todo" => "Todo",
         "in_progress" => "In progress",
         "done" => "Done",

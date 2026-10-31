@@ -34,8 +34,10 @@ pub(super) fn handle_request(request: Request, ctx: &Ctx) {
     let method = request.method().clone();
 
     // only api routes consult the shared-password config; static files carry
-    // no user data and stay open so the login screen can load
-    let auth = if path.starts_with("/api/") {
+    // no user data and stay open so the login screen can load. the calendar
+    // feed is data too, so it takes the same gate (calendar apps pass
+    // ?token= since they cannot hold a session)
+    let auth = if path.starts_with("/api/") || path == "/feed.ics" {
         load_auth(&ctx.db_path)
     } else {
         None
@@ -94,6 +96,7 @@ pub(super) fn handle_request(request: Request, ctx: &Ctx) {
             restore_backup_http(p, ctx)
         }
         (Method::Delete, p) if p.starts_with("/api/backups/") => delete_backup_http(p, ctx),
+        (Method::Get, "/feed.ics") => serve_ics_feed(ctx),
         (Method::Get, _) | (Method::Head, _) => serve_static(path, ctx),
         _ => json_response(StatusCode(404), json!({ "error": "Not found" })),
     };
@@ -258,4 +261,112 @@ fn parse_query(query: &str) -> std::collections::HashMap<String, String> {
         out.insert(key.to_string(), percent_decode(value));
     }
     out
+}
+
+// calendar feed: every task carrying a due or end date becomes an all-day
+// VEVENT, so calendar apps can subscribe to tasks over the lan. summary text
+// gets ics-escaped; DTEND is exclusive, so a single-day task spans one day
+fn serve_ics_feed(ctx: &Ctx) -> Response<std::io::Cursor<Vec<u8>>> {
+    let conn = match rusqlite::Connection::open(&ctx.db_path) {
+        Ok(c) => c,
+        Err(_) => {
+            return json_response(StatusCode(500), json!({ "error": "db unavailable" }));
+        }
+    };
+    let mut stmt = match conn.prepare(
+        "SELECT t.id, t.number, t.title, t.due_date, t.end_date, t.status, p.prefix
+         FROM tasks t
+         LEFT JOIN projects p ON p.id = t.project_id
+         WHERE t.deleted_at IS NULL
+           AND (t.due_date IS NOT NULL OR t.end_date IS NOT NULL)",
+    ) {
+        Ok(s) => s,
+        Err(_) => {
+            return json_response(StatusCode(500), json!({ "error": "query failed" }));
+        }
+    };
+    let rows: Vec<(String, i64, String, Option<String>, Option<String>, String, Option<String>)> =
+        stmt.query_map([], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+                r.get(6)?,
+            ))
+        })
+        .map(|it| it.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default();
+
+    let escape = |s: &str| -> String {
+        s.replace('\\', "\\\\")
+            .replace(';', "\\;")
+            .replace(',', "\\,")
+            .replace('\n', "\\n")
+    };
+    // ics dates are YYYYMMDD; stored dates are YYYY-MM-DD
+    let stamp = |d: &str| d.replace('-', "");
+    let next_day = |d: &str| -> Option<String> {
+        let (y, rest) = d.split_once('-')?;
+        let (m, day) = rest.split_once('-')?;
+        let (mut y, mut m, mut day) = (
+            y.parse::<i64>().ok()?,
+            m.parse::<i64>().ok()?,
+            day.parse::<i64>().ok()?,
+        );
+        day += 1;
+        let dim = [31, 28 + (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) as i64, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        if day > dim[(m - 1) as usize] {
+            day = 1;
+            m += 1;
+            if m > 12 {
+                m = 1;
+                y += 1;
+            }
+        }
+        Some(format!("{:04}-{:02}-{:02}", y, m, day))
+    };
+
+    let mut out = String::from(
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//pimatis//tack//EN\r\nCALSCALE:GREGORIAN\r\n",
+    );
+    for (id, number, title, due, end, status, prefix) in rows {
+        let start = due.clone().or_else(|| end.clone());
+        let (Some(start), Some(end_d)) = (start, end.clone().or(due.clone())) else {
+            continue;
+        };
+        let Some(exclusive_end) = next_day(&end_d) else { continue };
+        out.push_str("BEGIN:VEVENT\r\n");
+        out.push_str(&format!("UID:{}@tack\r\n", id));
+        out.push_str(&format!(
+            "SUMMARY:{}-{} {}\r\n",
+            escape(&prefix.unwrap_or_else(|| "TSK".to_string())),
+            number,
+            escape(&title)
+        ));
+        out.push_str(&format!("DTSTART;VALUE=DATE:{}\r\n", stamp(&start)));
+        out.push_str(&format!("DTEND;VALUE=DATE:{}\r\n", stamp(&exclusive_end)));
+        if status == "done" {
+            out.push_str("STATUS:COMPLETED\r\n");
+        }
+        out.push_str("END:VEVENT\r\n");
+    }
+    out.push_str("END:VCALENDAR\r\n");
+
+    let data = out.into_bytes();
+    let headers = vec![
+        Header::from_bytes(b"Content-Type", b"text/calendar; charset=utf-8").unwrap(),
+        Header::from_bytes(b"Cache-Control", b"no-cache").unwrap(),
+        Header::from_bytes(b"Connection", b"close").unwrap(),
+    ];
+    let len = data.len();
+    Response::new(
+        StatusCode(200),
+        headers,
+        std::io::Cursor::new(data),
+        Some(len),
+        None,
+    )
 }

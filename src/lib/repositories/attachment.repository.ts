@@ -56,7 +56,7 @@ async function saveFileData(id: string, fileData: string): Promise<string> {
 	}
 	const res = await fetch(`/api/attachment/${id}`, {
 		method: 'PUT',
-		body: dataUrlToBytes(fileData)
+		body: dataUrlToBytes(fileData) as unknown as BodyInit
 	});
 	if (!res.ok) throw new Error(await res.text());
 	return '';

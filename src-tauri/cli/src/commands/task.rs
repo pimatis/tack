@@ -140,6 +140,134 @@ fn fts_query(query: &str) -> String {
         .join(" ")
 }
 
+// "90", "90m", "1h", "1h30m", "1.5h" -> minutes; empty clears the estimate
+fn parse_estimate(value: &str) -> Result<Option<i64>> {
+    let v: String = value
+        .trim()
+        .to_lowercase()
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    if v.is_empty() {
+        return Ok(None);
+    }
+    let invalid = || format!("Invalid estimate '{}'", value);
+    if let Some((hh, rest)) = v.split_once('h') {
+        let hours: f64 = hh.parse().map_err(|_| invalid())?;
+        let mins: i64 = rest.trim_end_matches('m').parse().unwrap_or(0);
+        return Ok(Some((hours * 60.0).round() as i64 + mins));
+    }
+    v.trim_end_matches('m')
+        .parse::<i64>()
+        .map(Some)
+        .map_err(|_| invalid())
+}
+
+// structured "key:value" tokens pulled out of a search query; the rest stays
+// free text for fts. mirrors src/lib/search/operators.ts
+fn split_search(query: &str) -> (String, Vec<(String, String)>) {
+    const KEYS: [&str; 10] = ["status", "priority", "p", "project", "label", "due", "pinned", "is", "has", "type"];
+    let mut text = Vec::new();
+    let mut ops = Vec::new();
+    for token in query.split_whitespace() {
+        if let Some((key, value)) = token.split_once(':') {
+            let key = key.to_lowercase();
+            if !value.is_empty() && KEYS.contains(&key.as_str()) {
+                ops.push((key, value.to_lowercase()));
+                continue;
+            }
+        }
+        text.push(token.to_string());
+    }
+    (text.join(" "), ops)
+}
+
+// turn the extracted operators into sql conditions + args against alias t/p
+fn search_op_sql(ops: &[(String, String)]) -> (String, Vec<String>) {
+    let mut sql = String::new();
+    let mut args: Vec<String> = Vec::new();
+    for (key, value) in ops {
+        match key.as_str() {
+            "status" => {
+                let status = match value.as_str() {
+                    "inprogress" | "in-progress" | "doing" => "in_progress",
+                    "cancelled" => "canceled",
+                    "open" => "todo",
+                    s => s,
+                };
+                sql.push_str(" AND t.status = ?");
+                args.push(status.to_string());
+            }
+            "priority" | "p" => {
+                let n = match value.as_str() {
+                    "none" | "no" => 0,
+                    "urgent" => 1,
+                    "high" => 2,
+                    "medium" => 3,
+                    "low" => 4,
+                    s => s.parse().unwrap_or(-1),
+                };
+                sql.push_str(" AND t.priority = ?");
+                args.push(n.to_string());
+            }
+            "project" => {
+                if value == "none" || value == "inbox" {
+                    sql.push_str(" AND t.project_id IS NULL");
+                } else {
+                    sql.push_str(" AND (p.prefix = ? COLLATE NOCASE OR p.name = ? COLLATE NOCASE)");
+                    args.push(value.clone());
+                    args.push(value.clone());
+                }
+            }
+            "label" => {
+                sql.push_str(
+                    " AND EXISTS (SELECT 1 FROM task_labels tl JOIN labels l ON l.id = tl.label_id WHERE tl.task_id = t.id AND l.name = ? COLLATE NOCASE)",
+                );
+                args.push(value.clone());
+            }
+            "due" => match value.as_str() {
+                "today" => sql.push_str(" AND t.due_date = date('now', 'localtime')"),
+                "tomorrow" => {
+                    sql.push_str(" AND t.due_date = date('now', 'localtime', '+1 day')")
+                }
+                "week" => sql.push_str(
+                    " AND t.due_date BETWEEN date('now', 'localtime') AND date('now', 'localtime', '+7 days')",
+                ),
+                "overdue" => sql.push_str(" AND t.due_date < date('now', 'localtime')"),
+                "none" => sql.push_str(" AND t.due_date IS NULL AND t.end_date IS NULL"),
+                _ => {}
+            },
+            "is" => {
+                let exists = "SELECT 1 FROM task_relations r JOIN tasks b ON b.id = r.task_id WHERE r.related_task_id = t.id AND r.type = 'blocks' AND b.status NOT IN ('done', 'canceled') AND b.deleted_at IS NULL";
+                if value == "blocked" {
+                    sql.push_str(&format!(" AND EXISTS ({})", exists));
+                } else if value == "unblocked" {
+                    sql.push_str(&format!(" AND NOT EXISTS ({})", exists));
+                }
+            }
+            "has" => {
+                if value == "parent" {
+                    sql.push_str(" AND t.parent_id IS NOT NULL");
+                }
+            }
+            "type" => match value.as_str() {
+                "subtask" => sql.push_str(" AND t.parent_id IS NOT NULL"),
+                "toplevel" => sql.push_str(" AND t.parent_id IS NULL"),
+                _ => {}
+            },
+            "pinned" => {
+                if ["1", "true", "yes"].contains(&value.as_str()) {
+                    sql.push_str(" AND t.pinned = 1");
+                } else if ["0", "false", "no"].contains(&value.as_str()) {
+                    sql.push_str(" AND t.pinned = 0");
+                }
+            }
+            _ => {}
+        }
+    }
+    (sql, args)
+}
+
 pub fn create(
     conn: &Connection,
     json: bool,
@@ -153,8 +281,18 @@ pub fn create(
     description: Option<&str>,
     reminder: Option<&str>,
     repeat: Option<&str>,
+    parent: Option<&str>,
+    estimate: Option<&str>,
 ) -> Result<()> {
     let project_id = resolve_project_id(conn, project, project_prefix)?;
+    let parent_id = match parent {
+        Some(p) => Some(resolve_task_id(conn, p)?),
+        None => None,
+    };
+    let estimate_minutes = match estimate {
+        Some(e) => parse_estimate(e)?,
+        None => None,
+    };
     let id = new_id();
     let now = now_iso();
     let reminder_at = match reminder {
@@ -190,9 +328,9 @@ pub fn create(
     .map_err(|e| format!("Failed to assign task number: {}", e))?;
 
     conn.execute(
-        "INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, reminder_at, recurrence_rule, sort_order, pinned, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 0, 0, ?12, ?13)",
-        params![id, number, project_id, title, description, final_status, final_priority, due_date, end_date, reminder_at, recurrence_rule, now, now],
+        "INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, reminder_at, recurrence_rule, parent_id, estimate_minutes, sort_order, pinned, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 0, 0, ?14, ?15)",
+        params![id, number, project_id, title, description, final_status, final_priority, due_date, end_date, reminder_at, recurrence_rule, parent_id, estimate_minutes, now, now],
     ).map_err(|e| format!("Failed to create task: {}", e))?;
 
     log_activity(conn, &id, "created", None, None, None, "cli")?;
@@ -297,20 +435,41 @@ pub fn search(
     status: Option<&str>,
     limit: i64,
 ) -> Result<()> {
-    let match_query = fts_query(query);
-    if match_query.is_empty() {
+    let (text, ops) = split_search(query);
+    let match_query = fts_query(&text);
+    if match_query.is_empty() && ops.is_empty() {
         return Err("Empty search query".to_string());
     }
     let project_id = resolve_project_id(conn, project, project_prefix)?;
 
-    let mut sql = String::from(
-        "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule
-         FROM tasks_fts
-         JOIN tasks t ON t.id = tasks_fts.task_id
-         LEFT JOIN projects p ON t.project_id = p.id
-         WHERE tasks_fts MATCH ? AND t.deleted_at IS NULL",
-    );
-    let mut args: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(match_query)];
+    // when the query is only operators ("status:todo due:week") there is no
+    // text to match, so the fts table joins as a plain task listing
+    let mut sql = if match_query.is_empty() {
+        String::from(
+            "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule
+             FROM tasks t
+             LEFT JOIN projects p ON t.project_id = p.id
+             WHERE t.deleted_at IS NULL",
+        )
+    } else {
+        String::from(
+            "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule
+             FROM tasks_fts
+             JOIN tasks t ON t.id = tasks_fts.task_id
+             LEFT JOIN projects p ON t.project_id = p.id
+             WHERE tasks_fts MATCH ? AND t.deleted_at IS NULL",
+        )
+    };
+    let has_text = !match_query.is_empty();
+    let mut args: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+    if has_text {
+        args.push(Box::new(match_query));
+    }
+    let (op_sql, op_args) = search_op_sql(&ops);
+    sql.push_str(&op_sql);
+    for a in op_args {
+        args.push(Box::new(a));
+    }
 
     if let Some(ref pid) = project_id {
         sql.push_str(" AND t.project_id = ?");
@@ -320,7 +479,11 @@ pub fn search(
         sql.push_str(" AND t.status = ?");
         args.push(Box::new(s.to_string()));
     }
-    sql.push_str(" ORDER BY rank LIMIT ?");
+    if has_text {
+        sql.push_str(" ORDER BY rank LIMIT ?");
+    } else {
+        sql.push_str(" ORDER BY t.updated_at DESC LIMIT ?");
+    }
     args.push(Box::new(limit));
 
     let mut stmt = conn
@@ -572,6 +735,8 @@ pub fn update(
     end_date: Option<&str>,
     reminder: Option<&str>,
     repeat: Option<&str>,
+    parent: Option<&str>,
+    estimate: Option<&str>,
 ) -> Result<()> {
     let id = resolve_task_id(conn, id)?;
     let current = conn.query_row(
@@ -630,6 +795,63 @@ pub fn update(
 
     if result == 0 {
         return Err(format!("Task {} not found", id));
+    }
+
+    // parent and estimate are separate statements: empty string clears the
+    // value, None keeps it. a cycle check guards the parent chain
+    if let Some(p) = parent {
+        let new_parent: Option<String> = if p.is_empty() {
+            None
+        } else {
+            let pid = resolve_task_id(conn, p)?;
+            // walk ancestors of the candidate; hitting our own id means a cycle
+            let mut cursor = Some(pid.clone());
+            for _ in 0..100 {
+                match cursor.as_deref() {
+                    None => break,
+                    Some(c) if c == id => {
+                        return Err("Cannot set parent: it would create a cycle".to_string());
+                    }
+                    Some(c) => {
+                        cursor = conn
+                            .query_row(
+                                "SELECT parent_id FROM tasks WHERE id = ?1",
+                                params![c],
+                                |row| row.get::<_, Option<String>>(0),
+                            )
+                            .ok()
+                            .flatten();
+                    }
+                }
+            }
+            Some(pid)
+        };
+        conn.execute(
+            "UPDATE tasks SET parent_id = ?1, updated_at = ?2 WHERE id = ?3",
+            params![new_parent, now, id],
+        )
+        .map_err(|e| format!("Failed to update task: {}", e))?;
+        log_activity(conn, &id, "parent_changed", Some("parent_id"), None, new_parent.as_deref(), "cli")?;
+    }
+    if let Some(e) = estimate {
+        let minutes = parse_estimate(e)?;
+        conn.execute(
+            "UPDATE tasks SET estimate_minutes = ?1, updated_at = ?2 WHERE id = ?3",
+            params![minutes, now, id],
+        )
+        .map_err(|e| format!("Failed to update task: {}", e))?;
+        log_activity(
+            conn,
+            &id,
+            "estimate_changed",
+            Some("estimate_minutes"),
+            None,
+            minutes.map(|m| m.to_string()).as_deref(),
+            "cli",
+        )?;
+    }
+    if new_status == "done" || new_status == "canceled" {
+        bank_terminal_timers(conn, &[id.clone()])?;
     }
 
     if new_status != cur_status {
@@ -873,6 +1095,8 @@ pub fn duplicate(conn: &Connection, json: bool, id: &str) -> Result<()> {
         desc.as_deref(),
         reminder.as_deref(),
         rule.as_deref(),
+        None,
+        None,
     )?;
     Ok(())
 }
@@ -1041,6 +1265,10 @@ pub fn bulk_status(conn: &Connection, json: bool, ids: &[String], status: &str) 
     let count = conn
         .execute(&sql, &arg_refs[..])
         .map_err(|e| format!("Failed to update status: {}", e))?;
+
+    if status == "done" || status == "canceled" {
+        bank_terminal_timers(conn, ids)?;
+    }
 
     for id in ids {
         let _ = log_activity(
@@ -1410,4 +1638,219 @@ pub fn empty_trash(conn: &Connection, json: bool) -> Result<()> {
         println!("Permanently deleted {} task(s) from trash", count);
     }
     Ok(())
+}
+
+// ---- time tracking ----
+
+// one running timer at a time: starting banks any other timer's elapsed
+pub fn timer_start(conn: &Connection, json: bool, id: &str) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
+    let now = now_iso();
+    conn.execute(
+        "UPDATE tasks SET tracked_seconds = tracked_seconds + MAX(0, CAST((julianday(?1) - julianday(timer_started_at)) * 86400 AS INTEGER)), timer_started_at = NULL, updated_at = ?1 WHERE timer_started_at IS NOT NULL",
+        params![now],
+    )
+    .map_err(|e| format!("Failed to stop other timers: {}", e))?;
+    conn.execute(
+        "UPDATE tasks SET timer_started_at = ?1, updated_at = ?1 WHERE id = ?2",
+        params![now, id],
+    )
+    .map_err(|e| format!("Failed to start timer: {}", e))?;
+    log_activity(conn, &id, "timer_started", None, None, None, "cli")?;
+    if json {
+        println!("{}", json!({ "success": true, "action": "timer_started", "id": id }));
+    } else {
+        println!("Started timer on {}", id);
+    }
+    Ok(())
+}
+
+pub fn timer_stop(conn: &Connection, json: bool, id: &str) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
+    let now = now_iso();
+    conn.execute(
+        "UPDATE tasks SET tracked_seconds = tracked_seconds + MAX(0, CAST((julianday(?1) - julianday(timer_started_at)) * 86400 AS INTEGER)), timer_started_at = NULL, updated_at = ?1 WHERE id = ?2 AND timer_started_at IS NOT NULL",
+        params![now, id],
+    )
+    .map_err(|e| format!("Failed to stop timer: {}", e))?;
+    log_activity(conn, &id, "timer_stopped", None, None, None, "cli")?;
+    if json {
+        println!("{}", json!({ "success": true, "action": "timer_stopped", "id": id }));
+    } else {
+        println!("Stopped timer on {}", id);
+    }
+    Ok(())
+}
+
+pub fn children(conn: &Connection, json: bool, id: &str) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule
+             FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
+             WHERE t.parent_id = ?1 AND t.deleted_at IS NULL
+             ORDER BY t.sort_order, t.created_at",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<TaskRow> = stmt
+        .query_map(params![id], map_task_row)
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    render_task_rows(json, &rows)
+}
+
+// ---- relations ----
+
+pub fn relation_add(
+    conn: &Connection,
+    json: bool,
+    id: &str,
+    other: &str,
+    kind: &str,
+) -> Result<()> {
+    if !["blocks", "relates", "duplicates"].contains(&kind) {
+        return Err("Relation type must be: blocks, relates or duplicates".to_string());
+    }
+    let id = resolve_task_id(conn, id)?;
+    let other_id = resolve_task_id(conn, other)?;
+    if id == other_id {
+        return Err("A task cannot relate to itself".to_string());
+    }
+    conn.execute(
+        "INSERT OR IGNORE INTO task_relations (task_id, related_task_id, type, created_at) VALUES (?1, ?2, ?3, ?4)",
+        params![id, other_id, kind, now_iso()],
+    )
+    .map_err(|e| format!("Failed to add relation: {}", e))?;
+    log_activity(conn, &id, "relation_added", Some("relation"), None, Some(&format!("{}:{}", kind, other_id)), "cli")?;
+    if json {
+        println!("{}", json!({ "success": true, "action": "relation_added", "task_id": id, "related_task_id": other_id, "type": kind }));
+    } else {
+        println!("Added '{}' relation {} -> {}", kind, id, other_id);
+    }
+    Ok(())
+}
+
+pub fn relation_remove(
+    conn: &Connection,
+    json: bool,
+    id: &str,
+    other: &str,
+    kind: &str,
+) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
+    let other_id = resolve_task_id(conn, other)?;
+    conn.execute(
+        "DELETE FROM task_relations WHERE type = ?3 AND ((task_id = ?1 AND related_task_id = ?2) OR (task_id = ?2 AND related_task_id = ?1))",
+        params![id, other_id, kind],
+    )
+    .map_err(|e| format!("Failed to remove relation: {}", e))?;
+    log_activity(conn, &id, "relation_removed", Some("relation"), Some(&format!("{}:{}", kind, other_id)), None, "cli")?;
+    if json {
+        println!("{}", json!({ "success": true, "action": "relation_removed" }));
+    } else {
+        println!("Removed '{}' relation between {} and {}", kind, id, other_id);
+    }
+    Ok(())
+}
+
+pub fn relation_list(conn: &Connection, json: bool, id: &str) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT r.type, 'out' AS direction, o.number, o.title, p.prefix
+             FROM task_relations r
+             JOIN tasks o ON o.id = r.related_task_id
+             LEFT JOIN projects p ON p.id = o.project_id
+             WHERE r.task_id = ?1 AND o.deleted_at IS NULL
+             UNION ALL
+             SELECT r.type, 'in', o.number, o.title, p.prefix
+             FROM task_relations r
+             JOIN tasks o ON o.id = r.task_id
+             LEFT JOIN projects p ON p.id = o.project_id
+             WHERE r.related_task_id = ?1 AND o.deleted_at IS NULL",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<(String, String, i32, String, Option<String>)> = stmt
+        .query_map(params![id], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    if json {
+        let items: Vec<_> = rows
+            .iter()
+            .map(|(t, d, n, title, pfx)| {
+                json!({ "type": t, "direction": d, "number": n, "title": title, "prefix": pfx })
+            })
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&items).map_err(|e| e.to_string())?);
+        return Ok(());
+    }
+    if rows.is_empty() {
+        println!("No relations");
+        return Ok(());
+    }
+    for (kind, direction, number, title, pfx) in rows {
+        let arrow = if direction == "out" { "->" } else { "<-" };
+        println!(
+            "{} {} {}-{}  {}",
+            kind,
+            arrow,
+            pfx.unwrap_or_else(|| "TSK".to_string()),
+            number,
+            title
+        );
+    }
+    Ok(())
+}
+
+// a terminal status must not leave a timer running: bank the elapsed segment
+// and clear the start marker. runs after the status write so the stored
+// status is the source of truth
+fn bank_terminal_timers(conn: &Connection, ids: &[String]) -> Result<()> {
+    let now = now_iso();
+    let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+    let sql = format!(
+        "UPDATE tasks SET tracked_seconds = tracked_seconds + MAX(0, CAST((julianday(?1) - julianday(timer_started_at)) * 86400 AS INTEGER)), timer_started_at = NULL WHERE timer_started_at IS NOT NULL AND status IN ('done', 'canceled') AND id IN ({})",
+        placeholders
+    );
+    let mut args: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(now)];
+    for id in ids {
+        args.push(Box::new(id.clone()));
+    }
+    let arg_refs: Vec<&dyn rusqlite::ToSql> = args.iter().map(|a| a.as_ref()).collect();
+    conn.execute(&sql, &arg_refs[..])
+        .map_err(|e| format!("Failed to stop timers: {}", e))?;
+    Ok(())
+}
+
+// tasks spanning today: an open task whose due/end window covers the current
+// date; mirrors the app's today filter
+pub fn today(conn: &Connection, json: bool) -> Result<()> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule
+             FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
+             WHERE t.deleted_at IS NULL AND t.status NOT IN ('done', 'canceled')
+               AND (t.due_date IS NOT NULL OR t.end_date IS NOT NULL)
+               AND (t.due_date IS NULL OR t.due_date <= date('now', 'localtime'))
+               AND (t.end_date IS NULL OR t.end_date >= date('now', 'localtime'))
+             ORDER BY t.pinned DESC, t.priority ASC, t.due_date ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<TaskRow> = stmt
+        .query_map([], map_task_row)
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    render_task_rows(json, &rows)
 }

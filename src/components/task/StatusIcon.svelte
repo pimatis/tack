@@ -10,7 +10,9 @@
 	let { status, size = 14 }: Props = $props();
 </script>
 
-{#if status === 'todo'}
+{#if status === 'backlog'}
+	<Icon icon="inbox" {size} class="shrink-0 text-muted-foreground/40" />
+{:else if status === 'todo'}
 	<Icon icon="circle-outline" {size} class="shrink-0 text-muted-foreground/50" />
 {:else if status === 'in_progress'}
 	<Icon icon="pie-chart" {size} class="shrink-0 text-amber-500" />

@@ -7,6 +7,7 @@
 	import EndDateBadge from './EndDateBadge.svelte';
 	import ReminderBadge from './ReminderBadge.svelte';
 	import RecurrenceBadge from './RecurrenceBadge.svelte';
+	import TimerBadge from './TimerBadge.svelte';
 	import TaskMenu from './TaskMenu.svelte';
 	import { sortableItem, type DragDropState } from '$lib/dnd';
 	import type { Task, TaskStatus, TaskPriority } from '$lib/types/task';
@@ -84,6 +85,20 @@
 			{/if}
 			<ReminderBadge reminderAt={task.reminderAt} sentAt={task.reminderSentAt} />
 			<RecurrenceBadge rule={task.recurrenceRule} />
+			<TimerBadge {task} />
+			{#if task.blocked}
+				<span class="text-red-400" title="Blocked">
+					<Icon icon="blocked" size={12} />
+				</span>
+			{/if}
+			{#if (task.childrenTotal ?? 0) > 0}
+				<span
+					class="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground/50 tabular-nums"
+					title="Child tasks"
+				>
+					<Icon icon="list" size={11} />{task.childrenDone ?? 0}/{task.childrenTotal}
+				</span>
+			{/if}
 			<div class="flex-1"></div>
 			<!-- priority -->
 			<PriorityMenu

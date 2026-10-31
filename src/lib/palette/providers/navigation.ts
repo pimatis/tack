@@ -13,6 +13,13 @@ function buildItems(): PaletteItem[] {
 			run: () => goto('/')
 		},
 		{
+			id: 'stats',
+			label: 'Stats',
+			icon: 'chart',
+			keywords: 'stats analytics report page go to',
+			run: () => goto('/stats')
+		},
+		{
 			id: 'trash',
 			label: 'Trash',
 			icon: 'trash',

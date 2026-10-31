@@ -1,6 +1,8 @@
+mod agent;
 mod backup;
 mod commands;
 mod db;
+mod mcp;
 mod recurrence;
 
 use clap::{Parser, Subcommand};
@@ -66,6 +68,108 @@ enum Commands {
         #[command(subcommand)]
         action: LiveAction,
     },
+    /// Show workspace stats
+    Stats,
+    /// List tasks due today
+    Today,
+    /// Control the running app's ui (ai agent access)
+    Ui {
+        #[command(subcommand)]
+        action: UiAction,
+    },
+    /// Run an mcp stdio server exposing the app's ui tools
+    Mcp,
+}
+
+#[derive(Subcommand)]
+enum UiAction {
+    /// Check whether the agent api is reachable
+    Status,
+    /// List interactable elements with ref ids (--text for compact lines)
+    Snapshot {
+        #[arg(long, help = "Print compact text lines instead of json")]
+        text: bool,
+    },
+    /// Capture the app window as png
+    Screenshot {
+        #[arg(long, help = "Output file path")]
+        out: Option<String>,
+    },
+    /// Click an element: --ref N or --x X --y Y
+    Click {
+        #[arg(long, alias = "ref")]
+        reference: Option<u64>,
+        #[arg(long)]
+        x: Option<f64>,
+        #[arg(long)]
+        y: Option<f64>,
+        #[arg(long)]
+        double: bool,
+        #[arg(long)]
+        right: bool,
+    },
+    /// Hover an element: --ref N or --x X --y Y
+    Hover {
+        #[arg(long, alias = "ref")]
+        reference: Option<u64>,
+        #[arg(long)]
+        x: Option<f64>,
+        #[arg(long)]
+        y: Option<f64>,
+    },
+    /// Set an input's text: --ref N --text "..."
+    Type {
+        #[arg(long, alias = "ref")]
+        reference: Option<u64>,
+        #[arg(long)]
+        x: Option<f64>,
+        #[arg(long)]
+        y: Option<f64>,
+        #[arg(long)]
+        text: String,
+    },
+    /// Press a key or combo: enter, escape, meta+k (meta = cmd)
+    Key { keys: String },
+    /// Scroll the page or a container
+    Scroll {
+        #[arg(long, alias = "ref")]
+        reference: Option<u64>,
+        #[arg(long)]
+        x: Option<f64>,
+        #[arg(long)]
+        y: Option<f64>,
+        #[arg(long, default_value_t = 0.0)]
+        dx: f64,
+        #[arg(long, default_value_t = 400.0)]
+        dy: f64,
+    },
+    /// Drag between points or elements
+    Drag {
+        #[arg(long, help = "Start point \"x,y\"")]
+        from: Option<String>,
+        #[arg(long, help = "End point \"x,y\"")]
+        to: Option<String>,
+        #[arg(long)]
+        from_ref: Option<u64>,
+        #[arg(long)]
+        to_ref: Option<u64>,
+    },
+    /// Navigate to an app route (/, /settings, /stats, /trash)
+    Goto { path: String },
+    /// Wait for the ui to settle (max 5000 ms)
+    Wait {
+        #[arg(long, default_value_t = 500)]
+        ms: u64,
+    },
+    /// Run javascript in the app and print the result
+    Eval { code: String },
+    /// Ask the user to approve an action in a native dialog
+    Confirm {
+        #[arg(long)]
+        title: String,
+        #[arg(long)]
+        body: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -125,6 +229,10 @@ enum TaskAction {
         repeat: Option<String>,
         #[arg(long)]
         description: Option<String>,
+        #[arg(long, help = "Parent task id or number")]
+        parent: Option<String>,
+        #[arg(long, help = "Estimate: 90m, 2h, 1h30m")]
+        estimate: Option<String>,
     },
     /// List tasks with optional filters
     List {
@@ -178,6 +286,10 @@ enum TaskAction {
             help = "Repeat schedule: daily, weekly:<mon..sun|1-7>, monthly:<1-31>; use empty string to clear"
         )]
         repeat: Option<String>,
+        #[arg(long, help = "Parent task id or number; empty clears")]
+        parent: Option<String>,
+        #[arg(long, help = "Estimate: 90m, 2h, 1h30m; empty clears")]
+        estimate: Option<String>,
     },
     /// Delete a task
     Delete { id: String },
@@ -232,6 +344,17 @@ enum TaskAction {
         #[arg(long, help = "Remove the label instead of adding it")]
         remove: bool,
     },
+    /// List child tasks
+    Children { id: String },
+    /// Start time tracking on a task
+    Start { id: String },
+    /// Stop the running timer on a task
+    Stop { id: String },
+    /// Manage task relations (blocks, relates, duplicates)
+    Relation {
+        #[command(subcommand)]
+        action: RelationAction,
+    },
     /// List trashed tasks
     Trash,
     /// Restore a task from trash
@@ -240,6 +363,26 @@ enum TaskAction {
     PermanentDelete { id: String },
     /// Permanently delete all trashed tasks
     EmptyTrash,
+}
+
+#[derive(Subcommand)]
+enum RelationAction {
+    /// Add a relation: blocks, relates, duplicates
+    Add {
+        id: String,
+        other: String,
+        #[arg(long, help = "blocks, relates or duplicates")]
+        kind: String,
+    },
+    /// Remove a relation
+    Remove {
+        id: String,
+        other: String,
+        #[arg(long, help = "blocks, relates or duplicates")]
+        kind: String,
+    },
+    /// List a task's relations
+    List { id: String },
 }
 
 #[derive(Subcommand)]
@@ -341,10 +484,12 @@ enum ActivityAction {
 
 #[derive(Subcommand)]
 enum DataAction {
-    /// Export all data to a JSON file
+    /// Export all data to a file
     Export {
         #[arg(long, help = "Output file path (defaults to tack-export.json)")]
         output: Option<String>,
+        #[arg(long, default_value = "json", help = "json, csv or markdown")]
+        format: String,
     },
     /// Import data from a JSON file
     Import {
@@ -445,6 +590,8 @@ fn main() {
                 reminder,
                 repeat,
                 description,
+                parent,
+                estimate,
             } => {
                 let dd = due_date.as_deref().filter(|s| !s.is_empty());
                 let ed = end_date.as_deref().filter(|s| !s.is_empty());
@@ -461,6 +608,8 @@ fn main() {
                     description.as_deref(),
                     reminder.as_deref(),
                     repeat.as_deref(),
+                    parent.as_deref(),
+                    estimate.as_deref(),
                 )
             }
             TaskAction::List {
@@ -506,6 +655,8 @@ fn main() {
                 end_date,
                 reminder,
                 repeat,
+                parent,
+                estimate,
             } => commands::task::update(
                 &conn,
                 json,
@@ -518,6 +669,8 @@ fn main() {
                 end_date.as_deref(),
                 reminder.as_deref(),
                 repeat.as_deref(),
+                parent.as_deref(),
+                estimate.as_deref(),
             ),
             TaskAction::Delete { id } => commands::task::delete(&conn, json, &id),
             TaskAction::Duplicate { id } => commands::task::duplicate(&conn, json, &id),
@@ -557,6 +710,20 @@ fn main() {
             TaskAction::BulkLabel { ids, label, remove } => {
                 commands::task::bulk_label(&conn, json, &parse_ids(&ids), &label, remove)
             }
+            TaskAction::Children { id } => commands::task::children(&conn, json, &id),
+            TaskAction::Start { id } => commands::task::timer_start(&conn, json, &id),
+            TaskAction::Stop { id } => commands::task::timer_stop(&conn, json, &id),
+            TaskAction::Relation { action } => match action {
+                RelationAction::Add { id, other, kind } => {
+                    commands::task::relation_add(&conn, json, &id, &other, &kind)
+                }
+                RelationAction::Remove { id, other, kind } => {
+                    commands::task::relation_remove(&conn, json, &id, &other, &kind)
+                }
+                RelationAction::List { id } => {
+                    commands::task::relation_list(&conn, json, &id)
+                }
+            },
             TaskAction::Trash => commands::task::trash_list(&conn, json),
             TaskAction::Restore { id } => commands::task::restore(&conn, json, &id),
             TaskAction::PermanentDelete { id } => {
@@ -603,8 +770,8 @@ fn main() {
             ActivityAction::List { task } => commands::activity::list(&conn, json, &task),
         },
         Commands::Data { action } => match action {
-            DataAction::Export { output } => {
-                commands::data::export(&conn, json, output.as_deref().unwrap_or(""))
+            DataAction::Export { output, format } => {
+                commands::data::export(&conn, json, output.as_deref().unwrap_or(""), &format)
             }
             DataAction::Import { file } => commands::data::import(&conn, json, &file),
             DataAction::Backup { keep } => {
@@ -629,6 +796,48 @@ fn main() {
             LiveAction::Status => commands::live::status(&conn, json),
             LiveAction::Watch => commands::live::watch(&conn, json),
         },
+        Commands::Stats => commands::stats::stats(&conn, json),
+        Commands::Today => commands::task::today(&conn, json),
+        Commands::Ui { action } => match action {
+            UiAction::Status => commands::ui::status(&conn, json),
+            UiAction::Snapshot { text } => commands::ui::snapshot(&conn, json, text),
+            UiAction::Screenshot { out } => commands::ui::screenshot(&conn, out),
+            UiAction::Click {
+                reference,
+                x,
+                y,
+                double,
+                right,
+            } => commands::ui::click(&conn, json, reference, x, y, double, right),
+            UiAction::Hover { reference, x, y } => {
+                commands::ui::hover(&conn, json, reference, x, y)
+            }
+            UiAction::Type {
+                reference,
+                x,
+                y,
+                text,
+            } => commands::ui::type_text(&conn, json, reference, x, y, text),
+            UiAction::Key { keys } => commands::ui::key(&conn, json, keys),
+            UiAction::Scroll {
+                reference,
+                x,
+                y,
+                dx,
+                dy,
+            } => commands::ui::scroll(&conn, json, reference, x, y, dx, dy),
+            UiAction::Drag {
+                from,
+                to,
+                from_ref,
+                to_ref,
+            } => commands::ui::drag(&conn, json, from, to, from_ref, to_ref),
+            UiAction::Goto { path } => commands::ui::goto(&conn, json, path),
+            UiAction::Wait { ms } => commands::ui::wait(&conn, json, ms),
+            UiAction::Eval { code } => commands::ui::eval(&conn, json, code),
+            UiAction::Confirm { title, body } => commands::ui::confirm(&conn, json, title, body),
+        },
+        Commands::Mcp => mcp::serve(&conn),
     };
 
     if let Err(e) = result {

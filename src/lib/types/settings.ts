@@ -18,7 +18,7 @@ export type Settings = {
 	themePreset: ColorPresetId;
 	sidebarCollapsed: boolean;
 	defaultViewMode: 'list' | 'board' | 'calendar';
-	defaultStatus: 'todo' | 'in_progress';
+	defaultStatus: 'backlog' | 'todo' | 'in_progress';
 	defaultPriority: 0 | 1 | 2 | 3 | 4;
 	dueSoonThreshold: number;
 	prefixPadding: number;
@@ -31,6 +31,9 @@ export type Settings = {
 	// (never plaintext); empty means no password is required
 	livePasswordHash: string;
 	livePasswordSalt: string;
+	// loopback-only ui control for ai agents (see the agents settings tab)
+	agentEnabled: boolean;
+	agentPort: number;
 	sidebarItems: SidebarItemConfig[];
 	shortcuts: Record<string, ShortcutKey[]>;
 };
@@ -61,6 +64,8 @@ export const defaultSettings: Settings = {
 	livePort: 17890,
 	livePasswordHash: '',
 	livePasswordSalt: '',
+	agentEnabled: true,
+	agentPort: 17891,
 	sidebarItems: [...defaultSidebarItems],
 	shortcuts: Object.fromEntries(SHORTCUTS.map((s) => [s.id, s.keys])) as Record<
 		string,

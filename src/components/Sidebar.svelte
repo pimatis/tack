@@ -7,6 +7,8 @@
 	import type { TaskStatus } from '$lib/types/task';
 	import type { Settings } from '$lib/types/settings';
 	import type { SidebarItemConfig, SidebarItemId } from '$lib/types/settings';
+	import type { SavedView } from '$lib/types/view';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import { setSettings, getSettings } from '$lib/stores/settings';
 	import { sortableItem, useDndActive, reorderArray, type DragDropState } from '$lib/dnd';
 	import { getShortcutRegistry } from '$lib/shortcuts/index.js';
@@ -56,18 +58,40 @@
 	const allTasks = $derived(pageState?.tasks ?? []);
 	const projects = $derived(pageState?.projects ?? []);
 	const labels = $derived(pageState?.labels ?? []);
+	const savedViews = $derived(pageState?.savedViews ?? []);
+	let renamingViewId = $state<string | null>(null);
+	let renameText = $state('');
+
+	function startRenameView(id: string, name: string) {
+		renamingViewId = id;
+		renameText = name;
+	}
+
+	function submitRenameView() {
+		const id = renamingViewId;
+		renamingViewId = null;
+		if (id) void pageState.renameView(id, renameText);
+		renameText = '';
+	}
+
+	function handleViewReorder(state: DragDropState<SavedView>, targetItem: SavedView) {
+		const dragged = state.draggedItem;
+		if (!dragged || dragged.id === targetItem.id || !state.dropPosition || !pageState) return;
+		pageState.reorderViews(reorderArray(savedViews, dragged, targetItem, state.dropPosition));
+	}
 	const pinnedCount = $derived(allTasks.filter((t) => t.pinned && !t.deletedAt).length);
 	let pinnedActive = $state(false);
 	let activeFilter = $state<string | null>(null);
 
 	// persist collapsed sidebar sections across page reloads
-	type CollapsibleSectionId = 'status' | 'priority' | 'projects' | 'labels';
+	type CollapsibleSectionId = 'status' | 'priority' | 'projects' | 'labels' | 'views';
 	const COLLAPSED_SECTIONS_KEY = 'tack-collapsed-sidebar-sections';
 	const collapsibleSectionIds: CollapsibleSectionId[] = [
 		'status',
 		'priority',
 		'projects',
-		'labels'
+		'labels',
+		'views'
 	];
 
 	function loadCollapsedSections(): Set<CollapsibleSectionId> {
@@ -152,12 +176,13 @@
 	});
 
 	const statusConfig: Record<TaskStatus, { label: string }> = {
+		backlog: { label: 'Backlog' },
 		todo: { label: 'Todo' },
 		in_progress: { label: 'In progress' },
 		done: { label: 'Done' },
 		canceled: { label: 'Canceled' }
 	};
-	const statusOrder: TaskStatus[] = ['todo', 'in_progress', 'done', 'canceled'];
+	const statusOrder: TaskStatus[] = ['backlog', 'todo', 'in_progress', 'done', 'canceled'];
 	const priorityConfig: Record<number, { label: string }> = {
 		1: { label: 'Urgent' },
 		2: { label: 'High' },
@@ -184,7 +209,13 @@
 
 	// computed counts
 	let statusCounts = $derived.by(() => {
-		const counts: Record<string, number> = { todo: 0, in_progress: 0, done: 0, canceled: 0 };
+		const counts: Record<string, number> = {
+			backlog: 0,
+			todo: 0,
+			in_progress: 0,
+			done: 0,
+			canceled: 0
+		};
 		for (const t of allTasks) {
 			if (t.deletedAt) continue;
 			counts[t.status]++;
@@ -390,6 +421,7 @@
 		window.addEventListener('filter-by-label', setFilterActive);
 		window.addEventListener('filter-today', setFilterActive);
 		window.addEventListener('filter-upcoming', setFilterActive);
+		window.addEventListener('apply-view', setFilterActive);
 		const clearActiveState = () => {
 			pinnedActive = false;
 			activeFilter = null;
@@ -417,6 +449,7 @@
 			window.removeEventListener('filter-by-label', setFilterActive);
 			window.removeEventListener('filter-today', setFilterActive);
 			window.removeEventListener('filter-upcoming', setFilterActive);
+			window.removeEventListener('apply-view', setFilterActive);
 			window.removeEventListener('filter-overdue', setFilterActive);
 			window.removeEventListener('clear-filters', clearActiveState);
 			unregisterToggleSidebar?.();
@@ -950,6 +983,85 @@
 						</Collapsible.Content>
 					</Collapsible.Root>
 				{/if}
+
+				<!-- saved views -->
+				{#if savedViews.length > 0}
+					<Collapsible.Root
+						open={!collapsedSections.has('views')}
+						onOpenChange={(open) => setSectionOpen('views', open)}
+						class="group/views mt-1"
+					>
+						<Collapsible.Trigger class={groupTriggerClass}>
+							<Icon
+								icon="arrow-right"
+								size={12}
+								class="shrink-0 text-muted-foreground transition-transform duration-150 group-data-[state=open]/views:rotate-90"
+							/>
+							<span>Views</span>
+						</Collapsible.Trigger>
+						<Collapsible.Content class={groupContentClass}>
+							{#each savedViews as view (view.id)}
+								<div
+									class="{treeItemClass} group/view flex w-full min-w-0 items-center"
+									role="listitem"
+									use:sortableItem={{
+										dragData: view,
+										container: 'sidebar-views',
+										onDrop: (state: DragDropState<SavedView>) => handleViewReorder(state, view)
+									}}
+								>
+									{#if renamingViewId === view.id}
+										<form
+											class="flex min-w-0 flex-1 items-center px-2"
+											onsubmit={(e) => {
+												e.preventDefault();
+												submitRenameView();
+											}}
+										>
+											<Input
+												bind:value={renameText}
+												class="h-7 w-full rounded-md border-input bg-transparent px-1.5 text-[13px] text-foreground outline-none dark:bg-input/30"
+												autofocus
+												onblur={submitRenameView}
+												onkeydown={(e) => {
+													if (e.key === 'Escape') renamingViewId = null;
+												}}
+											/>
+										</form>
+									{:else}
+										<button
+											type="button"
+											aria-pressed={activeFilter === 'apply-view:' + view.id}
+											class="{navItemClass} flex-1 {activeFilter === 'apply-view:' + view.id
+												? navActiveClass
+												: navIdleClass}"
+											onclick={() => dispatchFilter('apply-view', 'apply-view:' + view.id, view)}
+										>
+											<Icon icon="widget" size={14} class="shrink-0 text-muted-foreground" />
+											<span class="truncate">{view.name}</span>
+										</button>
+										<button
+											type="button"
+											aria-label="Rename view"
+											class="shrink-0 rounded p-0.5 text-muted-foreground/40 opacity-0 transition-opacity group-hover/view:opacity-100 hover:text-foreground"
+											onclick={() => startRenameView(view.id, view.name)}
+										>
+											<Icon icon="pencil" size={11} />
+										</button>
+										<button
+											type="button"
+											aria-label="Delete view"
+											class="mr-1 shrink-0 rounded p-0.5 text-muted-foreground/40 opacity-0 transition-opacity group-hover/view:opacity-100 hover:text-destructive"
+											onclick={() => void pageState.deleteView(view.id)}
+										>
+											<Icon icon="close" size={12} />
+										</button>
+									{/if}
+								</div>
+							{/each}
+						</Collapsible.Content>
+					</Collapsible.Root>
+				{/if}
 			</div>
 		{/if}
 		<div class="h-2 shrink-0"></div>
@@ -1017,6 +1129,27 @@
 					<Button
 						{...props}
 						variant="ghost"
+						href="/stats"
+						size={collapsed ? 'icon-sm' : 'default'}
+						class={collapsed
+							? iconBtnClass
+							: 'w-full justify-start gap-2 px-2 py-1.5 text-[13px] ' + navIdleClass}
+						aria-label="Stats"
+						onclick={closeMobile}
+					>
+						<Icon icon="chart" size={15} class="shrink-0 text-muted-foreground" />
+						{#if !collapsed}<span>Stats</span>{/if}
+					</Button>
+				{/snippet}
+			</Tooltip.Trigger>
+			{#if collapsed}<Tooltip.Content side="right">Stats</Tooltip.Content>{/if}
+		</Tooltip.Root>
+		<Tooltip.Root>
+			<Tooltip.Trigger>
+				{#snippet child({ props })}
+					<Button
+						{...props}
+						variant="ghost"
 						href="/settings"
 						size={collapsed ? 'icon-sm' : 'default'}
 						class={collapsed
@@ -1045,30 +1178,5 @@
 {/if}
 
 <style>
-	/* file-explorer style indent guides: a vertical rail under the group
-	   chevron plus a short stub connecting each row to it; the guides live
-	   in the left gutter so the row hover background never covers them,
-	   and the last row's rail stops at mid-height ending with an elbow */
-	.tree-item {
-		position: relative;
-	}
-	.tree-item::before,
-	.tree-item::after {
-		content: '';
-		position: absolute;
-		left: -8px;
-	}
-	.tree-item::before {
-		top: 0;
-		bottom: -1px;
-		border-left: 1px solid color-mix(in oklch, var(--sidebar-border) 60%, transparent);
-	}
-	.tree-item::after {
-		top: 50%;
-		width: 14px;
-		border-top: 1px solid color-mix(in oklch, var(--sidebar-border) 60%, transparent);
-	}
-	.tree-item:last-of-type::before {
-		bottom: 50%;
-	}
+	/* .tree-item guides live in layout.css so the task tree reuses them */
 </style>

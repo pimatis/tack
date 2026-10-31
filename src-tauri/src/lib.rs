@@ -1,3 +1,4 @@
+mod agent;
 mod attachments;
 pub mod backup;
 mod cli;
@@ -245,7 +246,11 @@ pub fn run() {
             live::live_stop,
             live::live_status,
             live::live_presence,
-            live::hash_live_password
+            live::hash_live_password,
+            agent::agent_start,
+            agent::agent_stop,
+            agent::agent_status,
+            agent::agent_result
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -279,6 +284,10 @@ pub fn run() {
             app.manage(live::LiveState {
                 server: Mutex::new(None),
                 hub: hub.clone(),
+            });
+            app.manage(agent::AgentState {
+                server: Mutex::new(None),
+                pending: Mutex::new(std::collections::HashMap::new()),
             });
             db_reporter::start_db_reporter(handle.clone(), hub.clone());
             // safety net: if the frontend never boots, don't leave the user

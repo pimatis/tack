@@ -1185,3 +1185,28 @@ body {
 .wiki-link:hover {
 	color: var(--foreground);
 }
+
+/* file-explorer style indent guides: a vertical rail plus a short stub
+   connecting each row to it; last row's rail stops at mid-height with an elbow */
+.tree-item {
+	position: relative;
+}
+.tree-item::before,
+.tree-item::after {
+	content: '';
+	position: absolute;
+	left: -8px;
+}
+.tree-item::before {
+	top: 0;
+	bottom: -1px;
+	border-left: 1px solid color-mix(in oklch, var(--sidebar-border) 60%, transparent);
+}
+.tree-item::after {
+	top: 50%;
+	width: 14px;
+	border-top: 1px solid color-mix(in oklch, var(--sidebar-border) 60%, transparent);
+}
+.tree-item:last-of-type::before {
+	bottom: 50%;
+}

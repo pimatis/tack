@@ -26,6 +26,7 @@
 			labels={state.labels}
 			initialDueDate={state.createDueDate}
 			initialTitle={state.createInitialTitle}
+			initialParentId={state.createParentId}
 			onCreated={(t) => state.handleCreated(t)}
 			onLabelCreated={(l) => state.handleLabelCreated(l)}
 			onLabelUpdated={(l) => state.handleLabelUpdated(l)}
@@ -108,6 +109,7 @@
 				onToggleLabelFilter={(id) => state.toggleLabelFilter(id)}
 				onSetUpdatedSince={(d) => (state.updatedSinceDays = d)}
 				onClearFilters={() => state.clearFilters()}
+				onSaveView={(name) => state.saveCurrentView(name)}
 			/>
 			<Separator class="mb-4" />
 		{/if}

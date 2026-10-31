@@ -16,6 +16,8 @@ const DEFAULTS: &[(&str, &str)] = &[
     ("backupKeepCount", "7"),
     ("liveEnabled", "false"),
     ("livePort", "17890"),
+    ("agentEnabled", "true"),
+    ("agentPort", "17891"),
     (
         "sidebarItems",
         "[{\"id\":\"pinned\",\"visible\":true},{\"id\":\"today\",\"visible\":true},{\"id\":\"upcoming\",\"visible\":true},{\"id\":\"overdue\",\"visible\":true},{\"id\":\"status\",\"visible\":true},{\"id\":\"priority\",\"visible\":true},{\"id\":\"quickStats\",\"visible\":true}]",
@@ -33,17 +35,17 @@ fn validate_value(key: &str, value: &str) -> Result<()> {
                 return Err("theme must be: dark, light, or system".to_string());
             }
         }
-        "sidebarCollapsed" | "backupEnabled" | "liveEnabled" => {
+        "sidebarCollapsed" | "backupEnabled" | "liveEnabled" | "agentEnabled" => {
             if value != "true" && value != "false" {
                 return Err(format!("{} must be true or false", key));
             }
         }
-        "livePort" => {
+        "livePort" | "agentPort" => {
             let p: u16 = value
                 .parse()
-                .map_err(|_| "livePort must be a number between 1024 and 65535".to_string())?;
+                .map_err(|_| format!("{} must be a number between 1024 and 65535", key))?;
             if !(1024..=65535).contains(&p) {
-                return Err("livePort must be between 1024 and 65535".to_string());
+                return Err(format!("{} must be between 1024 and 65535", key));
             }
         }
         "defaultViewMode" => {
@@ -52,8 +54,8 @@ fn validate_value(key: &str, value: &str) -> Result<()> {
             }
         }
         "defaultStatus" => {
-            if !["todo", "in_progress"].contains(&value) {
-                return Err("defaultStatus must be: todo or in_progress".to_string());
+            if !["backlog", "todo", "in_progress"].contains(&value) {
+                return Err("defaultStatus must be: backlog, todo or in_progress".to_string());
             }
         }
         "defaultPriority" => {

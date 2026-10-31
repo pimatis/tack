@@ -14,6 +14,7 @@
 	} = $props();
 
 	const statusOptions = [
+		{ value: 'backlog', label: 'Backlog' },
 		{ value: 'todo', label: 'Todo' },
 		{ value: 'in_progress', label: 'In progress' }
 	];
@@ -36,10 +37,10 @@
 	<Select.Root
 		type="single"
 		value={settings.defaultStatus}
-		onValueChange={(v) => update('defaultStatus', v as 'todo' | 'in_progress')}
+		onValueChange={(v) => update('defaultStatus', v as 'todo' | 'in_progress' | 'backlog')}
 	>
 		<Select.Trigger class="w-32">
-			{settings.defaultStatus === 'todo' ? 'Todo' : 'In progress'}
+			{statusOptions.find((o) => o.value === settings.defaultStatus)?.label ?? 'Todo'}
 		</Select.Trigger>
 		<Select.Content>
 			{#each statusOptions as opt (opt.value)}

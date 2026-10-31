@@ -3,6 +3,13 @@ import type { PaletteItem, PaletteProvider } from '../types';
 
 const ITEMS: PaletteItem[] = [
 	{
+		id: 'status-backlog',
+		label: 'Backlog',
+		status: 'backlog',
+		keywords: 'filter status backlog unprioritized',
+		run: () => goHomeThenDispatch('filter-by-status', 'backlog')
+	},
+	{
 		id: 'status-todo',
 		label: 'Todo',
 		status: 'todo',

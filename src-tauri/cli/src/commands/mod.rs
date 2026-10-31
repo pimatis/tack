@@ -7,3 +7,5 @@ pub mod project;
 pub mod settings;
 pub mod subtask;
 pub mod task;
+pub mod stats;
+pub mod ui;

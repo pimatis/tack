@@ -22,6 +22,15 @@ import {
 import { getSettings, setSettings } from '$lib/stores/settings';
 import { toast } from 'svelte-sonner';
 import { searchTaskIds } from '$lib/search/fts.service';
+import { parseSearchQuery, hasOperators, type SearchOperators } from '$lib/search/operators';
+import {
+	findAll as findViews,
+	create as createView,
+	remove as removeView,
+	rename as renameViewDb,
+	reorder as reorderViewsDb
+} from '$lib/repositories/view.repository';
+import type { SavedView, ViewFilters } from '$lib/types/view';
 import { getShortcutRegistry } from '$lib/shortcuts/index.js';
 import { sortableItem, dropZone, useDndActive, type DragDropState } from '$lib/dnd';
 import type { Project } from '$lib/types/project';
@@ -75,8 +84,12 @@ export class TaskPageState {
 
 	searchQuery = $state('');
 	ftsIds = $state<Set<string> | null>(null);
+	searchOps = $state<SearchOperators | null>(null);
+	searchText = $state('');
 	createDueDate = $state<string | null>(null);
 	createInitialTitle = $state<string | null>(null);
+	createParentId = $state<string | null>(null);
+	savedViews = $state<SavedView[]>([]);
 	statusFilters = $state<Set<TaskStatus>>(new Set());
 	projectFilters = $state<Set<string>>(new Set());
 	labelFilters = $state<Set<string>>(new Set());
@@ -163,11 +176,83 @@ export class TaskPageState {
 		}
 
 		const q = this.searchQuery.toLowerCase().trim();
-		if (q) {
+		if (this.searchText) {
 			// fts match (title, description, subtasks, labels, project, issue
 			// number) with an in-memory title fallback while results are pending
 			if (this.ftsIds) result = result.filter((t) => this.ftsIds?.has(t.id));
-			else result = result.filter((t) => t.title.toLowerCase().includes(q));
+			else result = result.filter((t) => t.title.toLowerCase().includes(this.searchText));
+		} else if (q && !this.searchOps) {
+			// first-keystroke fallback before the parser runs
+			result = result.filter((t) => t.title.toLowerCase().includes(q));
+		}
+
+		if (this.searchOps) {
+			const ops = this.searchOps;
+			if (ops.statuses.length > 0) result = result.filter((t) => ops.statuses.includes(t.status));
+			if (ops.priorities.length > 0)
+				result = result.filter((t) => ops.priorities.includes(t.priority));
+			if (ops.projectKeys.length > 0) {
+				const projectIds = new Set(
+					this.projects
+						.filter(
+							(p) =>
+								ops.projectKeys.includes(p.prefix.toLowerCase()) ||
+								ops.projectKeys.includes(p.name.toLowerCase())
+						)
+						.map((p) => p.id)
+				);
+				const wantsInbox = ops.projectKeys.some((k) => k === 'none' || k === 'inbox');
+				result = result.filter((t) => (t.projectId ? projectIds.has(t.projectId) : wantsInbox));
+			}
+			if (ops.labelNames.length > 0) {
+				const labelIds = new Set(
+					this.labels.filter((l) => ops.labelNames.includes(l.name.toLowerCase())).map((l) => l.id)
+				);
+				result = result.filter((t) => (t.labelIds ?? []).some((id) => labelIds.has(id)));
+			}
+			if (ops.pinned !== null) result = result.filter((t) => !!t.pinned === ops.pinned);
+			if (ops.blocked !== null) result = result.filter((t) => !!t.blocked === ops.blocked);
+			if (ops.hasParent) result = result.filter((t) => !!t.parentId);
+			if (ops.subtask !== null) result = result.filter((t) => !!t.parentId === ops.subtask);
+			if (ops.due) {
+				const now = new Date();
+				now.setHours(0, 0, 0, 0);
+				result = result.filter((t) => {
+					if (t.status === 'done' || t.status === 'canceled') return false;
+					const { start, end } = dateRange(t);
+					if (ops.due === 'none') return !start && !end;
+					if (!start && !end) return false;
+					if (ops.due === 'overdue')
+						return (
+							(!!start && start.getTime() < now.getTime()) ||
+							(!!end && end.getTime() < now.getTime())
+						);
+					if (ops.due === 'today')
+						return (
+							(!start || start.getTime() <= now.getTime()) &&
+							(!end || end.getTime() >= now.getTime())
+						);
+					if (ops.due === 'tomorrow') {
+						const tomorrow = new Date(now);
+						tomorrow.setDate(now.getDate() + 1);
+						const dayAfter = new Date(now);
+						dayAfter.setDate(now.getDate() + 2);
+						return (
+							(!!start &&
+								start.getTime() >= tomorrow.getTime() &&
+								start.getTime() < dayAfter.getTime()) ||
+							(!!end && end.getTime() >= tomorrow.getTime() && end.getTime() < dayAfter.getTime())
+						);
+					}
+					// week: either end of the span within the next 7 days
+					const week = new Date(now);
+					week.setDate(now.getDate() + 7);
+					return (
+						(!!start && start.getTime() > now.getTime() && start.getTime() <= week.getTime()) ||
+						(!!end && end.getTime() > now.getTime() && end.getTime() <= week.getTime())
+					);
+				});
+			}
 		}
 		if (this.statusFilters.size > 0)
 			result = result.filter((t) => this.statusFilters.has(t.status));
@@ -219,10 +304,19 @@ export class TaskPageState {
 		const q = query.trim();
 		if (!q) {
 			this.ftsIds = null;
+			this.searchOps = null;
+			this.searchText = '';
+			return;
+		}
+		const parsed = parseSearchQuery(q);
+		this.searchOps = hasOperators(parsed.ops) ? parsed.ops : null;
+		this.searchText = parsed.text.toLowerCase();
+		if (!parsed.text) {
+			this.ftsIds = null;
 			return;
 		}
 		try {
-			this.ftsIds = await searchTaskIds(q);
+			this.ftsIds = await searchTaskIds(parsed.text);
 		} catch {
 			this.ftsIds = null;
 		}
@@ -230,6 +324,8 @@ export class TaskPageState {
 
 	clearFilters() {
 		this.searchQuery = '';
+		this.searchOps = null;
+		this.searchText = '';
 		this.statusFilters = new Set();
 		this.projectFilters = new Set();
 		this.labelFilters = new Set();
@@ -366,14 +462,16 @@ export class TaskPageState {
 		if (!hasData) this.loading = true;
 		this.error = null;
 		try {
-			const [tasks, projects, labels] = await Promise.all([
+			const [tasks, projects, labels, views] = await Promise.all([
 				findAll(),
 				findProjects(),
-				findLabels()
+				findLabels(),
+				findViews().catch(() => [] as SavedView[])
 			]);
 			this.tasks = tasks;
 			this.projects = projects;
 			this.labels = labels;
+			this.savedViews = views;
 			writeDataCache({ tasks, projects, labels });
 			window.dispatchEvent(new Event('tasks-changed'));
 			window.dispatchEvent(new Event('projects-changed'));
@@ -416,9 +514,87 @@ export class TaskPageState {
 	}
 
 	handleEdit(task: Task) {
+		// the detail panel is an overlay; remember the list scroll so closing
+		// the panel returns to the same spot instead of the top
+		this.listScrollTop =
+			document.querySelector('main .overflow-auto')?.scrollTop ?? this.listScrollTop;
 		this.editingTask = task;
 		this.editDialogOpen = true;
 	}
+
+	// apply a saved view's filter snapshot
+	applyView(view: SavedView) {
+		const f = view.filters;
+		this.statusFilters = new Set(f.statuses ?? []);
+		this.projectFilters = new Set(f.projectIds ?? []);
+		this.labelFilters = new Set(f.labelIds ?? []);
+		this.priorityFilter = f.priority ?? null;
+		this.pinnedFilter = f.pinned ?? false;
+		this.todayFilter = f.due === 'today';
+		this.upcomingFilter = f.due === 'upcoming';
+		this.overdueFilter = f.due === 'overdue';
+		this.updatedSinceDays = f.updatedSinceDays ?? null;
+		this.searchQuery = '';
+	}
+
+	// the filter snapshot a saved view would restore right now
+	currentViewFilters = $derived<ViewFilters>({
+		statuses: [...this.statusFilters],
+		projectIds: [...this.projectFilters],
+		labelIds: [...this.labelFilters],
+		priority: this.priorityFilter,
+		pinned: this.pinnedFilter,
+		due: this.todayFilter
+			? 'today'
+			: this.upcomingFilter
+				? 'upcoming'
+				: this.overdueFilter
+					? 'overdue'
+					: null,
+		updatedSinceDays: this.updatedSinceDays
+	});
+
+	async saveCurrentView(name: string) {
+		const trimmed = name.trim();
+		if (!trimmed) return;
+		try {
+			const view = await createView(trimmed, this.currentViewFilters);
+			this.savedViews = [...this.savedViews, view];
+			toast.success(`View "${trimmed}" saved`);
+		} catch {
+			this.error = 'Failed to save view';
+		}
+	}
+
+	async renameView(id: string, name: string) {
+		const trimmed = name.trim();
+		if (!trimmed) return;
+		try {
+			await renameViewDb(id, trimmed);
+			this.savedViews = this.savedViews.map((v) => (v.id === id ? { ...v, name: trimmed } : v));
+		} catch {
+			this.error = 'Failed to rename view';
+		}
+	}
+
+	reorderViews(ordered: SavedView[]) {
+		// optimistic: the sidebar re-renders immediately, the write catches up
+		this.savedViews = ordered;
+		void reorderViewsDb(ordered.map((v) => v.id)).catch(() => {
+			this.error = 'Failed to reorder views';
+		});
+	}
+
+	async deleteView(id: string) {
+		try {
+			await removeView(id);
+			this.savedViews = this.savedViews.filter((v) => v.id !== id);
+		} catch {
+			this.error = 'Failed to delete view';
+		}
+	}
+
+	private listScrollTop = 0;
 
 	handleUpdated(task: Task) {
 		this.tasks = this.tasks.map((item) => (item.id === task.id ? task : item));
@@ -588,7 +764,14 @@ export class TaskPageState {
 			if (!this.dialogOpen) {
 				this.createInitialTitle = null;
 				this.createDueDate = null;
+				this.createParentId = null;
 			}
+		});
+		$effect(() => {
+			// the detail panel closes -> put the list scroll back where it was
+			if (this.editDialogOpen) return;
+			const el = document.querySelector('main .overflow-auto');
+			if (el) requestAnimationFrame(() => (el.scrollTop = this.listScrollTop));
 		});
 	}
 
@@ -613,7 +796,9 @@ export class TaskPageState {
 	init() {
 		const openDialog = (event: Event) => {
 			// the palette's "Create task '<query>'" item prefills the title
-			this.createInitialTitle = (event as CustomEvent<{ title?: string }>).detail?.title ?? null;
+			const detail = (event as CustomEvent<{ title?: string; parentId?: string }>).detail;
+			this.createInitialTitle = detail?.title ?? null;
+			this.createParentId = detail?.parentId ?? null;
 			this.dialogOpen = true;
 		};
 		const openProjectDialog = () => (this.projectDialogOpen = true);
@@ -729,6 +914,9 @@ export class TaskPageState {
 			this.labelFilters = new Set();
 		};
 		const clearFiltersHandler = () => this.clearFilters();
+		const applyViewHandler = (event: Event) => {
+			this.applyView((event as CustomEvent<SavedView>).detail);
+		};
 		const setView = (event: Event) => {
 			const mode = (event as CustomEvent<string>).detail;
 			if (mode === 'list' || mode === 'board' || mode === 'calendar') this.viewMode = mode;
@@ -774,6 +962,7 @@ export class TaskPageState {
 		window.addEventListener('filter-upcoming', filterUpcoming);
 		window.addEventListener('filter-overdue', filterOverdue);
 		window.addEventListener('clear-filters', clearFiltersHandler);
+		window.addEventListener('apply-view', applyViewHandler);
 		window.addEventListener('set-view', setView);
 
 		let refreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -799,6 +988,7 @@ export class TaskPageState {
 			window.removeEventListener('filter-upcoming', filterUpcoming);
 			window.removeEventListener('filter-overdue', filterOverdue);
 			window.removeEventListener('clear-filters', clearFiltersHandler);
+			window.removeEventListener('apply-view', applyViewHandler);
 			window.removeEventListener('set-view', setView);
 			unregisterSelectAll();
 			unregisterToggleView();

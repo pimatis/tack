@@ -8,6 +8,7 @@
 	import type { Label } from '$lib/types/label';
 	import type { Settings } from '$lib/types/settings';
 	import { statusConfig } from '$lib/task/constants';
+	import { SvelteSet } from 'svelte/reactivity';
 
 	let {
 		groups,
@@ -44,7 +45,56 @@
 		onDelete: (id: string) => void;
 		onListDrop: (state: DragDropState<Task>, targetTask: Task) => void;
 	} = $props();
+
+	const allTasks = $derived(statusOrderList.flatMap((s) => groups[s]));
+	const parentIds = $derived(new Set(allTasks.map((t) => t.id)));
+	const childrenOf = $derived.by(() => {
+		const map = new Map<string, Task[]>();
+		for (const t of allTasks) {
+			if (!t.parentId || !parentIds.has(t.parentId)) continue;
+			const arr = map.get(t.parentId) ?? [];
+			arr.push(t);
+			map.set(t.parentId, arr);
+		}
+		for (const arr of map.values()) arr.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+		return map;
+	});
+	const topLevel = (group: Task[]) =>
+		group.filter((t) => !t.parentId || !parentIds.has(t.parentId));
+
+	// expanded by default; toggle hides the children tree
+	let collapsedTasks = new SvelteSet<string>();
 </script>
+
+{#snippet taskRow(task: Task)}
+	<TaskRow
+		{task}
+		{projects}
+		{appSettings}
+		{labelMap}
+		{selectedIds}
+		{onToggleSelect}
+		{onChangePriority}
+		{onChangeStatus}
+		{onEdit}
+		{onTogglePin}
+		{onDuplicate}
+		{onDelete}
+		{onListDrop}
+		childrenExpanded={!collapsedTasks.has(task.id)}
+		onToggleChildren={() =>
+			collapsedTasks.has(task.id) ? collapsedTasks.delete(task.id) : collapsedTasks.add(task.id)}
+	/>
+	{#if !collapsedTasks.has(task.id) && (childrenOf.get(task.id)?.length ?? 0) > 0}
+		<div class="mt-0.5 ml-9 grid gap-px pl-2">
+			{#each childrenOf.get(task.id) ?? [] as child (child.id)}
+				<div class="tree-item">
+					{@render taskRow(child)}
+				</div>
+			{/each}
+		</div>
+	{/if}
+{/snippet}
 
 <div class="flex flex-col gap-5">
 	{#each statusOrderList as status (status)}
@@ -71,22 +121,8 @@
 				<!-- task rows -->
 				{#if !collapsed}
 					<div class="flex flex-col">
-						{#each group as task (task.id)}
-							<TaskRow
-								{task}
-								{projects}
-								{appSettings}
-								{labelMap}
-								{selectedIds}
-								{onToggleSelect}
-								{onChangePriority}
-								{onChangeStatus}
-								{onEdit}
-								{onTogglePin}
-								{onDuplicate}
-								{onDelete}
-								{onListDrop}
-							/>
+						{#each topLevel(group) as task (task.id)}
+							{@render taskRow(task)}
 						{/each}
 					</div>
 				{/if}
