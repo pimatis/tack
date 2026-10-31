@@ -13,7 +13,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
-	import { Separator } from '$lib/components/ui/separator/index.js';
+
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Label as FormLabel } from '$lib/components/ui/label/index.js';
 	import { Spinner } from '$lib/components/ui/spinner/index.js';
@@ -261,7 +261,9 @@
 		<Dialog.Title class="sr-only">Create task</Dialog.Title>
 		<form onsubmit={handleSubmit} class="flex flex-col">
 			<!-- header: badge + breadcrumb + close -->
-			<div class="flex items-center justify-between gap-2 px-4 pt-4 pb-3 sm:px-5">
+			<header
+				class="flex items-center justify-between gap-2 border-b border-border/60 px-4 py-3 sm:px-5"
+			>
 				<div class="flex min-w-0 items-center gap-2">
 					<div
 						class="flex size-4.5 shrink-0 items-center justify-center rounded-[5px] bg-primary text-[9px] leading-none font-bold text-primary-foreground"
@@ -284,34 +286,35 @@
 						</Button>
 					{/snippet}
 				</Dialog.Close>
-			</div>
+			</header>
 
-			<!-- title + description -->
-			<div class="flex flex-col gap-2 px-4 sm:px-5">
+			<!-- body -->
+			<div class="flex flex-col gap-4 px-4 py-4 sm:px-5">
 				<Input
 					bind:ref={titleRef}
 					bind:value={title}
 					placeholder="Task title"
-					class="h-auto border-none bg-transparent px-3 py-1 text-[18px] font-semibold shadow-none placeholder:text-muted-foreground/40"
+					class="h-auto px-3 py-2 text-[18px] font-semibold placeholder:text-muted-foreground/40"
 				/>
-				<div class="flex flex-col gap-1.5">
-					<div class="flex items-center justify-between">
+
+				<!-- description -->
+				<section>
+					<div class="flex items-center justify-between pb-1">
+						<span class="text-[11px] font-medium text-muted-foreground/60">Description</span>
 						{#if description.trim()}
-							<Button
-								variant="ghost"
-								class="flex h-auto items-center gap-1 p-0 text-[11px] text-muted-foreground/60 transition-colors hover:text-foreground"
+							<button
+								type="button"
+								class="flex items-center gap-1 text-[11px] text-muted-foreground/60 transition-colors hover:text-foreground"
 								onclick={() => (previewMode = !previewMode)}
 							>
 								{#if previewMode}
-									<Icon icon="checklist" size={11} />
+									<Icon icon="pencil" size={10} />
 									<span>Edit</span>
 								{:else}
-									<Icon icon="eye" size={11} />
+									<Icon icon="eye" size={10} />
 									<span>Preview</span>
 								{/if}
-							</Button>
-						{:else}
-							<span></span>
+							</button>
 						{/if}
 					</div>
 					{#if previewMode}
@@ -327,43 +330,142 @@
 							bind:value={description}
 							placeholder="Add a description... **markdown supported**"
 							rows={2}
-							class="min-h-0 border-none bg-transparent px-3 py-1 text-[13px] shadow-none placeholder:text-muted-foreground/50"
+							class="min-h-0 text-[13px] placeholder:text-muted-foreground/50"
 						/>
 					{/if}
+				</section>
+
+				{#if attachments.length > 0}
+					<div class="flex flex-wrap gap-2">
+						{#each attachments as att, i (i)}
+							<div
+								class="group/att relative size-16 cursor-zoom-in overflow-hidden rounded-lg border border-border bg-muted/30"
+								role="button"
+								tabindex="0"
+								onclick={() => {
+									if (att.fileData) lightboxUrl = att.fileData;
+									lightboxAtt = att;
+								}}
+								onkeydown={(e) => {
+									if (e.key === 'Enter' && att.fileData) lightboxUrl = att.fileData;
+									lightboxAtt = att;
+								}}
+							>
+								<img src={att.fileData} alt={att.fileName} class="size-full object-cover" />
+								<Button
+									variant="ghost"
+									size="icon-xs"
+									onclick={() => removeAttachment(i)}
+									class="absolute top-1 right-1 bg-background/80 text-foreground opacity-0 transition-opacity group-hover/att:opacity-100"
+									aria-label="Remove attachment"
+								>
+									<Icon icon="close" size={10} />
+								</Button>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				<!-- metadata: pills on top, pickers in pairs -->
+				<div class="flex flex-col gap-1.5">
+					<div class="flex flex-wrap gap-1.5">
+						<Select.Root type="single" bind:value={projectId as never}>
+							<Select.Trigger
+								size="sm"
+								class="gap-1.5 rounded-lg border-border bg-muted/30 px-2.5 text-[12px] font-normal shadow-none hover:bg-muted/50"
+							>
+								<span class="size-2 rounded-full bg-primary/80"></span>
+								{projects.find((p) => p.id === projectId)?.name ?? 'Select project'}
+							</Select.Trigger>
+							<Select.Content>
+								{#each projects as project (project.id)}
+									<Select.Item value={project.id} label={`${project.name} (${project.prefix})`} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+
+						<Select.Root type="single" bind:value={status as never}>
+							<Select.Trigger
+								size="sm"
+								class="gap-1.5 rounded-lg border-border bg-muted/30 px-2.5 text-[12px] font-normal shadow-none hover:bg-muted/50"
+							>
+								<StatusIcon {status} size={12} />
+								{statusLabels[status]}
+							</Select.Trigger>
+							<Select.Content>
+								{#each Object.entries(statusLabels) as [value, label] (value)}
+									<Select.Item {value} {label}>
+										<StatusIcon status={value as TaskStatus} size={12} />
+										<span>{label}</span>
+									</Select.Item>
+								{/each}
+							</Select.Content>
+						</Select.Root>
+
+						<Select.Root type="single" bind:value={priority as never}>
+							<Select.Trigger
+								size="sm"
+								class="gap-1.5 rounded-lg border-border bg-muted/30 px-2.5 text-[12px] font-normal shadow-none hover:bg-muted/50"
+							>
+								{#if priority !== '0'}
+									<PriorityIcon priority={Number(priority)} size={13} />
+								{/if}
+								{priorityLabels[priority]}
+							</Select.Trigger>
+							<Select.Content>
+								{#each Object.entries(priorityLabels) as [value, label] (value)}
+									<Select.Item {value} {label}>
+										<PriorityIcon priority={Number(value)} size={14} />
+										<span>{label}</span>
+									</Select.Item>
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
+
+					<LabelSelector
+						bind:selectedIds={selectedLabelIds}
+						{labels}
+						onCreated={onLabelCreated}
+						onUpdated={onLabelUpdated}
+						onRemoved={onLabelRemoved}
+					/>
+
+					<div class="grid grid-cols-2 gap-1.5">
+						<DueDatePicker
+							value={dueDate}
+							onSelect={(d) => (dueDate = d)}
+							onClear={() => (dueDate = '')}
+						/>
+						<DueDatePicker
+							title="End date"
+							value={endDate}
+							onSelect={(d) => (endDate = d)}
+							onClear={() => (endDate = '')}
+						/>
+					</div>
+
+					<div class="grid grid-cols-2 gap-1.5">
+						<RecurrencePicker
+							value={recurrenceRule}
+							anchorDate={dueDate || null}
+							onSelect={(rule) => (recurrenceRule = rule)}
+							onClear={() => (recurrenceRule = '')}
+						/>
+						<ReminderPicker
+							value={reminderAt}
+							onSelect={(iso) => (reminderAt = iso)}
+							onClear={() => (reminderAt = '')}
+						/>
+					</div>
 				</div>
+
+				{#if error}
+					<p class="text-[12px] text-destructive" role="alert">{error}</p>
+				{/if}
 			</div>
 
-			{#if attachments.length > 0}
-				<div class="flex flex-wrap gap-2 px-4 pt-1 sm:px-5">
-					{#each attachments as att, i (i)}
-						<div
-							class="group/att relative size-16 cursor-zoom-in overflow-hidden rounded-lg border border-border bg-muted/30"
-							role="button"
-							tabindex="0"
-							onclick={() => {
-								if (att.fileData) lightboxUrl = att.fileData;
-								lightboxAtt = att;
-							}}
-							onkeydown={(e) => {
-								if (e.key === 'Enter' && att.fileData) lightboxUrl = att.fileData;
-								lightboxAtt = att;
-							}}
-						>
-							<img src={att.fileData} alt={att.fileName} class="size-full object-cover" />
-							<Button
-								variant="ghost"
-								size="icon-xs"
-								onclick={() => removeAttachment(i)}
-								class="absolute top-1 right-1 bg-background/80 text-foreground opacity-0 transition-opacity group-hover/att:opacity-100"
-								aria-label="Remove attachment"
-							>
-								<Icon icon="close" size={10} />
-							</Button>
-						</div>
-					{/each}
-				</div>
-			{/if}
-
+			<!-- footer -->
 			<Input
 				bind:ref={fileInput}
 				type="file"
@@ -372,109 +474,9 @@
 				class="hidden"
 				onchange={handleFileSelect}
 			/>
-
-			<!-- metadata pills -->
-			<div class="flex flex-wrap gap-1.5 px-4 pt-3 pb-4 sm:px-5">
-				<Select.Root type="single" bind:value={projectId as never}>
-					<Select.Trigger
-						size="sm"
-						class="gap-1.5 rounded-lg border-border bg-muted/30 px-2.5 text-[12px] font-normal shadow-none hover:bg-muted/50"
-					>
-						<span class="size-2 rounded-full bg-primary/80"></span>
-						{projects.find((p) => p.id === projectId)?.name ?? 'Select project'}
-					</Select.Trigger>
-					<Select.Content>
-						{#each projects as project (project.id)}
-							<Select.Item value={project.id} label={`${project.name} (${project.prefix})`} />
-						{/each}
-					</Select.Content>
-				</Select.Root>
-
-				<Select.Root type="single" bind:value={status as never}>
-					<Select.Trigger
-						size="sm"
-						class="gap-1.5 rounded-lg border-border bg-muted/30 px-2.5 text-[12px] font-normal shadow-none hover:bg-muted/50"
-					>
-						<StatusIcon {status} size={12} />
-						{statusLabels[status]}
-					</Select.Trigger>
-					<Select.Content>
-						{#each Object.entries(statusLabels) as [value, label] (value)}
-							<Select.Item {value} {label}>
-								<StatusIcon status={value as TaskStatus} size={12} />
-								<span>{label}</span>
-							</Select.Item>
-						{/each}
-					</Select.Content>
-				</Select.Root>
-
-				<Select.Root type="single" bind:value={priority as never}>
-					<Select.Trigger
-						size="sm"
-						class="gap-1.5 rounded-lg border-border bg-muted/30 px-2.5 text-[12px] font-normal shadow-none hover:bg-muted/50"
-					>
-						{#if priority !== '0'}
-							<PriorityIcon priority={Number(priority)} size={13} />
-						{/if}
-						{priorityLabels[priority]}
-					</Select.Trigger>
-					<Select.Content>
-						{#each Object.entries(priorityLabels) as [value, label] (value)}
-							<Select.Item {value} {label}>
-								<PriorityIcon priority={Number(value)} size={14} />
-								<span>{label}</span>
-							</Select.Item>
-						{/each}
-					</Select.Content>
-				</Select.Root>
-
-				<LabelSelector
-					bind:selectedIds={selectedLabelIds}
-					{labels}
-					onCreated={onLabelCreated}
-					onUpdated={onLabelUpdated}
-					onRemoved={onLabelRemoved}
-				/>
-
-				<!-- due date picker -->
-				<DueDatePicker
-					value={dueDate}
-					onSelect={(d) => (dueDate = d)}
-					onClear={() => (dueDate = '')}
-				/>
-
-				<!-- end date picker -->
-				<DueDatePicker
-					title="End date"
-					value={endDate}
-					onSelect={(d) => (endDate = d)}
-					onClear={() => (endDate = '')}
-				/>
-
-				<!-- repeat schedule -->
-				<RecurrencePicker
-					value={recurrenceRule}
-					anchorDate={dueDate || null}
-					onSelect={(rule) => (recurrenceRule = rule)}
-					onClear={() => (recurrenceRule = '')}
-				/>
-
-				<!-- reminder -->
-				<ReminderPicker
-					value={reminderAt}
-					onSelect={(iso) => (reminderAt = iso)}
-					onClear={() => (reminderAt = '')}
-				/>
-			</div>
-
-			{#if error}
-				<p class="px-4 text-[12px] text-destructive sm:px-5" role="alert">{error}</p>
-			{/if}
-
-			<Separator />
-
-			<!-- footer -->
-			<div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-5">
+			<footer
+				class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-3 sm:px-5"
+			>
 				<div class="flex items-center gap-2">
 					<Checkbox id="create-more" bind:checked={createMore} />
 					<FormLabel
@@ -503,7 +505,7 @@
 						{submitting ? 'Creating...' : 'Create task'}
 					</Button>
 				</div>
-			</div>
+			</footer>
 		</form>
 	</Dialog.Content>
 </Dialog.Root>

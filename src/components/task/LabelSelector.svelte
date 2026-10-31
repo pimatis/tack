@@ -143,7 +143,7 @@
 										}
 										if (e.key === 'Escape') cancelEdit();
 									}}
-									class="h-6 w-full border-none bg-transparent px-2 text-[13px] text-foreground outline-none"
+									class="h-6 w-full text-[13px]"
 									aria-label="Edit label name"
 								/>
 							</div>
@@ -258,7 +258,7 @@
 							void handleCreate();
 						}
 					}}
-					class="h-6 w-full border-none bg-transparent px-2 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/40"
+					class="h-6 w-full text-[13px] placeholder:text-muted-foreground/40"
 				/>
 				{#if newLabelName.trim()}
 					<Button

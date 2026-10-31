@@ -100,7 +100,7 @@
 					bind:ref={nameRef}
 					bind:value={name}
 					placeholder="Project name"
-					class="h-auto border-none bg-transparent px-3 py-1 text-[18px] font-semibold shadow-none placeholder:text-muted-foreground/40"
+					class="h-auto px-3 py-2 text-[18px] font-semibold placeholder:text-muted-foreground/40"
 				/>
 				<div class="flex items-center gap-2">
 					<span class="shrink-0 text-[12px] text-muted-foreground">Prefix</span>
@@ -145,7 +145,7 @@
 							bind:value={description}
 							placeholder="Add a description... **markdown supported**"
 							rows={3}
-							class="min-h-[80px] border-none bg-transparent px-3 py-1 text-[13px] shadow-none placeholder:text-muted-foreground/50"
+							class="min-h-[80px] text-[13px] placeholder:text-muted-foreground/50"
 						/>
 					{/if}
 				</div>

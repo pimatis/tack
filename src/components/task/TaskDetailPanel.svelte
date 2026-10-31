@@ -615,7 +615,7 @@
 	<Sheet.Content
 		side="right"
 		showCloseButton={false}
-		class="w-full! max-w-[640px]! gap-0 bg-card shadow-2xl sm:max-w-[680px]! lg:max-w-[720px]!"
+		class="w-full! gap-0 bg-card p-0 shadow-2xl sm:max-w-[640px]! lg:max-w-[700px]!"
 		aria-label="Task detail"
 	>
 		{#if task}
@@ -627,14 +627,16 @@
 				}}
 				class="flex h-full flex-col"
 			>
-				<!-- header -->
-				<div class="flex items-center justify-between px-4 pt-4 pb-3 sm:px-5">
-					<div class="flex items-center gap-2">
-						<span class="font-mono text-[12px] text-muted-foreground">
-							{prefix}-{task.number}
-						</span>
-					</div>
-					<div class="flex items-center gap-1">
+				<!-- header: issue id + quick actions -->
+				<header
+					class="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-2.5 sm:px-5"
+				>
+					<span
+						class="rounded-md border border-border/60 bg-muted/30 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
+					>
+						{prefix}-{task.number}
+					</span>
+					<div class="flex items-center gap-0.5">
 						<Tooltip.Root>
 							<Tooltip.Trigger>
 								{#snippet child({ props })}
@@ -676,6 +678,7 @@
 							</Tooltip.Trigger>
 							<Tooltip.Content side="bottom">Delete task</Tooltip.Content>
 						</Tooltip.Root>
+						<span class="mx-1.5 h-4 w-px bg-border/70"></span>
 						<Tooltip.Root>
 							<Tooltip.Trigger>
 								{#snippet child({ props })}
@@ -694,39 +697,38 @@
 							<Tooltip.Content side="bottom">Close</Tooltip.Content>
 						</Tooltip.Root>
 					</div>
-				</div>
+				</header>
 
-				<!-- scrollable content -->
-				<div class="flex flex-1 flex-col overflow-hidden md:flex-row">
-					<!-- main content -->
-					<div class="flex flex-1 flex-col overflow-y-auto px-4 sm:px-5">
+				<!-- body: content column + properties rail -->
+				<div class="flex min-h-0 flex-1 flex-col md:flex-row">
+					<!-- main column -->
+					<div class="min-w-0 flex-1 overflow-y-auto px-4 pt-3 pb-6 sm:px-5">
 						<!-- title -->
 						<Input
 							bind:ref={titleRef}
 							bind:value={title}
 							placeholder="Task title"
-							class="h-auto border-none bg-transparent px-3 py-1 text-[18px] font-semibold shadow-none placeholder:text-muted-foreground/40"
+							class="h-auto px-3 py-2 text-[17px] font-semibold placeholder:text-muted-foreground/40"
 						/>
 
 						<!-- description -->
-						<div class="flex flex-col gap-1.5 pt-2">
-							<div class="flex items-center justify-between">
+						<section class="pt-3">
+							<div class="flex items-center justify-between pb-1">
+								<span class="text-[11px] font-medium text-muted-foreground/60">Description</span>
 								{#if description.trim()}
-									<Button
-										variant="ghost"
-										class="flex h-auto items-center gap-1 p-0 text-[11px] text-muted-foreground/60 transition-colors hover:text-foreground"
+									<button
+										type="button"
+										class="flex items-center gap-1 text-[11px] text-muted-foreground/60 transition-colors hover:text-foreground"
 										onclick={() => (previewMode = !previewMode)}
 									>
 										{#if previewMode}
-											<Icon icon="checklist" size={11} />
+											<Icon icon="pencil" size={10} />
 											<span>Edit</span>
 										{:else}
-											<Icon icon="eye" size={11} />
+											<Icon icon="eye" size={10} />
 											<span>Preview</span>
 										{/if}
-									</Button>
-								{:else}
-									<span></span>
+									</button>
 								{/if}
 							</div>
 							{#if previewMode}
@@ -742,24 +744,24 @@
 									bind:value={description}
 									placeholder="Add a description... **markdown supported**"
 									rows={4}
-									class="min-h-[80px] border-none bg-transparent px-3 py-1 text-[13px] shadow-none placeholder:text-muted-foreground/50"
+									class="min-h-[80px] text-[13px] placeholder:text-muted-foreground/50"
 								/>
 							{/if}
-						</div>
+						</section>
 
-						<!-- subtasks / checklist -->
-						<div class="pt-4">
-							<div class="flex items-center gap-2 pb-2">
-								<Icon icon="checklist" size={14} class="text-muted-foreground/60" />
-								<span class="text-[12px] font-medium text-foreground">Subtasks</span>
+						<!-- subtasks -->
+						<section class="pt-6">
+							<div
+								class="flex items-center gap-1.5 pb-2 text-[11px] font-medium text-muted-foreground/60"
+							>
+								<Icon icon="checklist" size={12} />
+								<span>Subtasks</span>
 								{#if subtasks.length > 0}
-									<span class="text-[11px] text-muted-foreground/50"
-										>{subtasks.filter((s) => s.completed).length}/{subtasks.length}</span
-									>
+									<span>{subtasks.filter((s) => s.completed).length}/{subtasks.length}</span>
 									<div class="flex-1"></div>
 									<div class="flex items-center gap-1.5">
-										<span class="text-[11px] text-muted-foreground/50">{subtaskProgress}%</span>
-										<Progress value={subtaskProgress} class="h-1 w-20" />
+										<Progress value={subtaskProgress} class="h-1 w-16" />
+										<span>{subtaskProgress}%</span>
 									</div>
 								{/if}
 							</div>
@@ -800,7 +802,7 @@
 															if (e.key === 'Escape') cancelEditSubtask();
 														}}
 														onblur={() => void handleRenameSubtask(subtask.id)}
-														class="h-5 flex-1 rounded border-none bg-transparent px-2 text-[13px] text-foreground outline-none"
+														class="h-7 flex-1 text-[13px]"
 														aria-label="Rename subtask"
 													/>
 												{:else}
@@ -850,7 +852,7 @@
 												void handleAddSubtask();
 											}
 										}}
-										class="h-7 flex-1 border-none bg-transparent px-2 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/40"
+										class="h-8 flex-1 text-[13px] placeholder:text-muted-foreground/40"
 									/>
 									{#if newSubtaskTitle.trim()}
 										<Button
@@ -864,21 +866,22 @@
 									{/if}
 								</div>
 							{/if}
-						</div>
+						</section>
 
 						<!-- attachments -->
 						{#if loadingAttachments}
-							<div class="flex items-center gap-2 pt-3 text-[12px] text-muted-foreground">
+							<div class="flex items-center gap-2 pt-6 text-[12px] text-muted-foreground">
 								<Spinner class="size-3" />
 								<span>Loading attachments...</span>
 							</div>
 						{:else if attachments.length > 0 || pendingAttachments.length > 0}
-							<div class="pt-3">
+							<section class="pt-6">
 								<div
 									class="flex items-center gap-1.5 pb-2 text-[11px] font-medium text-muted-foreground/60"
 								>
 									<Icon icon="paperclip" size={12} />
 									<span>Attachments</span>
+									<span>{attachments.length + pendingAttachments.length}</span>
 								</div>
 								<div class="flex flex-wrap gap-2">
 									{#each attachments as att (att.id)}
@@ -983,16 +986,16 @@
 										</div>
 									{/each}
 								</div>
-							</div>
+							</section>
 						{/if}
 
 						{#if error}
-							<p class="pt-3 text-[12px] text-destructive" role="alert">{error}</p>
+							<p class="pt-4 text-[12px] text-destructive" role="alert">{error}</p>
 						{/if}
 
-						<!-- activity history -->
+						<!-- activity -->
 						{#if activities.length > 0}
-							<div class="pt-5">
+							<section class="pt-6">
 								<div
 									class="flex items-center gap-1.5 pb-2 text-[11px] font-medium text-muted-foreground/60"
 								>
@@ -1032,115 +1035,81 @@
 										</div>
 									{/each}
 								</div>
-							</div>
+							</section>
 						{/if}
-
-						<!-- timestamps -->
-						<div class="flex items-center gap-3 pt-2 pb-4 text-[11px] text-muted-foreground/40">
-							<span>Created {formatDate(task.createdAt)}</span>
-							<span class="size-1 rounded-full bg-muted-foreground/20"></span>
-							<span>Updated {formatDate(task.updatedAt)}</span>
-						</div>
 					</div>
 
-					<!-- properties sidebar -->
+					<!-- properties rail: every row is a self-labeled h-8 picker -->
 					<aside
-						class="flex shrink-0 flex-col gap-px border-t border-border/60 bg-muted/10 p-3 md:w-[200px] md:overflow-y-auto md:border-t-0 md:border-l"
+						class="flex w-full shrink-0 flex-col gap-1.5 border-t border-border/60 bg-muted/10 px-3 py-3 md:w-[215px] md:overflow-y-auto md:border-t-0 md:border-l"
 					>
-						<!-- status -->
-						<div class="flex flex-col gap-1 py-1.5">
-							<span class="text-[11px] font-medium text-muted-foreground/60">Status</span>
-							<StatusMenu value={status} onSelect={(s) => (status = s)}>
-								{#snippet trigger(props)}
-									<Button
-										{...props}
-										variant="ghost"
-										class="flex h-auto w-full items-center justify-start gap-2 rounded-md px-2 py-1.5 text-[12px] text-foreground transition-colors hover:bg-muted/50"
-									>
-										<StatusIcon {status} size={14} />
-										<span>{statusLabels[status]}</span>
-									</Button>
-								{/snippet}
-							</StatusMenu>
-						</div>
+						<StatusMenu value={status} onSelect={(s) => (status = s)}>
+							{#snippet trigger(props)}
+								<Button
+									{...props}
+									variant="outline"
+									size="sm"
+									class="flex h-8 w-full items-center justify-start gap-1.5 rounded-lg border-border bg-muted/30 px-2.5 text-[12px] font-normal shadow-none transition-colors hover:bg-muted/50"
+								>
+									<StatusIcon {status} size={14} />
+									<span>{statusLabels[status]}</span>
+								</Button>
+							{/snippet}
+						</StatusMenu>
 
-						<Separator />
+						<PriorityMenu value={Number(priority)} onSelect={(p) => (priority = String(p))}>
+							{#snippet trigger(props)}
+								<Button
+									{...props}
+									variant="outline"
+									size="sm"
+									class="flex h-8 w-full items-center justify-start gap-1.5 rounded-lg border-border bg-muted/30 px-2.5 text-[12px] font-normal shadow-none transition-colors hover:bg-muted/50"
+								>
+									<PriorityIcon priority={Number(priority)} size={14} />
+									<span>{priorityLabels[priority]}</span>
+								</Button>
+							{/snippet}
+						</PriorityMenu>
 
-						<!-- priority -->
-						<div class="flex flex-col gap-1 py-1.5">
-							<span class="text-[11px] font-medium text-muted-foreground/60">Priority</span>
-							<PriorityMenu value={Number(priority)} onSelect={(p) => (priority = String(p))}>
-								{#snippet trigger(props)}
-									<Button
-										{...props}
-										variant="ghost"
-										class="flex h-auto w-full items-center justify-start gap-2 rounded-md px-2 py-1.5 text-[12px] text-foreground transition-colors hover:bg-muted/50"
-									>
-										{#if Number(priority) > 0}
-											<PriorityIcon priority={Number(priority)} size={14} />
-										{/if}
-										<span>{priorityLabels[priority]}</span>
-									</Button>
-								{/snippet}
-							</PriorityMenu>
-						</div>
+						<Separator class="my-1.5" />
 
-						<Separator />
+						<DueDatePicker
+							value={dueDate}
+							onSelect={(d) => (dueDate = d)}
+							onClear={() => (dueDate = '')}
+						/>
+						<DueDatePicker
+							title="End date"
+							value={endDate}
+							onSelect={(d) => (endDate = d)}
+							onClear={() => (endDate = '')}
+						/>
+						<RecurrencePicker
+							value={recurrenceRule}
+							anchorDate={dueDate || null}
+							onSelect={(rule) => (recurrenceRule = rule)}
+							onClear={() => (recurrenceRule = '')}
+						/>
+						<ReminderPicker
+							value={reminderAt}
+							onSelect={(iso) => (reminderAt = iso)}
+							onClear={() => (reminderAt = '')}
+						/>
 
-						<!-- due date -->
-						<div class="flex flex-col gap-1 py-1.5">
-							<span class="text-[11px] font-medium text-muted-foreground/60">Due date</span>
-							<DueDatePicker
-								value={dueDate}
-								onSelect={(d) => (dueDate = d)}
-								onClear={() => (dueDate = '')}
-							/>
-						</div>
+						<Separator class="my-1.5" />
 
-						<!-- end date -->
-						<div class="flex flex-col gap-1 py-1.5">
-							<span class="text-[11px] font-medium text-muted-foreground/60">End date</span>
-							<DueDatePicker
-								title="End date"
-								value={endDate}
-								onSelect={(d) => (endDate = d)}
-								onClear={() => (endDate = '')}
-							/>
-						</div>
+						<LabelSelector
+							bind:selectedIds={selectedLabelIds}
+							{labels}
+							onCreated={onLabelCreated}
+							onUpdated={onLabelUpdated}
+							onRemoved={onLabelRemoved}
+						/>
 
-						<!-- repeat -->
-						<div class="flex flex-col gap-1 py-1.5">
-							<span class="text-[11px] font-medium text-muted-foreground/60">Repeat</span>
-							<RecurrencePicker
-								value={recurrenceRule}
-								anchorDate={dueDate || null}
-								onSelect={(rule) => (recurrenceRule = rule)}
-								onClear={() => (recurrenceRule = '')}
-							/>
-						</div>
-
-						<!-- reminder -->
-						<div class="flex flex-col gap-1 py-1.5">
-							<span class="text-[11px] font-medium text-muted-foreground/60">Reminder</span>
-							<ReminderPicker
-								value={reminderAt}
-								onSelect={(iso) => (reminderAt = iso)}
-								onClear={() => (reminderAt = '')}
-							/>
-						</div>
-
-						<Separator />
-
-						<!-- labels -->
-						<div class="flex flex-col gap-1 py-1.5">
-							<span class="text-[11px] font-medium text-muted-foreground/60">Labels</span>
-							<LabelSelector
-								bind:selectedIds={selectedLabelIds}
-								{labels}
-								onCreated={onLabelCreated}
-								onUpdated={onLabelUpdated}
-								onRemoved={onLabelRemoved}
-							/>
+						<!-- task meta pinned to the rail bottom -->
+						<div class="mt-auto flex flex-col gap-0.5 pt-5 text-[10px] text-muted-foreground/40">
+							<span>Created {formatDate(task.createdAt)}</span>
+							<span>Updated {formatDate(task.updatedAt)}</span>
 						</div>
 					</aside>
 				</div>
@@ -1154,37 +1123,37 @@
 					class="hidden"
 					onchange={handleFileSelect}
 				/>
-				<div class="flex items-center justify-between border-t border-border px-4 py-3 sm:px-5">
-					<div class="flex items-center gap-2">
-						<Tooltip.Root>
-							<Tooltip.Trigger>
-								{#snippet child({ props })}
-									<Button
-										{...props}
-										variant="ghost"
-										size="icon-sm"
-										class="text-muted-foreground"
-										aria-label="Attach file"
-										onclick={() => fileInput?.click()}
-									>
-										{#if uploading}
-											<Spinner class="size-4" />
-										{:else}
-											<Icon icon="paperclip" size={16} />
-										{/if}
-									</Button>
-								{/snippet}
-							</Tooltip.Trigger>
-							<Tooltip.Content side="top">Attach file</Tooltip.Content>
-						</Tooltip.Root>
-					</div>
+				<footer
+					class="flex items-center justify-between border-t border-border/60 px-4 py-3 sm:px-5"
+				>
+					<Tooltip.Root>
+						<Tooltip.Trigger>
+							{#snippet child({ props })}
+								<Button
+									{...props}
+									variant="ghost"
+									size="icon-sm"
+									class="text-muted-foreground"
+									aria-label="Attach file"
+									onclick={() => fileInput?.click()}
+								>
+									{#if uploading}
+										<Spinner class="size-4" />
+									{:else}
+										<Icon icon="paperclip" size={16} />
+									{/if}
+								</Button>
+							{/snippet}
+						</Tooltip.Trigger>
+						<Tooltip.Content side="top">Attach file</Tooltip.Content>
+					</Tooltip.Root>
 					<div class="flex items-center gap-2">
 						<Button variant="ghost" size="sm" onclick={close}>Cancel</Button>
 						<Button type="submit" size="sm" disabled={submitting || !isDirty}>
 							{submitting ? 'Saving...' : 'Save changes'}
 						</Button>
 					</div>
-				</div>
+				</footer>
 			</form>
 		{/if}
 	</Sheet.Content>

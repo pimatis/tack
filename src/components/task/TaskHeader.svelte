@@ -40,7 +40,7 @@
 			</span>
 		</div>
 	</div>
-	<div class="flex items-center gap-0.5 rounded-lg border border-border bg-muted/20 p-0.5">
+	<div class="flex items-center gap-0.5 rounded-lg border border-input bg-input/30 p-0.5">
 		<Tooltip.Root>
 			<Tooltip.Trigger>
 				{#snippet child({ props })}
@@ -50,8 +50,8 @@
 						size="icon-sm"
 						class="flex h-7 w-7 items-center justify-center rounded-md transition-colors {viewMode ===
 						'list'
-							? 'bg-muted text-foreground'
-							: 'text-muted-foreground hover:text-foreground'}"
+							? 'bg-foreground/10 text-foreground'
+							: 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'}"
 						onclick={() => (viewMode = 'list')}
 						aria-label="List view"
 					>
@@ -70,8 +70,8 @@
 						size="icon-sm"
 						class="flex h-7 w-7 items-center justify-center rounded-md transition-colors {viewMode ===
 						'board'
-							? 'bg-muted text-foreground'
-							: 'text-muted-foreground hover:text-foreground'}"
+							? 'bg-foreground/10 text-foreground'
+							: 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'}"
 						onclick={() => (viewMode = 'board')}
 						aria-label="Board view"
 					>
@@ -90,8 +90,8 @@
 						size="icon-sm"
 						class="flex h-7 w-7 items-center justify-center rounded-md transition-colors {viewMode ===
 						'calendar'
-							? 'bg-muted text-foreground'
-							: 'text-muted-foreground hover:text-foreground'}"
+							? 'bg-foreground/10 text-foreground'
+							: 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'}"
 						onclick={() => (viewMode = 'calendar')}
 						aria-label="Calendar view"
 					>
