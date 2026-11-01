@@ -4,6 +4,7 @@
 // working even when the ui moves around. every write is logged with
 // source='agent' so the feed can tell agent work apart from human work
 use super::http::{ask_user, err, json_response, read_body};
+use chrono::{Local, SecondsFormat, TimeZone, Utc};
 use super::Result;
 use crate::db::app_db_path;
 use crate::live::http::percent_decode;
@@ -298,7 +299,23 @@ pub(super) fn create(request: &mut Request, app: &AppHandle) -> Response<Cursor<
         Ok(c) => c,
         Err(e) => return err(500, e),
     };
-    let title = body["title"].as_str().map(str::trim).unwrap_or_default();
+    let now_dt = Local::now();
+    // "text" runs the natural-language quick-add parser; explicit body fields
+    // always win over parsed values
+    let parsed = body
+        .get("text")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|t| crate::quickadd::parse(t, now_dt.date_naive(), now_dt.time()));
+
+    let title = body["title"]
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .or_else(|| parsed.as_ref().map(|p| p.title.clone()))
+        .unwrap_or_default();
     if title.is_empty() {
         return err(400, "missing or empty \"title\"");
     }
@@ -312,11 +329,21 @@ pub(super) fn create(request: &mut Request, app: &AppHandle) -> Response<Cursor<
     let priority = match body.get("priority").and_then(|v| v.as_i64()) {
         Some(p) if !(0..=4).contains(&p) => return err(400, "priority must be 0-4"),
         Some(p) => p,
-        None => default_setting(&conn, "defaultPriority", "0")
-            .parse()
-            .unwrap_or(0),
+        None => parsed
+            .as_ref()
+            .and_then(|p| p.priority.map(|v| v as i64))
+            .unwrap_or_else(|| {
+                default_setting(&conn, "defaultPriority", "0")
+                    .parse()
+                    .unwrap_or(0)
+            }),
     };
-    let project_id = match body.get("project").and_then(|v| v.as_str()) {
+    let project_ref = body
+        .get("project")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .or_else(|| parsed.as_ref().and_then(|p| p.project_key.clone()));
+    let project_id = match project_ref.as_deref() {
         Some(p) => match resolve_project_id(&conn, p) {
             Ok(pid) => Some(pid),
             Err(e) => return err(404, e),
@@ -332,11 +359,54 @@ pub(super) fn create(request: &mut Request, app: &AppHandle) -> Response<Cursor<
     };
     let estimate = match body.get("estimate_minutes").and_then(|v| v.as_i64()) {
         Some(m) if m < 0 => return err(400, "estimate_minutes must be 0 or greater"),
-        other => other,
+        Some(m) => Some(m),
+        None => parsed.as_ref().and_then(|p| p.estimate_minutes),
     };
     let description = body.get("description").and_then(|v| v.as_str());
-    let due_date = body.get("due_date").and_then(|v| v.as_str());
-    let end_date = body.get("end_date").and_then(|v| v.as_str());
+    let due_date = body
+        .get("due_date")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .or_else(|| {
+            parsed
+                .as_ref()
+                .and_then(|p| p.due_date.map(|d| d.format("%Y-%m-%d").to_string()))
+        });
+    let end_date = body
+        .get("end_date")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .or_else(|| {
+            parsed
+                .as_ref()
+                .and_then(|p| p.end_date.map(|d| d.format("%Y-%m-%d").to_string()))
+        });
+    let reminder_at = body
+        .get("reminder_at")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .or_else(|| {
+            parsed.as_ref().and_then(|p| {
+                p.reminder.and_then(|naive| {
+                    Local
+                        .from_local_datetime(&naive)
+                        .earliest()
+                        .map(|dt| {
+                            dt.with_timezone(&Utc)
+                                .to_rfc3339_opts(SecondsFormat::Millis, true)
+                        })
+                })
+            })
+        });
+    let recurrence_rule = body
+        .get("recurrence_rule")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .or_else(|| parsed.as_ref().and_then(|p| p.recurrence.clone()));
+    let pinned = body
+        .get("pinned")
+        .and_then(|v| v.as_bool())
+        .unwrap_or_else(|| parsed.as_ref().is_some_and(|p| p.pinned));
 
     let id = new_id();
     let now = now_iso();
@@ -357,16 +427,41 @@ pub(super) fn create(request: &mut Request, app: &AppHandle) -> Response<Cursor<
 
     if let Err(e) = conn.execute(
         "INSERT INTO tasks (id, number, project_id, title, description, status, priority,
-         due_date, end_date, parent_id, estimate_minutes, sort_order, pinned, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 0, 0, ?12, ?13)",
-        params![id, number, project_id, title, description, status, priority, due_date, end_date, parent_id, estimate, now, now],
+         due_date, end_date, parent_id, estimate_minutes, reminder_at, recurrence_rule, sort_order, pinned, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 0, ?14, ?15, ?16)",
+        params![id, number, project_id, title, description, status, priority, due_date, end_date, parent_id, estimate, reminder_at, recurrence_rule, pinned as i64, now, now],
     ) {
         return err(500, format!("failed to create task: {}", e));
     }
     let _ = log_activity(&conn, &id, "created", None, None, None);
+    let mut missing_labels = Vec::new();
+    if let Some(p) = &parsed {
+        for name in &p.label_names {
+            let label_id = conn
+                .query_row(
+                    "SELECT id FROM labels WHERE name = ?1 COLLATE NOCASE OR name = ?2 COLLATE NOCASE",
+                    params![name, name.replace('-', " ")],
+                    |r| r.get::<_, String>(0),
+                )
+                .optional()
+                .unwrap_or(None);
+            match label_id {
+                Some(lid) => {
+                    let _ = conn.execute(
+                        "INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?1, ?2)",
+                        params![id, lid],
+                    );
+                }
+                None => missing_labels.push(name.clone()),
+            }
+        }
+    }
     notify(app);
     match task_by_id(&conn, &id) {
-        Ok(task) => json_response(StatusCode(200), json!({ "ok": true, "task": task })),
+        Ok(task) => json_response(
+            StatusCode(200),
+            json!({ "ok": true, "task": task, "missing_labels": missing_labels }),
+        ),
         Err(e) => err(500, e),
     }
 }

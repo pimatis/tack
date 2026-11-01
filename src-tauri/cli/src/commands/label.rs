@@ -177,7 +177,9 @@ pub fn delete(conn: &Connection, json: bool, id: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn assign(conn: &Connection, json: bool, task_id: &str, label_ids: &[String]) -> Result<()> {
+// replace a task's labels and log the additions; shared by `assign` and
+// `task add` (quick add resolves label names before calling)
+pub fn set_labels(conn: &Connection, task_id: &str, label_ids: &[String]) -> Result<()> {
     conn.execute(
         "DELETE FROM task_labels WHERE task_id = ?1",
         params![task_id],
@@ -210,6 +212,11 @@ pub fn assign(conn: &Connection, json: bool, task_id: &str, label_ids: &[String]
             "cli",
         );
     }
+    Ok(())
+}
+
+pub fn assign(conn: &Connection, json: bool, task_id: &str, label_ids: &[String]) -> Result<()> {
+    set_labels(conn, task_id, label_ids)?;
     if json {
         println!(
             "{}",

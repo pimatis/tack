@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { create } from '$lib/repositories/task.repository';
+	import { create, togglePin } from '$lib/repositories/task.repository';
+	import { parseQuickAdd } from '$lib/quickadd/parse';
 	import { create as createAttachment } from '$lib/repositories/attachment.repository';
 	import { setTaskLabels } from '$lib/repositories/label.repository';
 	import type { Label } from '$lib/types/label';
@@ -40,6 +41,8 @@
 		initialDueDate?: string | null;
 		initialTitle?: string | null;
 		initialParentId?: string | null;
+		// full prefill payload (palette quick-add alt+enter)
+		initial?: Partial<Task> | null;
 		onCreated?: (task: Task) => void;
 		onLabelCreated?: (label: Label) => void;
 		onLabelUpdated?: (label: Label) => void;
@@ -53,6 +56,7 @@
 		initialDueDate = null,
 		initialTitle = null,
 		initialParentId = null,
+		initial = null,
 		onCreated,
 		onLabelCreated,
 		onLabelUpdated,
@@ -70,6 +74,50 @@
 	let recurrenceRule = $state('');
 	let estimateText = $state('');
 	let selectedLabelIds = $state<string[]>([]);
+	let parsedPinned = $state(false);
+	let lastParsedKey = '';
+
+	// natural language quick-add: meta tokens typed into the title are applied
+	// to the matching fields and removed from the title as you type
+	function onTitleInput() {
+		const parsed = parseQuickAdd(title);
+		const key = JSON.stringify([
+			parsed.title,
+			parsed.projectKey,
+			parsed.labelNames,
+			parsed.priority,
+			parsed.pinned,
+			parsed.dueDate,
+			parsed.endDate,
+			parsed.reminderAt,
+			parsed.recurrenceRule,
+			parsed.estimateMinutes
+		]);
+		if (key === lastParsedKey) return;
+		lastParsedKey = key;
+		if (parsed.title !== title) title = parsed.title;
+		if (parsed.pinned) parsedPinned = true;
+		if (parsed.priority != null) priority = String(parsed.priority);
+		if (parsed.dueDate) dueDate = parsed.dueDate;
+		if (parsed.endDate) endDate = parsed.endDate;
+		if (parsed.reminderAt) reminderAt = parsed.reminderAt;
+		if (parsed.recurrenceRule) recurrenceRule = parsed.recurrenceRule;
+		if (parsed.estimateMinutes != null) estimateText = `${parsed.estimateMinutes}m`;
+		if (parsed.projectKey) {
+			const p = projects.find(
+				(pr) =>
+					pr.prefix.toLowerCase() === parsed.projectKey ||
+					pr.name.toLowerCase() === parsed.projectKey
+			);
+			if (p) projectId = p.id;
+		}
+		if (parsed.labelNames.length) {
+			const ids = parsed.labelNames
+				.map((n) => labels.find((l) => l.name.toLowerCase() === n)?.id)
+				.filter((id): id is string => !!id);
+			if (ids.length) selectedLabelIds = [...new Set([...selectedLabelIds, ...ids])];
+		}
+	}
 	let error = $state<string | null>(null);
 	let submitting = $state(false);
 	let createMore = $state(false);
@@ -114,6 +162,18 @@
 		if (!open) return;
 		dueDate = initialDueDate ?? '';
 		title = initialTitle ?? '';
+		parsedPinned = false;
+		lastParsedKey = '';
+		if (!initial) return;
+		if (initial.title) title = initial.title;
+		if (initial.dueDate) dueDate = initial.dueDate;
+		if (initial.endDate) endDate = initial.endDate;
+		if (initial.reminderAt) reminderAt = initial.reminderAt;
+		if (initial.recurrenceRule) recurrenceRule = initial.recurrenceRule;
+		if (initial.estimateMinutes != null) estimateText = `${initial.estimateMinutes}m`;
+		if (initial.priority != null) priority = String(initial.priority);
+		if (initial.projectId) projectId = initial.projectId;
+		if (initial.labelIds?.length) selectedLabelIds = [...initial.labelIds];
 	});
 
 	$effect(() => {
@@ -140,7 +200,7 @@
 			draftEnabled = false;
 			return;
 		}
-		if (initialTitle || initialDueDate || initialParentId) {
+		if (initialTitle || initialDueDate || initialParentId || initial) {
 			clearDraft();
 			return;
 		}
@@ -281,7 +341,7 @@
 		submitting = true;
 
 		try {
-			const task = await create({
+			let task = await create({
 				title: trimmedTitle,
 				projectId: project.id,
 				description: description.trim() || null,
@@ -310,6 +370,8 @@
 			if (selectedLabelIds.length > 0) {
 				await setTaskLabels(task.id, selectedLabelIds);
 			}
+
+			if (parsedPinned) task = (await togglePin(task.id)) ?? task;
 
 			onCreated?.(task);
 			if (createMore) {
@@ -380,6 +442,7 @@
 				<Input
 					bind:ref={titleRef}
 					bind:value={title}
+					oninput={onTitleInput}
 					placeholder="Task title"
 					class="h-auto px-3 py-2 text-[18px] font-semibold placeholder:text-muted-foreground/40"
 				/>

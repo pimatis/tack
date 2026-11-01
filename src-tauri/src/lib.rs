@@ -8,6 +8,9 @@ mod live;
 #[cfg(target_os = "macos")]
 mod macos_notifications;
 mod migrations;
+// the cli's natural-language parser, shared so agents get the same grammar
+#[path = "../cli/src/quickadd.rs"]
+mod quickadd;
 
 use rusqlite::Connection;
 use std::sync::atomic::{AtomicBool, Ordering};

@@ -19,7 +19,7 @@
 	// searches all providers at once
 	const PREFIX_SCOPES: Record<string, string[]> = {
 		'>': ['actions'],
-		'#': ['projects'],
+		'#': ['projects', 'actions'],
 		'@': ['labels'],
 		'?': ['filters']
 	};
@@ -32,9 +32,10 @@
 
 	const parsed = $derived.by(() => {
 		const trimmed = query.trim();
-		const ids = PREFIX_SCOPES[trimmed[0] ?? ''];
-		if (ids) return { ids, q: trimmed.slice(1).trim(), scoped: true };
-		return { ids: null as string[] | null, q: trimmed, scoped: false };
+		const prefix = trimmed[0] ?? '';
+		const ids = PREFIX_SCOPES[prefix];
+		if (ids) return { ids, prefix, raw: trimmed, q: trimmed.slice(1).trim(), scoped: true };
+		return { ids: null as string[] | null, prefix: '', raw: trimmed, q: trimmed, scoped: false };
 	});
 
 	const activeProviders = $derived(
@@ -93,7 +94,7 @@
 	// debounced provider search; the seq guard drops stale async results
 	let searchSeq = 0;
 	$effect(() => {
-		const { q, scoped } = parsed;
+		const { q, raw, prefix, scoped } = parsed;
 		const c = ctx;
 		if (!open) {
 			results = {};
@@ -104,7 +105,10 @@
 			async () => {
 				const entries = await Promise.all(
 					activeProviders.map(async (provider) => {
-						const items = await provider.search(q, c, scoped);
+						// quick-add needs the "#" sigil back to parse "#wrk ..." as a
+						// project token; other providers keep the stripped query
+						const providerQuery = prefix === '#' && provider.id === 'actions' ? raw : q;
+						const items = await provider.search(providerQuery, c, scoped);
 						return [provider.id, items] as const;
 					})
 				);

@@ -88,6 +88,8 @@ export class TaskPageState {
 	searchText = $state('');
 	createDueDate = $state<string | null>(null);
 	createInitialTitle = $state<string | null>(null);
+	// full prefill payload from the palette's quick-add alt+enter path
+	createInitial = $state<Partial<Task> | null>(null);
 	createParentId = $state<string | null>(null);
 	savedViews = $state<SavedView[]>([]);
 	statusFilters = $state<Set<TaskStatus>>(new Set());
@@ -765,6 +767,7 @@ export class TaskPageState {
 				this.createInitialTitle = null;
 				this.createDueDate = null;
 				this.createParentId = null;
+				this.createInitial = null;
 			}
 		});
 		$effect(() => {
@@ -796,7 +799,8 @@ export class TaskPageState {
 	init() {
 		const openDialog = (event: Event) => {
 			// the palette's "Create task '<query>'" item prefills the title
-			const detail = (event as CustomEvent<{ title?: string; parentId?: string }>).detail;
+			const detail = (event as CustomEvent<Partial<Task>>).detail;
+			this.createInitial = detail ?? null;
 			this.createInitialTitle = detail?.title ?? null;
 			this.createParentId = detail?.parentId ?? null;
 			this.dialogOpen = true;
@@ -813,6 +817,9 @@ export class TaskPageState {
 		const deleteTaskFromPanel = (event: Event) => {
 			const taskId = (event as CustomEvent<string>).detail;
 			void this.handleDelete(taskId);
+		};
+		const taskCreated = (event: Event) => {
+			this.handleCreated((event as CustomEvent<Task>).detail);
 		};
 		const filterByProject = (event: Event) => {
 			const projectId = (event as CustomEvent<string>).detail;
@@ -953,6 +960,7 @@ export class TaskPageState {
 		window.addEventListener('open-project-edit-dialog', openProjectEditDialog);
 		window.addEventListener('edit-task-from-command', editTaskFromCommand);
 		window.addEventListener('delete-task-from-panel', deleteTaskFromPanel);
+		window.addEventListener('task-created', taskCreated);
 		window.addEventListener('filter-by-project', filterByProject);
 		window.addEventListener('filter-pinned', filterPinned);
 		window.addEventListener('filter-by-status', filterByStatus);
@@ -979,6 +987,7 @@ export class TaskPageState {
 			window.removeEventListener('open-project-edit-dialog', openProjectEditDialog);
 			window.removeEventListener('edit-task-from-command', editTaskFromCommand);
 			window.removeEventListener('delete-task-from-panel', deleteTaskFromPanel);
+			window.removeEventListener('task-created', taskCreated);
 			window.removeEventListener('filter-by-project', filterByProject);
 			window.removeEventListener('filter-pinned', filterPinned);
 			window.removeEventListener('filter-by-status', filterByStatus);

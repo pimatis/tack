@@ -27,6 +27,7 @@
 			initialDueDate={state.createDueDate}
 			initialTitle={state.createInitialTitle}
 			initialParentId={state.createParentId}
+			initial={state.createInitial}
 			onCreated={(t) => state.handleCreated(t)}
 			onLabelCreated={(l) => state.handleLabelCreated(l)}
 			onLabelUpdated={(l) => state.handleLabelUpdated(l)}

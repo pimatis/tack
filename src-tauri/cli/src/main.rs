@@ -3,6 +3,7 @@ mod backup;
 mod commands;
 mod db;
 mod mcp;
+mod quickadd;
 mod recurrence;
 
 use clap::{Parser, Subcommand};
@@ -67,6 +68,14 @@ enum Commands {
     Live {
         #[command(subcommand)]
         action: LiveAction,
+    },
+    /// Quick-add a task from a natural language line (alias for `task add`),
+    /// e.g. `tack add tomorrow 15:00 finish report #work !high every friday`
+    Add {
+        #[arg(required = true, num_args = 1.., help = "Free-form text; #project +label !priority ~estimate and date/time/recurrence words are parsed out. Quote the line if it contains #")]
+        text: Vec<String>,
+        #[arg(long, help = "Print the parsed task without creating it")]
+        dry_run: bool,
     },
     /// Show workspace stats
     Stats,
@@ -251,6 +260,22 @@ enum TaskAction {
         parent: Option<String>,
         #[arg(long, help = "Estimate: 90m, 2h, 1h30m")]
         estimate: Option<String>,
+    },
+    /// Create a task from a natural language line, e.g.
+    /// `tack task add tomorrow 15:00 finish report #work !high every friday`
+    /// (quote the line if it contains #, the shell reads it as a comment)
+    Add {
+        #[arg(required = true, num_args = 1.., help = "Free-form text; #project +label !priority ~estimate and date/time/recurrence words are parsed out. Quote the line if it contains #")]
+        text: Vec<String>,
+        #[arg(long, help = "Print the parsed task without creating it")]
+        dry_run: bool,
+    },
+    /// Patch a task with the same natural language line as `task add`:
+    /// `tack task edit TSK-4 'tomorrow !high +bug'` applies only parsed fields
+    Edit {
+        id: String,
+        #[arg(required = true, num_args = 1..)]
+        text: Vec<String>,
     },
     /// List tasks with optional filters
     List {
@@ -630,6 +655,12 @@ fn main() {
                     estimate.as_deref(),
                 )
             }
+            TaskAction::Add { text, dry_run } => {
+                commands::task::add(&conn, json, &text.join(" "), dry_run)
+            }
+            TaskAction::Edit { id, text } => {
+                commands::task::edit(&conn, json, &id, &text.join(" "))
+            }
             TaskAction::List {
                 project,
                 project_prefix,
@@ -814,6 +845,9 @@ fn main() {
             LiveAction::Status => commands::live::status(&conn, json),
             LiveAction::Watch => commands::live::watch(&conn, json),
         },
+        Commands::Add { text, dry_run } => {
+            commands::task::add(&conn, json, &text.join(" "), dry_run)
+        }
         Commands::Stats => commands::stats::stats(&conn, json),
         Commands::Today => commands::task::today(&conn, json),
         Commands::Ui { action } => match action {

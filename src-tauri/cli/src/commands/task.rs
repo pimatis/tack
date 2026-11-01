@@ -1,7 +1,9 @@
+use super::label;
 use crate::db::*;
+use crate::quickadd;
 use crate::recurrence;
 use chrono::{Local, SecondsFormat, TimeZone, Utc};
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::json;
 
 // accept an rfc3339 instant or a local "YYYY-MM-DDTHH:MM[:SS]"; stored as utc
@@ -163,6 +165,17 @@ fn parse_estimate(value: &str) -> Result<Option<i64>> {
         .map_err(|_| invalid())
 }
 
+// minutes -> "1h30m" / "45m", inverse of parse_estimate
+fn format_estimate(minutes: i64) -> String {
+    let h = minutes / 60;
+    let m = minutes % 60;
+    match (h, m) {
+        (0, m) => format!("{}m", m),
+        (h, 0) => format!("{}h", h),
+        (h, m) => format!("{}h{}m", h, m),
+    }
+}
+
 // structured "key:value" tokens pulled out of a search query; the rest stays
 // free text for fts. mirrors src/lib/search/operators.ts
 fn split_search(query: &str) -> (String, Vec<(String, String)>) {
@@ -293,8 +306,6 @@ pub fn create(
         Some(e) => parse_estimate(e)?,
         None => None,
     };
-    let id = new_id();
-    let now = now_iso();
     let reminder_at = match reminder {
         Some(value) => parse_reminder(value)?,
         None => None,
@@ -312,28 +323,21 @@ pub fn create(
         .unwrap_or_else(|| get_default_status(conn));
     let final_priority = priority.unwrap_or_else(|| get_default_priority(conn));
 
-    let number: i32 = if let Some(ref pid) = project_id {
-        conn.query_row(
-            "SELECT COALESCE(MAX(number), 0) + 1 FROM tasks WHERE project_id = ?1",
-            params![pid],
-            |row| row.get(0),
-        )
-    } else {
-        conn.query_row(
-            "SELECT COALESCE(MAX(number), 0) + 1 FROM tasks WHERE project_id IS NULL",
-            [],
-            |row| row.get(0),
-        )
-    }
-    .map_err(|e| format!("Failed to assign task number: {}", e))?;
-
-    conn.execute(
-        "INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, reminder_at, recurrence_rule, parent_id, estimate_minutes, sort_order, pinned, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 0, 0, ?14, ?15)",
-        params![id, number, project_id, title, description, final_status, final_priority, due_date, end_date, reminder_at, recurrence_rule, parent_id, estimate_minutes, now, now],
-    ).map_err(|e| format!("Failed to create task: {}", e))?;
-
-    log_activity(conn, &id, "created", None, None, None, "cli")?;
+    let (id, number, now) = insert_task(
+        conn,
+        title,
+        project_id.as_deref(),
+        description,
+        &final_status,
+        final_priority,
+        due_date,
+        end_date,
+        reminder_at.as_deref(),
+        recurrence_rule.as_deref(),
+        parent_id.as_deref(),
+        estimate_minutes,
+        false,
+    )?;
 
     if json {
         println!(
@@ -364,6 +368,193 @@ pub fn create(
         println!("Priority: {}", priority_label(final_priority));
         if let Some(rule) = recurrence_rule.as_deref() {
             println!("Repeat: {}", recurrence::label(rule).unwrap_or_default());
+        }
+    }
+    Ok(())
+}
+
+// shared insert for `create` and `add`: assigns the per-project number, writes
+// the row and logs the activity. returns (id, number, created_at)
+#[allow(clippy::too_many_arguments)]
+fn insert_task(
+    conn: &Connection,
+    title: &str,
+    project_id: Option<&str>,
+    description: Option<&str>,
+    status: &str,
+    priority: i32,
+    due_date: Option<&str>,
+    end_date: Option<&str>,
+    reminder_at: Option<&str>,
+    recurrence_rule: Option<&str>,
+    parent_id: Option<&str>,
+    estimate_minutes: Option<i64>,
+    pinned: bool,
+) -> Result<(String, i32, String)> {
+    let id = new_id();
+    let now = now_iso();
+    let number: i32 = if let Some(pid) = project_id {
+        conn.query_row(
+            "SELECT COALESCE(MAX(number), 0) + 1 FROM tasks WHERE project_id = ?1",
+            params![pid],
+            |row| row.get(0),
+        )
+    } else {
+        conn.query_row(
+            "SELECT COALESCE(MAX(number), 0) + 1 FROM tasks WHERE project_id IS NULL",
+            [],
+            |row| row.get(0),
+        )
+    }
+    .map_err(|e| format!("Failed to assign task number: {}", e))?;
+
+    conn.execute(
+        "INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, reminder_at, recurrence_rule, parent_id, estimate_minutes, sort_order, pinned, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 0, ?14, ?15, ?16)",
+        params![id, number, project_id, title, description, status, priority, due_date, end_date, reminder_at, recurrence_rule, parent_id, estimate_minutes, pinned, now, now],
+    ).map_err(|e| format!("Failed to create task: {}", e))?;
+
+    log_activity(conn, &id, "created", None, None, None, "cli")?;
+    Ok((id, number, now))
+}
+
+// `tack task add tomorrow 15:00 finish report #work !high every friday` -
+// the line parses into fields (see quickadd.rs), leftovers become the title
+pub fn add(conn: &Connection, json: bool, text: &str, dry_run: bool) -> Result<()> {
+    let now = Local::now();
+    let parsed = quickadd::parse(text, now.date_naive(), now.time());
+    if parsed.title.is_empty() {
+        return Err("Nothing to create: no title text left after parsing".to_string());
+    }
+
+    let project_id = match parsed.project_key.as_deref() {
+        Some(key) => Some(
+            conn.query_row(
+                "SELECT id FROM projects WHERE prefix = ?1 COLLATE NOCASE OR name = ?1 COLLATE NOCASE",
+                params![key],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(|_| format!("No project matches '#{}'", key))?,
+        ),
+        None => None,
+    };
+
+    let mut label_ids = Vec::new();
+    let mut missing = Vec::new();
+    for name in &parsed.label_names {
+        let spaced = name.replace('-', " ");
+        match conn
+            .query_row(
+                "SELECT id FROM labels WHERE name = ?1 COLLATE NOCASE OR name = ?2 COLLATE NOCASE",
+                params![name, spaced],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?
+        {
+            Some(id) => label_ids.push(id),
+            None => missing.push(name.clone()),
+        }
+    }
+
+    let reminder_at = parsed.reminder.and_then(|naive| {
+        Local
+            .from_local_datetime(&naive)
+            .earliest()
+            .map(|dt| {
+                dt.with_timezone(&Utc)
+                    .to_rfc3339_opts(SecondsFormat::Millis, true)
+            })
+    });
+    let status = get_default_status(conn);
+    let priority = parsed
+        .priority
+        .unwrap_or_else(|| get_default_priority(conn));
+    let due_date = parsed.due_date.map(|d| d.format("%Y-%m-%d").to_string());
+    let end_date = parsed.end_date.map(|d| d.format("%Y-%m-%d").to_string());
+
+    if dry_run {
+        let out = json!({
+            "action": "task_add_dry_run",
+            "label_ids": label_ids,
+            "missing_labels": missing,
+            "task": {
+                "title": parsed.title,
+                "status": status,
+                "priority": priority,
+                "project_id": project_id,
+                "due_date": due_date,
+                "end_date": end_date,
+                "reminder_at": reminder_at,
+                "recurrence_rule": parsed.recurrence,
+                "estimate_minutes": parsed.estimate_minutes,
+                "pinned": parsed.pinned,
+            }
+        });
+        if json {
+            println!("{}", serde_json::to_string_pretty(&out).map_err(|e| e.to_string())?);
+        } else {
+            println!("Would create: {}", out);
+        }
+        return Ok(());
+    }
+
+    let (id, number, created) = insert_task(
+        conn,
+        &parsed.title,
+        project_id.as_deref(),
+        None,
+        &status,
+        priority,
+        due_date.as_deref(),
+        end_date.as_deref(),
+        reminder_at.as_deref(),
+        parsed.recurrence.as_deref(),
+        None,
+        parsed.estimate_minutes,
+        parsed.pinned,
+    )?;
+
+    if !label_ids.is_empty() {
+        label::set_labels(conn, &id, &label_ids)?;
+    }
+
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": true,
+                "action": "task_created",
+                "task": {
+                    "id": id,
+                    "number": number,
+                    "title": parsed.title,
+                    "status": status,
+                    "priority": priority,
+                    "due_date": due_date,
+                    "end_date": end_date,
+                    "reminder_at": reminder_at,
+                    "recurrence_rule": parsed.recurrence,
+                    "project_id": project_id,
+                    "pinned": parsed.pinned,
+                    "estimate_minutes": parsed.estimate_minutes,
+                    "created_at": created,
+                },
+                "label_ids": label_ids,
+                "missing_labels": missing,
+            }))
+            .map_err(|e| e.to_string())?
+        );
+    } else {
+        println!("Created task: #{} - {}", number, parsed.title);
+        println!("ID: {}", id);
+        println!("Status: {}", status_label(&status));
+        println!("Priority: {}", priority_label(priority));
+        if let Some(rule) = parsed.recurrence.as_deref() {
+            println!("Repeat: {}", recurrence::label(rule).unwrap_or_default());
+        }
+        if !missing.is_empty() {
+            println!("Note: unknown label(s) skipped: {}", missing.join(", "));
         }
     }
     Ok(())
@@ -504,7 +695,7 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
     let task = conn.query_row(
         "SELECT t.id, t.number, t.title, t.description, t.status, t.priority, t.due_date, t.end_date, t.pinned,
                 t.project_id, p.name, p.prefix, t.created_at, t.updated_at, t.reminder_at,
-                t.recurrence_rule, t.recurrence_parent_id
+                t.recurrence_rule, t.recurrence_parent_id, t.estimate_minutes, t.tracked_seconds
          FROM tasks t
          LEFT JOIN projects p ON t.project_id = p.id
          WHERE t.id = ?1",
@@ -528,6 +719,8 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
                 row.get::<_, Option<String>>(14)?,
                 row.get::<_, Option<String>>(15)?,
                 row.get::<_, Option<String>>(16)?,
+                row.get::<_, Option<i64>>(17)?,
+                row.get::<_, i64>(18)?,
             ))
         },
     ).map_err(|_| format!("Task {} not found", id))?;
@@ -550,6 +743,8 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
         reminder,
         recurrence_rule,
         recurrence_parent_id,
+        estimate_minutes,
+        tracked_seconds,
     ) = task;
 
     let display_number = match &project_prefix {
@@ -625,6 +820,8 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
                     "recurrence_rule": recurrence_rule,
                     "recurrence_parent_id": recurrence_parent_id,
                     "pinned": pinned == 1,
+                    "estimate_minutes": estimate_minutes,
+                    "tracked_seconds": tracked_seconds,
                     "project": {
                         "name": project_name,
                         "prefix": project_prefix,
@@ -664,6 +861,13 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
                 .unwrap_or("-".to_string())
         );
         println!("Pinned:      {}", if pinned == 1 { "yes" } else { "no" });
+        println!(
+            "Estimate:    {}",
+            estimate_minutes
+                .map(|m| format_estimate(m))
+                .unwrap_or("-".to_string())
+        );
+        println!("Tracked:     {}", format_estimate(tracked_seconds / 60));
         if let Some(pname) = project_name {
             println!(
                 "Project:     {} ({})",
@@ -721,6 +925,105 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// `tack task edit TSK-4 'yarın !high +bug'` — same grammar as `add`, applied
+/// as a patch: only the fields the parser extracts are touched
+pub fn edit(conn: &Connection, json: bool, id: &str, text: &str) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
+    let now = Local::now();
+    let parsed = quickadd::parse(text, now.date_naive(), now.time());
+
+    let mut sets: Vec<&str> = Vec::new();
+    let mut args: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+    if !parsed.title.is_empty() {
+        sets.push("title = ?");
+        args.push(Box::new(parsed.title.clone()));
+    }
+    if let Some(key) = &parsed.project_key {
+        let pid = conn
+            .query_row(
+                "SELECT id FROM projects WHERE prefix = ?1 COLLATE NOCASE OR name = ?1 COLLATE NOCASE",
+                params![key],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(|_| format!("No project matches '#{}'", key))?;
+        sets.push("project_id = ?");
+        args.push(Box::new(pid));
+    }
+    if let Some(p) = parsed.priority {
+        sets.push("priority = ?");
+        args.push(Box::new(p));
+    }
+    if parsed.pinned {
+        sets.push("pinned = 1");
+    }
+    if let Some(d) = parsed.due_date {
+        sets.push("due_date = ?");
+        args.push(Box::new(d.format("%Y-%m-%d").to_string()));
+    }
+    if let Some(d) = parsed.end_date {
+        sets.push("end_date = ?");
+        args.push(Box::new(d.format("%Y-%m-%d").to_string()));
+    }
+    if let Some(naive) = parsed.reminder {
+        let r = Local
+            .from_local_datetime(&naive)
+            .earliest()
+            .map(|dt| {
+                dt.with_timezone(&Utc)
+                    .to_rfc3339_opts(SecondsFormat::Millis, true)
+            })
+            .ok_or_else(|| "Invalid reminder".to_string())?;
+        sets.push("reminder_at = ?");
+        args.push(Box::new(r));
+    }
+    if let Some(r) = &parsed.recurrence {
+        sets.push("recurrence_rule = ?");
+        args.push(Box::new(r.clone()));
+    }
+    if let Some(m) = parsed.estimate_minutes {
+        sets.push("estimate_minutes = ?");
+        args.push(Box::new(m));
+    }
+    sets.push("updated_at = ?");
+    args.push(Box::new(now_iso()));
+
+    if sets.len() > 1 {
+        let sql = format!("UPDATE tasks SET {} WHERE id = ?", sets.join(", "));
+        args.push(Box::new(id.clone()));
+        let refs: Vec<&dyn rusqlite::ToSql> = args.iter().map(|a| a.as_ref()).collect();
+        conn.execute(&sql, &refs[..]).map_err(|e| e.to_string())?;
+        let _ = log_activity(conn, &id, "updated", None, None, None, "cli");
+    }
+
+    // +label tokens add to the task's labels without dropping existing ones
+    let mut missing = Vec::new();
+    for name in &parsed.label_names {
+        let spaced = name.replace('-', " ");
+        let label_id = conn
+            .query_row(
+                "SELECT id FROM labels WHERE name = ?1 COLLATE NOCASE OR name = ?2 COLLATE NOCASE",
+                params![name, spaced],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+        match label_id {
+            Some(lid) => {
+                conn.execute(
+                    "INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?1, ?2)",
+                    params![id, lid],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            None => missing.push(name.clone()),
+        }
+    }
+    if !missing.is_empty() {
+        eprintln!("Warning: unknown labels skipped: {}", missing.join(", "));
+    }
+    show(conn, json, &id)
 }
 
 pub fn update(

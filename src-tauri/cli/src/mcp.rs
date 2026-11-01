@@ -560,6 +560,7 @@ fn tools() -> Vec<Value> {
             "Create a task. Returns the created task with its id and display number",
             json!({
                 "title": { "type": "string" },
+                "text": { "type": "string", "description": "natural language line parsed for #project +label !priority ~estimate dates times recurrence; explicit fields override parsed values" },
                 "description": { "type": "string" },
                 "status": { "type": "string", "description": "backlog | todo | in_progress | done | canceled (default: the app's defaultStatus)" },
                 "priority": { "type": "number", "description": "0 none, 1 urgent, 2 high, 3 medium, 4 low" },
