@@ -1,8 +1,12 @@
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime};
+use serde::Deserialize;
+use std::collections::{HashMap, HashSet};
+use std::sync::OnceLock;
 
-// natural language quick-add parser; mirror of src/lib/quickadd/parse.ts,
-// kept in sync through the shared fixture in src/lib/quickadd/cases.json.
-// see the ts file for the full grammar table
+// natural language quick-add parser; mirror of src/lib/quickadd/parse.ts.
+// both sides read the shared vocabulary in src/lib/quickadd/langs.json so a
+// new language is a data change, not a code change. every language is active
+// at once - users can mix ("yarın at 5pm"). see the ts file for the grammar table
 #[derive(Debug, Default)]
 pub struct Parsed {
     pub title: String,
@@ -18,30 +22,119 @@ pub struct Parsed {
     pub estimate_minutes: Option<i64>,
 }
 
-fn weekday(token: &str) -> Option<u32> {
-    let iso = match token {
-        "mon" | "monday" | "pazartesi" | "pzt" => 1,
-        "tue" | "tues" | "tuesday" | "salı" | "sal" => 2,
-        "wed" | "wednesday" | "çarşamba" | "çar" => 3,
-        "thu" | "thur" | "thurs" | "thursday" | "perşembe" | "per" => 4,
-        "fri" | "friday" | "cuma" | "cum" => 5,
-        "sat" | "saturday" | "cumartesi" | "cmt" => 6,
-        "sun" | "sunday" | "pazar" | "paz" => 7,
-        _ => return None,
-    };
-    Some(iso)
+#[derive(Deserialize, Default)]
+struct Lang {
+    #[serde(default)]
+    weekdays: Vec<Vec<String>>,
+    #[serde(default)]
+    today: Vec<String>,
+    #[serde(default)]
+    tomorrow: Vec<String>,
+    #[serde(default, rename = "nextWeek")]
+    next_week: Vec<String>,
+    #[serde(default, rename = "nextMonth")]
+    next_month: Vec<String>,
+    #[serde(default)]
+    next: Vec<String>,
+    #[serde(default, rename = "in")]
+    in_words: Vec<String>,
+    #[serde(default)]
+    every: Vec<String>,
+    #[serde(default)]
+    day: Vec<String>,
+    #[serde(default)]
+    week: Vec<String>,
+    #[serde(default)]
+    month: Vec<String>,
+    #[serde(default)]
+    end: Vec<String>,
+    #[serde(default)]
+    due: Vec<String>,
+    #[serde(default)]
+    at: Vec<String>,
+    #[serde(default, rename = "namedTimes")]
+    named_times: HashMap<String, u32>,
+    #[serde(default)]
+    rules: HashMap<String, Vec<String>>,
+    #[serde(default)]
+    priorities: HashMap<String, Vec<String>>,
+    #[serde(default)]
+    pin: Vec<String>,
 }
 
-fn priority(flag: &str) -> Option<i32> {
-    let p = match flag {
-        "none" | "no" | "p0" | "0" => 0,
-        "urgent" | "p1" | "1" => 1,
-        "high" | "p2" | "2" => 2,
-        "medium" | "med" | "p3" | "3" => 3,
-        "low" | "p4" | "4" => 4,
-        _ => return None,
-    };
-    Some(p)
+#[derive(Default)]
+struct Vocab {
+    weekdays: HashMap<String, u32>,
+    today: HashSet<String>,
+    tomorrow: HashSet<String>,
+    next_week: HashSet<String>,
+    next_month: HashSet<String>,
+    next: HashSet<String>,
+    in_words: HashSet<String>,
+    every: HashSet<String>,
+    end: HashSet<String>,
+    due: HashSet<String>,
+    at: HashSet<String>,
+    // localized unit words plus the d/w/m letters -> day / week / month
+    units: HashMap<String, char>,
+    named_times: HashMap<String, u32>,
+    rules: HashMap<String, String>,
+    priorities: HashMap<String, i32>,
+    pin: HashSet<String>,
+}
+
+static VOCAB: OnceLock<Vocab> = OnceLock::new();
+
+fn vocab() -> &'static Vocab {
+    VOCAB.get_or_init(|| {
+        let langs: HashMap<String, Lang> =
+            serde_json::from_str(include_str!("../../../src/lib/quickadd/langs.json"))
+                .expect("langs.json must stay valid");
+        let mut v = Vocab::default();
+        for lang in langs.values() {
+            for (i, names) in lang.weekdays.iter().enumerate() {
+                for n in names {
+                    v.weekdays.insert(n.clone(), i as u32 + 1);
+                }
+            }
+            v.today.extend(lang.today.iter().cloned());
+            v.tomorrow.extend(lang.tomorrow.iter().cloned());
+            v.next_week.extend(lang.next_week.iter().cloned());
+            v.next_month.extend(lang.next_month.iter().cloned());
+            v.next.extend(lang.next.iter().cloned());
+            v.in_words.extend(lang.in_words.iter().cloned());
+            v.every.extend(lang.every.iter().cloned());
+            v.end.extend(lang.end.iter().cloned());
+            v.due.extend(lang.due.iter().cloned());
+            v.at.extend(lang.at.iter().cloned());
+            v.units.extend(lang.day.iter().map(|w| (w.clone(), 'd')));
+            v.units.extend(lang.week.iter().map(|w| (w.clone(), 'w')));
+            v.units.extend(lang.month.iter().map(|w| (w.clone(), 'm')));
+            v.named_times.extend(lang.named_times.iter().map(|(k, m)| (k.clone(), *m)));
+            for (kind, words) in &lang.rules {
+                for w in words {
+                    v.rules.insert(w.clone(), kind.clone());
+                }
+            }
+            for (p, words) in &lang.priorities {
+                if let Ok(p) = p.parse::<i32>() {
+                    for w in words {
+                        v.priorities.insert(w.clone(), p);
+                    }
+                }
+            }
+            v.pin.extend(lang.pin.iter().cloned());
+        }
+        // language-neutral forms: unit letters and p0..p4 / digit priorities
+        for (w, k) in [("d", 'd'), ("w", 'w'), ("m", 'm')] {
+            v.units.insert(w.to_string(), k);
+        }
+        for p in 0..=4i32 {
+            v.priorities.insert(format!("p{}", p), p);
+            v.priorities.insert(p.to_string(), p);
+        }
+        v
+    })
 }
 
 // first occurrence of the iso weekday strictly after today
@@ -64,12 +157,18 @@ fn add_months(date: NaiveDate, months: i64) -> NaiveDate {
     NaiveDate::from_ymd_opt(year, month, day).unwrap_or(date)
 }
 
-fn parse_date_token(token: &str, today: NaiveDate) -> Option<NaiveDate> {
-    match token {
-        "today" | "bugün" => return Some(today),
-        "tomorrow" | "yarın" => return Some(today + Duration::days(1)),
-        "haftaya" => return Some(today + Duration::days(7)),
-        _ => {}
+fn parse_date_token(token: &str, today: NaiveDate, v: &Vocab) -> Option<NaiveDate> {
+    if v.today.contains(token) {
+        return Some(today);
+    }
+    if v.tomorrow.contains(token) {
+        return Some(today + Duration::days(1));
+    }
+    if v.next_week.contains(token) {
+        return Some(today + Duration::days(7));
+    }
+    if v.next_month.contains(token) {
+        return Some(add_months(today, 1));
     }
     // strict shape so the parse stays identical to the ts regex
     let bytes = token.as_bytes();
@@ -78,11 +177,25 @@ fn parse_date_token(token: &str, today: NaiveDate) -> Option<NaiveDate> {
             return Some(d);
         }
     }
-    weekday(token).map(|iso| next_weekday(today, iso))
+    v.weekdays.get(token).map(|iso| next_weekday(today, *iso))
 }
 
-// "15:00", "9:30", "3pm", "3:45pm" -> minutes since midnight
+// "15:00", "9:30", "3pm", "3:45pm", "18h30" -> minutes since midnight
 fn parse_time_token(token: &str) -> Option<u32> {
+    // "18h" / "18h30" (fr)
+    if let Some((h_str, m_str)) = token.split_once('h') {
+        if !h_str.is_empty()
+            && h_str.bytes().all(|b| b.is_ascii_digit())
+            && (m_str.is_empty()
+                || (m_str.len() == 2 && m_str.bytes().all(|b| b.is_ascii_digit())))
+        {
+            let h: u32 = h_str.parse().ok()?;
+            let m: u32 = if m_str.is_empty() { 0 } else { m_str.parse().ok()? };
+            if h <= 23 && m <= 59 {
+                return Some(h * 60 + m);
+            }
+        }
+    }
     let (body, suffix) = if let Some(b) = token.strip_suffix("am") {
         (b, Some("am"))
     } else if let Some(b) = token.strip_suffix("pm") {
@@ -135,18 +248,6 @@ fn parse_time_token(token: &str) -> Option<u32> {
     Some(h * 60 + m)
 }
 
-// named times of day; consumed only after an explicit date token so plain
-// titles like "akşam yemeği" survive
-fn named_time(token: &str) -> Option<u32> {
-    Some(match token {
-        "sabah" => 9 * 60,
-        "öğle" | "öğlen" => 12 * 60,
-        "akşam" => 19 * 60,
-        "gece" => 22 * 60,
-        _ => return None,
-    })
-}
-
 // "~90", "~90m", "~2h", "~1h30m", "~1.5h" -> minutes, same format as --estimate
 fn parse_estimate_token(token: &str) -> Option<i64> {
     let inner = token.strip_prefix('~')?;
@@ -163,24 +264,25 @@ fn parse_estimate_token(token: &str) -> Option<i64> {
 
 // bare "daily" / "weekly" / "monthly" only count as a rule as the last word,
 // so titles like "weekly sync" survive; "weekly:N" / "monthly:N" works anywhere
-fn normalize_rule(token: &str, today: NaiveDate, is_last: bool) -> Option<String> {
-    match token {
-        "daily" if is_last => return Some("daily".to_string()),
-        "weekly" if is_last => {
-            return Some(format!(
-                "weekly:{}",
-                today.weekday().num_days_from_monday() + 1
-            ))
+fn normalize_rule(token: &str, today: NaiveDate, is_last: bool, v: &Vocab) -> Option<String> {
+    if let Some(kind) = v.rules.get(token) {
+        if !is_last {
+            return None;
         }
-        "monthly" if is_last => return Some(format!("monthly:{}", today.day())),
-        _ => {}
+        return Some(match kind.as_str() {
+            "daily" => "daily".to_string(),
+            "weekly" => format!("weekly:{}", today.weekday().num_days_from_monday() + 1),
+            _ => format!("monthly:{}", today.day()),
+        });
     }
     let (kind, arg) = token.split_once(':')?;
     match kind {
         "weekly" => {
-            let iso = weekday(arg).or_else(|| {
-                arg.parse::<u32>().ok().filter(|n| (1..=7).contains(n))
-            })?;
+            let iso = v
+                .weekdays
+                .get(arg)
+                .copied()
+                .or_else(|| arg.parse::<u32>().ok().filter(|n| (1..=7).contains(n)))?;
             Some(format!("weekly:{}", iso))
         }
         "monthly" => {
@@ -193,29 +295,44 @@ fn normalize_rule(token: &str, today: NaiveDate, is_last: bool) -> Option<String
     }
 }
 
-fn parse_in(token: &str, today: NaiveDate) -> Option<NaiveDate> {
-    if token.len() < 2 {
+// "<in> 3d" / "<in> 3 days" -> (due date, tokens consumed)
+fn parse_in(
+    token: &str,
+    lookahead: Option<&str>,
+    today: NaiveDate,
+    v: &Vocab,
+) -> Option<(NaiveDate, usize)> {
+    let digits: usize = token.bytes().take_while(|b| b.is_ascii_digit()).count();
+    if digits == 0 {
         return None;
     }
-    let (num, unit) = token.split_at(token.len() - 1);
+    let (num, suffix) = token.split_at(digits);
     let n: i64 = num.parse().ok()?;
-    match unit {
-        "d" => Some(today + Duration::days(n)),
-        "w" => Some(today + Duration::weeks(n)),
-        "m" => Some(add_months(today, n)),
-        _ => None,
-    }
+    let (unit, consumed) = if suffix.is_empty() {
+        (v.units.get(lookahead?)?, 3)
+    } else {
+        (v.units.get(suffix)?, 2)
+    };
+    let date = match unit {
+        'd' => today + Duration::days(n),
+        'w' => today + Duration::weeks(n),
+        'm' => add_months(today, n),
+        _ => return None,
+    };
+    Some((date, consumed))
 }
 
-fn every_rule(token: &str, today: NaiveDate) -> Option<String> {
-    match token {
-        "day" | "gün" => Some("daily".to_string()),
-        "week" | "hafta" => Some(format!(
+fn every_rule(token: &str, today: NaiveDate, v: &Vocab) -> Option<String> {
+    match v.units.get(token) {
+        Some('d') => Some("daily".to_string()),
+        Some('w') => Some(format!(
             "weekly:{}",
             today.weekday().num_days_from_monday() + 1
         )),
-        "month" | "ay" => Some(format!("monthly:{}", today.day())),
-        _ => weekday(token)
+        Some('m') => Some(format!("monthly:{}", today.day())),
+        _ => v
+            .weekdays
+            .get(token)
             .map(|iso| format!("weekly:{}", iso))
             .or_else(|| {
                 token
@@ -228,6 +345,7 @@ fn every_rule(token: &str, today: NaiveDate) -> Option<String> {
 }
 
 pub fn parse(input: &str, today: NaiveDate, now: NaiveTime) -> Parsed {
+    let v = vocab();
     // lowercase copy drives matching; the original casing feeds the title
     let raw_tokens: Vec<&str> = input.split_whitespace().collect();
     let tokens: Vec<String> = raw_tokens.iter().map(|t| t.to_lowercase()).collect();
@@ -243,88 +361,83 @@ pub fn parse(input: &str, today: NaiveDate, now: NaiveTime) -> Parsed {
         // lead words consume the following token only when it matches, so a
         // plain "meet at home" keeps both words in the title
         if let Some(n) = tokens.get(i + 1).map(|s| s.as_str()) {
-            match t {
-                "next" | "gelecek" | "haftaya" => {
-                    if let Some(iso) = weekday(n) {
-                        due = Some(next_weekday(today, iso) + Duration::days(7));
-                        due_explicit = true;
-                        i += 2;
-                        continue;
-                    }
-                    if n == "week" {
+            if v.next.contains(t) {
+                if let Some(iso) = v.weekdays.get(n) {
+                    due = Some(next_weekday(today, *iso) + Duration::days(7));
+                    due_explicit = true;
+                    i += 2;
+                    continue;
+                }
+                match v.units.get(n) {
+                    Some('w') => {
                         due = Some(today + Duration::days(7));
                         due_explicit = true;
                         i += 2;
                         continue;
                     }
-                    if n == "month" {
+                    Some('m') => {
                         due = Some(add_months(today, 1));
                         due_explicit = true;
                         i += 2;
                         continue;
                     }
+                    _ => {}
                 }
-                "in" => {
-                    if let Some(d) = parse_in(n, today) {
-                        due = Some(d);
-                        due_explicit = true;
-                        i += 2;
-                        continue;
-                    }
+            }
+            if v.in_words.contains(t) {
+                if let Some((d, consumed)) =
+                    parse_in(n, tokens.get(i + 2).map(|s| s.as_str()), today, v)
+                {
+                    due = Some(d);
+                    due_explicit = true;
+                    i += consumed;
+                    continue;
                 }
-                "every" | "her" => {
-                    if let Some(rule) = every_rule(n, today) {
-                        out.recurrence = Some(rule);
-                        i += 2;
-                        continue;
-                    }
+            }
+            if v.every.contains(t) {
+                if let Some(rule) = every_rule(n, today, v) {
+                    out.recurrence = Some(rule);
+                    i += 2;
+                    continue;
                 }
-                "end" | "until" => {
-                    if let Some(d) = parse_date_token(n, today) {
-                        out.end_date = Some(d);
-                        i += 2;
-                        continue;
-                    }
+            }
+            if v.end.contains(t) {
+                if let Some(d) = parse_date_token(n, today, v) {
+                    out.end_date = Some(d);
+                    i += 2;
+                    continue;
                 }
-                "on" | "by" | "due" => {
-                    if let Some(d) = parse_date_token(n, today) {
-                        due = Some(d);
-                        due_explicit = true;
-                        i += 2;
-                        continue;
-                    }
+            }
+            if v.due.contains(t) {
+                if let Some(d) = parse_date_token(n, today, v) {
+                    due = Some(d);
+                    due_explicit = true;
+                    i += 2;
+                    continue;
                 }
-                "at" => {
-                    if let Some(m) = parse_time_token(n) {
-                        time_of_day = Some(m);
-                        i += 2;
-                        continue;
-                    }
+            }
+            if v.at.contains(t) {
+                // "<at> 18" accepts a bare hour on top of regular time forms
+                let bare = n
+                    .parse::<u32>()
+                    .ok()
+                    .filter(|h| *h <= 23)
+                    .map(|h| h * 60);
+                if let Some(m) = parse_time_token(n).or(bare) {
+                    time_of_day = Some(m);
+                    i += 2;
+                    continue;
                 }
-                "saat" => {
-                    // "saat 18" accepts a bare hour on top of regular time forms
-                    let bare = n
-                        .parse::<u32>()
-                        .ok()
-                        .filter(|h| *h <= 23)
-                        .map(|h| h * 60);
-                    if let Some(m) = parse_time_token(n).or(bare) {
-                        time_of_day = Some(m);
-                        i += 2;
-                        continue;
-                    }
-                }
-                _ => {}
             }
         }
 
-        if let Some(d) = parse_date_token(t, today) {
+        if let Some(d) = parse_date_token(t, today, v) {
             due = Some(d);
             due_explicit = true;
             i += 1;
             continue;
         }
-        if let Some(rule) = normalize_rule(t, today, i == tokens.len() - 1) {
+        if let Some(rule) = normalize_rule(t, today, i == tokens.len() - 1, v) {
             out.recurrence = Some(rule);
             i += 1;
             continue;
@@ -335,8 +448,8 @@ pub fn parse(input: &str, today: NaiveDate, now: NaiveTime) -> Parsed {
             continue;
         }
         if due_explicit {
-            if let Some(m) = named_time(t) {
-                time_of_day = Some(m);
+            if let Some(m) = v.named_times.get(t) {
+                time_of_day = Some(*m);
                 i += 1;
                 continue;
             }
@@ -352,13 +465,13 @@ pub fn parse(input: &str, today: NaiveDate, now: NaiveTime) -> Parsed {
             continue;
         }
         if let Some(flag) = t.strip_prefix('!').filter(|s| !s.is_empty()) {
-            if flag == "pin" || flag == "pinned" {
+            if v.pin.contains(flag) {
                 out.pinned = true;
                 i += 1;
                 continue;
             }
-            if let Some(p) = priority(flag) {
-                out.priority = Some(p);
+            if let Some(p) = v.priorities.get(flag) {
+                out.priority = Some(*p);
                 i += 1;
                 continue;
             }
@@ -388,3 +501,122 @@ pub fn parse(input: &str, today: NaiveDate, now: NaiveTime) -> Parsed {
     out
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn today() -> NaiveDate {
+        // sunday 2026-11-01
+        NaiveDate::from_ymd_opt(2026, 11, 1).unwrap()
+    }
+
+    fn now() -> NaiveTime {
+        NaiveTime::from_hms_opt(9, 0, 0).unwrap()
+    }
+
+    fn date(d: u32) -> Option<NaiveDate> {
+        NaiveDate::from_ymd_opt(2026, 11, d)
+    }
+
+    #[test]
+    fn english_still_works() {
+        let p = parse("buy milk tomorrow !high #home", today(), now());
+        assert_eq!(p.title, "buy milk");
+        assert_eq!(p.due_date, date(2));
+        assert_eq!(p.priority, Some(2));
+        assert_eq!(p.project_key.as_deref(), Some("home"));
+    }
+
+    #[test]
+    fn turkish_still_works() {
+        let p = parse("raporu yar\u{131}n saat 18 !acil", today(), now());
+        assert_eq!(p.title, "raporu");
+        assert_eq!(p.due_date, date(2));
+        assert_eq!(p.reminder.unwrap().time(), NaiveTime::from_hms_opt(18, 0, 0).unwrap());
+        assert_eq!(p.priority, Some(1));
+    }
+
+    #[test]
+    fn turkish_every() {
+        let p = parse("spor her pazartesi", today(), now());
+        assert_eq!(p.recurrence.as_deref(), Some("weekly:1"));
+    }
+
+    #[test]
+    fn german_next_week() {
+        let p = parse("review n\u{e4}chste woche", today(), now());
+        assert_eq!(p.title, "review");
+        assert_eq!(p.due_date, date(8));
+    }
+
+    #[test]
+    fn german_due_and_time() {
+        let p = parse("anruf am montag um 9:00", today(), now());
+        assert_eq!(p.title, "anruf");
+        assert_eq!(p.due_date, date(2));
+        assert_eq!(p.reminder.unwrap().time(), NaiveTime::from_hms_opt(9, 0, 0).unwrap());
+    }
+
+    #[test]
+    fn french_date_and_h_time() {
+        let p = parse("r\u{e9}union demain \u{e0} 18h30", today(), now());
+        assert_eq!(p.title, "r\u{e9}union");
+        assert_eq!(p.due_date, date(2));
+        assert_eq!(p.reminder.unwrap().time(), NaiveTime::from_hms_opt(18, 30, 0).unwrap());
+    }
+
+    #[test]
+    fn french_in_words() {
+        let p = parse("appeler dans 3 jours", today(), now());
+        assert_eq!(p.due_date, date(4));
+    }
+
+    #[test]
+    fn spanish_every() {
+        let p = parse("gym cada lunes", today(), now());
+        assert_eq!(p.recurrence.as_deref(), Some("weekly:1"));
+    }
+
+    #[test]
+    fn in_three_days_words() {
+        let p = parse("call in 3 days", today(), now());
+        assert_eq!(p.due_date, date(4));
+    }
+
+    #[test]
+    fn russian_in_and_weekday() {
+        let p = parse(
+            "\u{43f}\u{43e}\u{437}\u{432}\u{43e}\u{43d}\u{438}\u{442}\u{44c} \u{447}\u{435}\u{440}\u{435}\u{437} 2 \u{43d}\u{435}\u{434}\u{435}\u{43b}\u{438}",
+            today(),
+            now(),
+        );
+        assert_eq!(p.due_date, date(15));
+        let p = parse(
+            "\u{432} \u{441}\u{440}\u{435}\u{434}\u{443}",
+            today(),
+            now(),
+        );
+        assert_eq!(p.due_date, date(4)); // wednesday
+    }
+
+    #[test]
+    fn japanese_tomorrow() {
+        let p = parse("\u{4f1a}\u{8b70} \u{660e}\u{65e5}", today(), now());
+        assert_eq!(p.title, "\u{4f1a}\u{8b70}");
+        assert_eq!(p.due_date, date(2));
+    }
+
+    #[test]
+    fn chinese_every_day() {
+        let p = parse("\u{8dd1}\u{6b65} \u{6bcf}\u{5929}", today(), now());
+        assert_eq!(p.recurrence.as_deref(), Some("daily"));
+    }
+
+    #[test]
+    fn title_survives() {
+        let p = parse("meet at home", today(), now());
+        assert_eq!(p.title, "meet at home");
+        assert_eq!(p.due_date, None);
+        assert_eq!(p.reminder, None);
+    }
+}

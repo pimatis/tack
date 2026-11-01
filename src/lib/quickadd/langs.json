@@ -1,0 +1,433 @@
+{
+	"en": {
+		"weekdays": [
+			["mon", "monday"],
+			["tue", "tues", "tuesday"],
+			["wed", "wednesday"],
+			["thu", "thur", "thurs", "thursday"],
+			["fri", "friday"],
+			["sat", "saturday"],
+			["sun", "sunday"]
+		],
+		"today": ["today"],
+		"tomorrow": ["tomorrow"],
+		"next": ["next"],
+		"in": ["in"],
+		"every": ["every"],
+		"day": ["day", "days"],
+		"week": ["week", "weeks"],
+		"month": ["month", "months"],
+		"end": ["end", "until"],
+		"due": ["on", "by", "due"],
+		"at": ["at"],
+		"namedTimes": {
+			"morning": 540,
+			"noon": 720,
+			"afternoon": 900,
+			"evening": 1140,
+			"night": 1320
+		},
+		"rules": {
+			"daily": ["daily"],
+			"weekly": ["weekly"],
+			"monthly": ["monthly"]
+		},
+		"priorities": {
+			"0": ["none", "no"],
+			"1": ["urgent"],
+			"2": ["high"],
+			"3": ["medium", "med"],
+			"4": ["low"]
+		},
+		"pin": ["pin", "pinned"]
+	},
+	"tr": {
+		"weekdays": [
+			["pazartesi", "pzt"],
+			["salı", "sal"],
+			["çarşamba", "çar"],
+			["perşembe", "per"],
+			["cuma", "cum"],
+			["cumartesi", "cmt"],
+			["pazar", "paz"]
+		],
+		"today": ["bugün"],
+		"tomorrow": ["yarın"],
+		"nextWeek": ["haftaya"],
+		"next": ["gelecek", "haftaya"],
+		"every": ["her"],
+		"day": ["gün"],
+		"week": ["hafta"],
+		"month": ["ay"],
+		"at": ["saat"],
+		"namedTimes": {
+			"sabah": 540,
+			"öğle": 720,
+			"öğlen": 720,
+			"akşam": 1140,
+			"gece": 1320
+		},
+		"rules": {
+			"daily": ["günlük"],
+			"weekly": ["haftalık"],
+			"monthly": ["aylık"]
+		},
+		"priorities": {
+			"0": ["yok"],
+			"1": ["acil"],
+			"2": ["yüksek", "yuksek"],
+			"3": ["orta"],
+			"4": ["düşük", "dusuk"]
+		}
+	},
+	"de": {
+		"weekdays": [
+			["montag"],
+			["dienstag"],
+			["mittwoch"],
+			["donnerstag"],
+			["freitag"],
+			["samstag"],
+			["sonntag"]
+		],
+		"today": ["heute"],
+		"tomorrow": ["morgen"],
+		"next": [
+			"nächste",
+			"nächster",
+			"nächstes",
+			"nächsten",
+			"nachste",
+			"nachster",
+			"nachstes",
+			"nachsten"
+		],
+		"in": ["in"],
+		"every": ["jede", "jeden", "jedes"],
+		"day": ["tag", "tage", "tagen"],
+		"week": ["woche", "wochen"],
+		"month": ["monat", "monate", "monaten"],
+		"due": ["am", "bis"],
+		"at": ["um"],
+		"namedTimes": {
+			"früh": 480,
+			"fruh": 480,
+			"morgens": 540,
+			"mittag": 720,
+			"mittags": 720,
+			"nachmittag": 900,
+			"abend": 1140,
+			"abends": 1140,
+			"nacht": 1320
+		},
+		"rules": {
+			"daily": ["täglich", "taglich"],
+			"weekly": ["wöchentlich", "wochentlich"],
+			"monthly": ["monatlich"]
+		},
+		"priorities": {
+			"0": ["keine"],
+			"1": ["dringend"],
+			"2": ["hoch"],
+			"3": ["mittel"],
+			"4": ["niedrig"]
+		}
+	},
+	"fr": {
+		"weekdays": [
+			["lundi", "lun"],
+			["mardi"],
+			["mercredi"],
+			["jeudi"],
+			["vendredi", "ven"],
+			["samedi"],
+			["dimanche", "dim"]
+		],
+		"today": ["aujourd'hui"],
+		"tomorrow": ["demain"],
+		"next": ["prochain", "prochaine"],
+		"in": ["dans"],
+		"every": ["chaque"],
+		"day": ["jour", "jours", "journée", "journee"],
+		"week": ["semaine", "semaines"],
+		"month": ["mois"],
+		"end": ["jusqu'à", "jusqu'au"],
+		"due": ["le", "pour"],
+		"at": ["à"],
+		"namedTimes": {
+			"matin": 540,
+			"midi": 720,
+			"après-midi": 900,
+			"apres-midi": 900,
+			"soir": 1140,
+			"nuit": 1320
+		},
+		"rules": {
+			"daily": ["quotidien", "quotidienne"],
+			"weekly": ["hebdomadaire"],
+			"monthly": ["mensuel", "mensuelle"]
+		},
+		"priorities": {
+			"0": ["aucune"],
+			"1": ["urgent"],
+			"2": ["haute"],
+			"3": ["moyenne"],
+			"4": ["basse"]
+		}
+	},
+	"es": {
+		"weekdays": [
+			["lunes"],
+			["martes"],
+			["miércoles", "miercoles"],
+			["jueves"],
+			["viernes"],
+			["sábado", "sabado"],
+			["domingo"]
+		],
+		"today": ["hoy"],
+		"tomorrow": ["mañana"],
+		"next": ["próximo", "próxima", "proximo", "proxima", "siguiente"],
+		"in": ["en"],
+		"every": ["cada"],
+		"day": ["día", "días", "dia", "dias"],
+		"week": ["semana", "semanas"],
+		"month": ["mes", "meses"],
+		"end": ["hasta"],
+		"due": ["el", "para"],
+		"at": ["a"],
+		"namedTimes": {
+			"mediodía": 720,
+			"mediodia": 720,
+			"tarde": 1080,
+			"noche": 1320
+		},
+		"rules": {
+			"daily": ["diario", "diaria"],
+			"weekly": ["semanal"],
+			"monthly": ["mensual"]
+		},
+		"priorities": {
+			"0": ["ninguna"],
+			"1": ["urgente"],
+			"2": ["alta"],
+			"3": ["media"],
+			"4": ["baja"]
+		}
+	},
+	"it": {
+		"weekdays": [
+			["lunedì", "lunedi"],
+			["martedì", "martedi"],
+			["mercoledì", "mercoledi"],
+			["giovedì", "giovedi"],
+			["venerdì", "venerdi"],
+			["sabato"],
+			["domenica"]
+		],
+		"today": ["oggi"],
+		"tomorrow": ["domani"],
+		"next": ["prossimo", "prossima"],
+		"in": ["tra", "fra"],
+		"every": ["ogni"],
+		"day": ["giorno", "giorni"],
+		"week": ["settimana", "settimane"],
+		"month": ["mese", "mesi"],
+		"end": ["fino", "entro"],
+		"due": ["il", "per"],
+		"at": ["alle"],
+		"namedTimes": {
+			"mattina": 540,
+			"mezzogiorno": 720,
+			"pomeriggio": 900,
+			"sera": 1140,
+			"notte": 1320
+		},
+		"rules": {
+			"daily": ["giornaliero", "giornaliera"],
+			"weekly": ["settimanale"],
+			"monthly": ["mensile"]
+		},
+		"priorities": {
+			"0": ["nessuna"],
+			"1": ["urgente"],
+			"2": ["alta"],
+			"3": ["media"],
+			"4": ["bassa"]
+		}
+	},
+	"pt": {
+		"weekdays": [
+			["segunda"],
+			["terça", "terca"],
+			["quarta"],
+			["quinta"],
+			["sexta"],
+			["sábado", "sabado"],
+			["domingo"]
+		],
+		"today": ["hoje"],
+		"tomorrow": ["amanhã", "amanha"],
+		"next": ["próximo", "próxima", "proximo", "proxima"],
+		"in": ["em"],
+		"every": ["cada", "toda", "todo"],
+		"day": ["dia", "dias"],
+		"week": ["semana", "semanas"],
+		"month": ["mês", "meses"],
+		"end": ["até"],
+		"due": ["em", "para"],
+		"at": ["às"],
+		"namedTimes": {
+			"manhã": 540,
+			"manha": 540,
+			"meio-dia": 720,
+			"tarde": 1080,
+			"noite": 1320
+		},
+		"rules": {
+			"daily": ["diário", "diária", "diario"],
+			"weekly": ["semanal"],
+			"monthly": ["mensal"]
+		},
+		"priorities": {
+			"0": ["nenhuma"],
+			"1": ["urgente"],
+			"2": ["alta"],
+			"3": ["média", "media"],
+			"4": ["baixa"]
+		}
+	},
+	"nl": {
+		"weekdays": [
+			["maandag"],
+			["dinsdag"],
+			["woensdag"],
+			["donderdag"],
+			["vrijdag"],
+			["zaterdag"],
+			["zondag"]
+		],
+		"today": ["vandaag"],
+		"tomorrow": ["morgen"],
+		"next": ["volgende"],
+		"in": ["over"],
+		"every": ["elke", "elk"],
+		"day": ["dag", "dagen"],
+		"week": ["week", "weken"],
+		"month": ["maand", "maanden"],
+		"end": ["tot"],
+		"due": ["op", "voor"],
+		"at": ["om"],
+		"namedTimes": {
+			"ochtend": 540,
+			"middag": 840,
+			"avond": 1140,
+			"nacht": 1320
+		},
+		"rules": {
+			"daily": ["dagelijks"],
+			"weekly": ["wekelijks"],
+			"monthly": ["maandelijks"]
+		},
+		"priorities": {
+			"0": ["geen"],
+			"1": ["dringend"],
+			"2": ["hoog"],
+			"3": ["gemiddeld"],
+			"4": ["laag"]
+		}
+	},
+	"ru": {
+		"weekdays": [
+			["понедельник", "понедельника", "пн"],
+			["вторник", "вторника", "вт"],
+			["среда", "среду", "среды", "ср"],
+			["четверг", "четверга", "чт"],
+			["пятница", "пятницу", "пятницы", "пт"],
+			["суббота", "субботу", "субботы", "сб"],
+			["воскресенье", "воскресенья", "вс"]
+		],
+		"today": ["сегодня"],
+		"tomorrow": ["завтра"],
+		"next": ["следующий", "следующая", "следующее", "следующую"],
+		"in": ["через"],
+		"every": ["каждый", "каждая", "каждое", "каждую"],
+		"day": ["день", "дня", "дней"],
+		"week": ["неделя", "недели", "недель", "неделю"],
+		"month": ["месяц", "месяца", "месяцев"],
+		"end": ["до"],
+		"due": ["в", "на"],
+		"at": ["в"],
+		"namedTimes": {
+			"утро": 540,
+			"полдень": 720,
+			"вечер": 1140,
+			"ночь": 1320
+		},
+		"rules": {
+			"daily": ["ежедневно"],
+			"weekly": ["еженедельно"],
+			"monthly": ["ежемесячно"]
+		},
+		"priorities": {
+			"0": ["нет"],
+			"1": ["срочно"],
+			"2": ["высокий"],
+			"3": ["средний"],
+			"4": ["низкий"]
+		}
+	},
+	"ja": {
+		"weekdays": [
+			["月曜", "月曜日"],
+			["火曜", "火曜日"],
+			["水曜", "水曜日"],
+			["木曜", "木曜日"],
+			["金曜", "金曜日"],
+			["土曜", "土曜日"],
+			["日曜", "日曜日"]
+		],
+		"today": ["今日"],
+		"tomorrow": ["明日"],
+		"nextWeek": ["来週"],
+		"nextMonth": ["来月"],
+		"namedTimes": {
+			"朝": 540,
+			"昼": 720,
+			"夕方": 1020,
+			"夜": 1260
+		},
+		"rules": {
+			"daily": ["毎日"],
+			"weekly": ["毎週"],
+			"monthly": ["毎月"]
+		}
+	},
+	"zh": {
+		"weekdays": [
+			["周一", "星期一", "礼拜一"],
+			["周二", "星期二", "礼拜二"],
+			["周三", "星期三", "礼拜三"],
+			["周四", "星期四", "礼拜四"],
+			["周五", "星期五", "礼拜五"],
+			["周六", "星期六", "礼拜六"],
+			["周日", "周天", "星期日", "星期天", "礼拜日", "礼拜天"]
+		],
+		"today": ["今天"],
+		"tomorrow": ["明天"],
+		"nextWeek": ["下周"],
+		"nextMonth": ["下月"],
+		"namedTimes": {
+			"早上": 540,
+			"上午": 600,
+			"中午": 720,
+			"下午": 900,
+			"晚上": 1200
+		},
+		"rules": {
+			"daily": ["每天"],
+			"weekly": ["每周"],
+			"monthly": ["每月"]
+		}
+	}
+}

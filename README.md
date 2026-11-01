@@ -2,7 +2,7 @@
 
 ![tack](assets/screenshot.jpg)
 
-A desktop task manager for humans and AI agents. No bullshit, no bloat. Just tasks, projects, and a CLI that talks to the same database as the app.
+A desktop task manager for humans and AI agents. No bullshit, no bloat. Just tasks, projects and a CLI that talks to the same database as the app.
 
 ## prerequisites
 
