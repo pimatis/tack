@@ -19,6 +19,7 @@
 	import type { Label } from '$lib/types/label';
 	import type { Settings } from '$lib/types/settings';
 	import { issueId, formatDate } from '$lib/task/utils';
+	import { agentColor } from '$lib/agents';
 	import Icon from '$lib/components/Icon.svelte';
 
 	let {
@@ -165,6 +166,15 @@
 			<div class="flex w-5 shrink-0 justify-center">
 				<ReminderBadge reminderAt={task.reminderAt} sentAt={task.reminderSentAt} />
 			</div>
+		{/if}
+
+		<!-- assignee badge -->
+		{#if task.assignee}
+			<span
+				class="shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[10px]"
+				style="color: {agentColor(task.assignee)}; background: {agentColor(task.assignee)}1a"
+				title="Assignee">@{task.assignee}</span
+			>
 		{/if}
 
 		<!-- tracked time (badge self-hides) -->

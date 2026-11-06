@@ -50,10 +50,30 @@ pub fn stats(conn: &Connection, json: bool) -> Result<()> {
         .filter_map(|r| r.ok())
         .collect();
 
+    // workload per assignee: humans see nothing here until agents exist
+    let agents: Vec<(String, i64, i64)> = conn
+        .prepare(
+            "SELECT t.assignee,
+                COALESCE(SUM(CASE WHEN t.status NOT IN ('done', 'canceled') THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END), 0)
+             FROM tasks t
+             WHERE t.assignee IS NOT NULL AND t.deleted_at IS NULL
+             GROUP BY t.assignee ORDER BY 2 DESC, t.assignee",
+        )
+        .and_then(|mut s| {
+            s.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        })
+        .unwrap_or_default();
+
     if json {
         let items: Vec<_> = projects
             .iter()
             .map(|(pfx, name, o, d)| json!({ "prefix": pfx, "name": name, "open": o, "done": d }))
+            .collect();
+        let agent_items: Vec<_> = agents
+            .iter()
+            .map(|(name, o, d)| json!({ "name": name, "open": o, "done": d }))
             .collect();
         println!(
             "{}",
@@ -65,6 +85,7 @@ pub fn stats(conn: &Connection, json: bool) -> Result<()> {
                 "tracked_seconds": tracked,
                 "running_timers": running,
                 "projects": items,
+                "agents": agent_items,
             }))
             .map_err(|e| e.to_string())?
         );
@@ -83,6 +104,12 @@ pub fn stats(conn: &Connection, json: bool) -> Result<()> {
         println!("\nBy project:");
         for (pfx, name, o, d) in &projects {
             println!("  {:<5} {:<24} {} open / {} done", pfx, name, o, d);
+        }
+    }
+    if !agents.is_empty() {
+        println!("\nBy agent:");
+        for (name, o, d) in &agents {
+            println!("  {:<20} {} open / {} done", name, o, d);
         }
     }
     Ok(())

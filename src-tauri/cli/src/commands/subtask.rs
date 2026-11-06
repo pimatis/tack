@@ -38,7 +38,7 @@ pub fn add(conn: &Connection, json: bool, task_id: &str, title: &str) -> Result<
         None,
         None,
         Some(title),
-        "cli",
+        activity_source(),
     );
     if json {
         println!("{}", serde_json::to_string_pretty(&json!({
@@ -118,7 +118,7 @@ pub fn toggle(conn: &Connection, json: bool, id: &str) -> Result<()> {
     } else {
         "subtask_uncompleted"
     };
-    let _ = log_activity(conn, &task_id, action, None, None, None, "cli");
+    let _ = log_activity(conn, &task_id, action, None, None, None, activity_source());
     if json {
         println!(
             "{}",
@@ -185,7 +185,7 @@ pub fn delete(conn: &Connection, json: bool, id: &str) -> Result<()> {
     if result == 0 {
         return Err(format!("Subtask {} not found", id));
     }
-    let _ = log_activity(conn, &task_id, "subtask_removed", None, None, None, "cli");
+    let _ = log_activity(conn, &task_id, "subtask_removed", None, None, None, activity_source());
     if json {
         println!(
             "{}",

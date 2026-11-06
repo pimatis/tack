@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { update, togglePin, findById } from '$lib/repositories/task.repository';
+	import { update, togglePin, findById, findAssignees } from '$lib/repositories/task.repository';
 	import PriorityIcon from './PriorityIcon.svelte';
 	import PriorityMenu from './PriorityMenu.svelte';
 	import StatusMenu from './StatusMenu.svelte';
@@ -107,6 +107,14 @@
 	let reminderAt = $state<string>('');
 	let recurrenceRule = $state<string>('');
 	let estimateText = $state<string>('');
+	let assigneeText = $state<string>('');
+	let knownAssignees = $state<string[]>([]);
+	// keep the current value selectable even if it is not a known assignee yet
+	let assigneeOptions = $derived(
+		assigneeText && !knownAssignees.includes(assigneeText)
+			? [...knownAssignees, assigneeText]
+			: knownAssignees
+	);
 	// relations, children and timer apply instantly like pin/delete do, not
 	// through the staged save form
 	let relations = $state<TaskRelation[]>([]);
@@ -151,6 +159,7 @@
 		reminderAt: string;
 		recurrenceRule: string;
 		estimateText: string;
+		assigneeText: string;
 		labelIds: string[];
 		pendingCount: number;
 	} | null>(null);
@@ -165,6 +174,7 @@
 				original.reminderAt !== reminderAt ||
 				original.recurrenceRule !== recurrenceRule ||
 				original.estimateText !== estimateText ||
+				original.assigneeText !== assigneeText ||
 				original.pendingCount !== pendingAttachments.length ||
 				original.labelIds.length !== selectedLabelIds.length ||
 				selectedLabelIds.some((id) => !original!.labelIds.includes(id)))
@@ -206,6 +216,7 @@
 		reminderAt = task.reminderAt ?? '';
 		recurrenceRule = task.recurrenceRule ?? '';
 		estimateText = formatMinutes(task.estimateMinutes);
+		assigneeText = task.assignee ?? '';
 		timerRunning = !!task.timerStartedAt;
 		trackedNow = task.trackedSeconds ?? 0;
 		startedAtMs = task.timerStartedAt ? new Date(task.timerStartedAt).getTime() : 0;
@@ -230,6 +241,7 @@
 			reminderAt: task.reminderAt ?? '',
 			recurrenceRule: task.recurrenceRule ?? '',
 			estimateText: formatMinutes(task.estimateMinutes),
+			assigneeText: task.assignee ?? '',
 			labelIds: [],
 			pendingCount: 0
 		};
@@ -237,6 +249,7 @@
 		void loadTaskLabels(task.id);
 		void loadSubtasks(task.id);
 		void loadActivity(task.id);
+		void findAssignees().then((a) => (knownAssignees = a));
 		void loadRelations(task.id);
 		void loadChildren(task.id);
 		void loadParent(task);
@@ -666,7 +679,8 @@
 				endDate: endDate || null,
 				reminderAt: reminderAt || null,
 				recurrenceRule: recurrenceRule || null,
-				estimateMinutes: parseEstimate(estimateText)
+				estimateMinutes: parseEstimate(estimateText),
+				assignee: assigneeText.trim() || null
 			});
 
 			for (const att of pendingAttachments) {
@@ -770,6 +784,14 @@
 				return 'added a relation';
 			case 'relation_removed':
 				return 'removed a relation';
+			case 'assigned':
+				return `assigned this task to ${entry.newValue}`;
+			case 'unassigned':
+				return entry.oldValue ? `unassigned ${entry.oldValue}` : 'unassigned this task';
+			case 'delegated':
+				return `delegated this task to ${entry.newValue}`;
+			case 'note':
+				return `note: ${entry.newValue}`;
 			case 'trashed':
 				return 'moved this task to trash';
 			case 'restored':
@@ -1426,6 +1448,46 @@
 								{/if}
 							</Button>
 						</div>
+
+						<!-- assignee -->
+						<DropdownMenu.Root>
+							<DropdownMenu.Trigger>
+								{#snippet child({ props })}
+									<Button
+										{...props}
+										variant="outline"
+										size="sm"
+										class="h-8 w-full justify-start rounded-lg border-border bg-muted/30 px-2.5 text-[12px] font-normal shadow-none hover:bg-muted/50 {assigneeText
+											? 'text-foreground'
+											: 'text-muted-foreground/50'}"
+									>
+										{assigneeText ? `@${assigneeText}` : 'Assignee'}
+									</Button>
+								{/snippet}
+							</DropdownMenu.Trigger>
+							<DropdownMenu.Content class="w-40 p-1.5" align="start">
+								<DropdownMenu.Item
+									class="gap-2.5 py-1.5 text-[13px]"
+									onclick={() => (assigneeText = '')}
+								>
+									Unassigned
+									{#if !assigneeText}
+										<Icon icon="check" size={14} class="ml-auto text-muted-foreground" />
+									{/if}
+								</DropdownMenu.Item>
+								{#each assigneeOptions as a (a)}
+									<DropdownMenu.Item
+										class="gap-2.5 py-1.5 text-[13px]"
+										onclick={() => (assigneeText = a)}
+									>
+										{a}
+										{#if assigneeText === a}
+											<Icon icon="check" size={14} class="ml-auto text-muted-foreground" />
+										{/if}
+									</DropdownMenu.Item>
+								{/each}
+							</DropdownMenu.Content>
+						</DropdownMenu.Root>
 
 						<!-- parent task -->
 						<div class="flex items-center gap-1.5">

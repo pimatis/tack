@@ -37,12 +37,17 @@ pub fn request(
     let port = port(conn);
     let mut stream = connect(port)?;
     let body = body.unwrap_or("");
+    // named agents get their writes attributed in the activity log
+    let agent_header = crate::db::agent_name()
+        .map(|n| format!("X-Tack-Agent: {}\r\n", n))
+        .unwrap_or_default();
     write!(
         stream,
-        "{} {} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nAccept: */*\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        "{} {} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nAccept: */*\r\nContent-Type: application/json\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
         method,
         path,
         port,
+        agent_header,
         body.len(),
         body
     )

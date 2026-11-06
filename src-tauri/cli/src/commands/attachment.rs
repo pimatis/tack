@@ -48,7 +48,7 @@ pub fn add(conn: &Connection, json: bool, task_id: &str, file_path: &str) -> Res
         None,
         None,
         Some(file_name),
-        "cli",
+        activity_source(),
     );
     if json {
         println!("{}", serde_json::to_string_pretty(&json!({
@@ -137,7 +137,7 @@ pub fn delete(conn: &Connection, json: bool, id: &str) -> Result<()> {
         None,
         None,
         None,
-        "cli",
+        activity_source(),
     );
     if json {
         println!(

@@ -28,6 +28,8 @@ export type Task = {
 	trackedSeconds?: number;
 	// utc iso timestamp while the timer is running, null when stopped
 	timerStartedAt?: string | null;
+	// agent or person the task is assigned to; null when unassigned
+	assignee?: string | null;
 	// computed in the list queries: an open task blocks this one / own children
 	blocked?: boolean;
 	childrenTotal?: number;

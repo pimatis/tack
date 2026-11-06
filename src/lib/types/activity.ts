@@ -23,6 +23,10 @@ export type ActivityAction =
 	| 'timer_stopped'
 	| 'relation_added'
 	| 'relation_removed'
+	| 'assigned'
+	| 'unassigned'
+	| 'delegated'
+	| 'note'
 	| 'trashed'
 	| 'restored';
 
@@ -33,6 +37,7 @@ export type ActivityLog = {
 	field?: string | null;
 	oldValue?: string | null;
 	newValue?: string | null;
-	source?: 'gui' | 'cli' | 'agent';
+	// 'gui' for the app, 'cli' for the terminal, 'agent' or 'agent:<harness>' for agents
+	source?: string;
 	createdAt: string;
 };

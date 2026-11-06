@@ -15,6 +15,7 @@
 	import type { Label } from '$lib/types/label';
 	import type { Settings } from '$lib/types/settings';
 	import { issueId } from '$lib/task/utils';
+	import { agentColor } from '$lib/agents';
 	import PriorityIcon from './PriorityIcon.svelte';
 	import PriorityMenu from './PriorityMenu.svelte';
 	import StatusMenu from './StatusMenu.svelte';
@@ -148,6 +149,13 @@
 		<!-- bottom row: labels + due date -->
 		<div class="flex flex-wrap items-center gap-1.5">
 			<TaskLabels labelIds={task.labelIds ?? []} {labelMap} max={2} />
+			{#if task.assignee}
+				<span
+					class="rounded-full px-1.5 py-0.5 font-mono text-[10px]"
+					style="color: {agentColor(task.assignee)}; background: {agentColor(task.assignee)}1a"
+					title="Assignee">@{task.assignee}</span
+				>
+			{/if}
 			<div class="ml-auto shrink-0">
 				<DueDateBadge dueDate={task.dueDate} />
 			</div>

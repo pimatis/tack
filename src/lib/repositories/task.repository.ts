@@ -51,6 +51,7 @@ type UpdateTaskInput = Partial<
 		| 'recurrenceRule'
 		| 'parentId'
 		| 'estimateMinutes'
+		| 'assignee'
 	>
 >;
 
@@ -74,6 +75,7 @@ const TASK_LIST_COLUMNS = `
 	timer_started_at AS timerStartedAt,
 	sort_order AS sortOrder,
 	pinned,
+	assignee,
 	created_at AS createdAt,
 	updated_at AS updatedAt,
 	deleted_at AS deletedAt,
@@ -178,6 +180,53 @@ export async function findAll(): Promise<Task[]> {
 		return tasks;
 	} catch (error) {
 		throw new Error('Failed to load tasks', { cause: error });
+	}
+}
+
+export type Agent = {
+	name: string;
+	harness?: string | null;
+	color?: string;
+	lastSeenAt?: string | null;
+};
+
+// registered agents from the agents table, populated lazily on assign/activity
+export async function findAgents(): Promise<Agent[]> {
+	try {
+		const db = await getDb();
+		return await db.select<Agent[]>(
+			`SELECT name, harness, color, last_seen_at AS lastSeenAt FROM agents ORDER BY name`
+		);
+	} catch {
+		return [];
+	}
+}
+
+// every assignee string seen on live tasks, for pickers and badges
+export async function findAssignees(): Promise<string[]> {
+	try {
+		const db = await getDb();
+		const rows = await db.select<{ assignee: string }[]>(
+			`SELECT DISTINCT assignee FROM tasks WHERE assignee IS NOT NULL AND deleted_at IS NULL ORDER BY assignee`
+		);
+		return rows.map((r) => r.assignee);
+	} catch {
+		return [];
+	}
+}
+
+// tasks currently in progress with an owner; the agent settings tab lists
+// them as "who is working on what right now"
+export async function findWorkingTasks(): Promise<Task[]> {
+	try {
+		const db = await getDb();
+		return await db.select<Task[]>(
+			`SELECT ${TASK_LIST_COLUMNS} FROM tasks
+			 WHERE deleted_at IS NULL AND status = 'in_progress' AND assignee IS NOT NULL
+			 ORDER BY assignee, updated_at DESC LIMIT 20`
+		);
+	} catch (error) {
+		throw new Error('Failed to load working tasks', { cause: error });
 	}
 }
 
@@ -304,6 +353,17 @@ export async function update(id: string, input: UpdateTaskInput): Promise<Task |
 				field: 'estimate_minutes',
 				oldValue: current.estimateMinutes != null ? `${current.estimateMinutes}m` : null,
 				newValue: input.estimateMinutes != null ? `${input.estimateMinutes}m` : null
+			});
+		}
+
+		if (input.assignee !== undefined && (current.assignee ?? null) !== input.assignee) {
+			values.push(input.assignee);
+			assignments.push(`assignee = $${values.length}`);
+			activityEntries.push({
+				action: input.assignee ? 'assigned' : 'unassigned',
+				field: 'assignee',
+				oldValue: current.assignee ?? null,
+				newValue: input.assignee ?? null
 			});
 		}
 

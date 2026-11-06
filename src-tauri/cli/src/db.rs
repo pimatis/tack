@@ -1,8 +1,162 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use sha2::{Digest, Sha384};
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 pub type Result<T> = std::result::Result<T, String>;
+
+// which agent harness is driving this process, set once at startup from
+// --agent or TACK_AGENT. used for activity attribution and forwarded to the
+// agent api as the X-Tack-Agent header
+static AGENT_NAME: OnceLock<Option<String>> = OnceLock::new();
+static ACTIVITY_SOURCE: OnceLock<String> = OnceLock::new();
+
+// letters, digits, dot, dash and underscore only so the name stays safe for
+// logs, headers and the "agent:<name>" source format
+fn sanitize_agent_name(raw: &str) -> Option<String> {
+    let name: String = raw
+        .trim()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+        .take(64)
+        .collect();
+    if name.is_empty() {
+        return None;
+    }
+    Some(name)
+}
+
+// env-var prefixes each agent harness leaks into the shells it spawns.
+// order decides precedence when several are present
+const HARNESS_ENV_PREFIXES: &[(&str, &str)] = &[
+    ("CLAUDECODE", "claude"),
+    ("CLAUDE_CODE", "claude"),
+    ("CODEX", "codex"),
+    ("OPENCODE", "opencode"),
+    ("AMP", "amp"),
+    ("AIDER", "aider"),
+    ("GEMINI", "gemini"),
+    ("GOOSE", "goose"),
+    ("AUGMENT", "augment"),
+    ("CURSOR", "cursor"),
+    ("WINDSURF", "windsurf"),
+    ("CODEIUM", "windsurf"),
+    ("DEVIN", "devin"),
+    ("ZED", "zed"),
+    ("COPILOT", "copilot"),
+    ("CONTINUE", "continue"),
+];
+
+// process names worth trusting as a harness when walking the parent chain
+const HARNESS_BINARIES: &[(&str, &str)] = &[
+    ("claude", "claude"),
+    ("codex", "codex"),
+    ("opencode", "opencode"),
+    ("amp", "amp"),
+    ("aider", "aider"),
+    ("gemini", "gemini"),
+    ("goose", "goose"),
+    ("devin", "devin"),
+    ("cursor", "cursor"),
+    ("windsurf", "windsurf"),
+    ("zed", "zed"),
+];
+
+// devin-style names like "devin_3000-11-238_agent" collapse to "devin"
+fn normalize_agent_name(raw: &str) -> Option<String> {
+    let head: String = raw
+        .trim()
+        .chars()
+        .take_while(|c| c.is_ascii_alphabetic())
+        .collect();
+    sanitize_agent_name(&head)
+}
+
+// best-effort: who spawned this shell? explicit flag and TACK_AGENT win,
+// then harness env vars, then the parent process chain for cli tools that
+// export nothing (opencode, amp, ...)
+fn detect_agent_name() -> Option<String> {
+    if let Ok(v) = std::env::var("AI_AGENT") {
+        if let Some(n) = normalize_agent_name(&v) {
+            return Some(n);
+        }
+    }
+    if let Ok(v) = std::env::var("ACP_BACKEND") {
+        if let Some(n) = normalize_agent_name(&v) {
+            return Some(n);
+        }
+    }
+    for key in std::env::vars_os().filter_map(|k| k.0.into_string().ok()) {
+        for (prefix, name) in HARNESS_ENV_PREFIXES {
+            if key.starts_with(prefix) {
+                return Some((*name).to_string());
+            }
+        }
+    }
+    ancestor_process_name()
+}
+
+// walk up to 10 ancestors via ps; returns the first known harness binary name
+#[cfg(unix)]
+fn ancestor_process_name() -> Option<String> {
+    let mut pid = std::process::id().to_string();
+    for _ in 0..10 {
+        let output = std::process::Command::new("ps")
+            .args(["-o", "ppid=,comm=", "-p", &pid])
+            .output()
+            .ok()?;
+        let line = String::from_utf8_lossy(&output.stdout);
+        let line = line.trim();
+        if line.is_empty() {
+            return None;
+        }
+        let (ppid, comm) = line.split_once(char::is_whitespace).unwrap_or(("1", ""));
+        let binary = comm
+            .trim()
+            .rsplit('/')
+            .next()
+            .unwrap_or("")
+            .to_lowercase();
+        for (bin, name) in HARNESS_BINARIES {
+            if binary == *bin || binary.starts_with(&format!("{} ", bin)) {
+                return Some((*name).to_string());
+            }
+        }
+        let next = ppid.trim();
+        if next.is_empty() || next == "0" || next == pid {
+            return None;
+        }
+        pid = next.to_string();
+    }
+    None
+}
+
+#[cfg(not(unix))]
+fn ancestor_process_name() -> Option<String> {
+    None
+}
+
+pub fn init_agent_name(flag: Option<&str>) {
+    let name = flag
+        .and_then(sanitize_agent_name)
+        .or_else(|| std::env::var("TACK_AGENT").ok().and_then(|v| sanitize_agent_name(&v)))
+        .or_else(detect_agent_name);
+    let source = match &name {
+        Some(n) => format!("agent:{}", n),
+        None => "cli".to_string(),
+    };
+    let _ = ACTIVITY_SOURCE.set(source);
+    let _ = AGENT_NAME.set(name);
+}
+
+pub fn agent_name() -> Option<&'static str> {
+    AGENT_NAME.get().and_then(|n| n.as_deref())
+}
+
+// 'cli' for a human, 'agent:<name>' when a harness identified itself
+pub fn activity_source() -> &'static str {
+    ACTIVITY_SOURCE.get().map(String::as_str).unwrap_or("cli")
+}
 
 pub fn get_db_path() -> PathBuf {
     let data_dir = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
@@ -126,6 +280,16 @@ fn run_migrations(conn: &Connection) -> Result<()> {
             "backlog_estimates_relations_views",
             include_str!("../../migrations/024_backlog_estimates_relations_views.sql"),
         ),
+        (
+            25,
+            "add_assignee_to_tasks",
+            include_str!("../../migrations/025_assignee.sql"),
+        ),
+        (
+            26,
+            "create_agents_table",
+            include_str!("../../migrations/026_agents.sql"),
+        ),
     ];
 
     let known: std::collections::HashSet<i64> =
@@ -240,6 +404,29 @@ pub fn new_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
+// deterministic badge color per agent name, shared palette with the app
+const AGENT_COLORS: &[&str] = &[
+    "indigo", "amber", "emerald", "rose", "sky", "violet",
+    "orange", "teal", "pink", "lime", "cyan", "fuchsia",
+];
+
+pub fn agent_color(name: &str) -> &'static str {
+    let h: u32 = name.bytes().fold(5381u32, |h, b| h.wrapping_mul(33).wrapping_add(b as u32));
+    AGENT_COLORS[((h ^ (h >> 16)) as usize) % AGENT_COLORS.len()]
+}
+
+// register an assignee the first time it is seen; harmless when it exists
+pub fn ensure_agent(conn: &Connection, name: &str) {
+    let name = name.trim();
+    if name.is_empty() {
+        return;
+    }
+    let _ = conn.execute(
+        "INSERT OR IGNORE INTO agents (id, name, harness, color, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![new_id(), name, agent_name(), agent_color(name), now_iso()],
+    );
+}
+
 pub fn log_activity(
     conn: &Connection,
     task_id: &str,
@@ -254,6 +441,14 @@ pub fn log_activity(
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![new_id(), task_id, action, field, old_value, new_value, source, now_iso()],
     ).map_err(|e| format!("Failed to log activity: {}", e))?;
+    // a named agent acting is a heartbeat for the registry
+    if let Some(name) = source.strip_prefix("agent:") {
+        ensure_agent(conn, name);
+        let _ = conn.execute(
+            "UPDATE agents SET last_seen_at = ?1 WHERE name = ?2",
+            params![now_iso(), name],
+        );
+    }
     Ok(())
 }
 

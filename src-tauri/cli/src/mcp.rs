@@ -120,7 +120,7 @@ fn call(conn: &Connection, params: &Value) -> std::result::Result<Vec<Value>, St
         }
         "tack_task_list" => {
             let mut qs = Vec::new();
-            for key in ["status", "project", "trash"] {
+            for key in ["status", "project", "trash", "assignee"] {
                 if let Some(v) = args.get(key).and_then(|v| v.as_str()) {
                     qs.push(format!("{}={}", key, v));
                 }
@@ -168,6 +168,15 @@ fn call(conn: &Connection, params: &Value) -> std::result::Result<Vec<Value>, St
         "tack_task_restore" => {
             let id = args["id"].as_str().unwrap_or_default();
             agent::request_json(conn, "POST", &format!("/api/agent/tasks/{}/restore", id), None)
+                .map(|v| vec![text(v.to_string())])
+        }
+        "tack_task_context" => {
+            let id = args["id"].as_str().unwrap_or_default();
+            agent::request_json(conn, "GET", &format!("/api/agent/tasks/{}/context", id), None)
+                .map(|v| vec![text(v.to_string())])
+        }
+        "tack_agent_list" => {
+            agent::request_json(conn, "GET", "/api/agent/agents", None)
                 .map(|v| vec![text(v.to_string())])
         }
         _ => {
@@ -543,6 +552,7 @@ fn tools() -> Vec<Value> {
             json!({
                 "status": { "type": "string", "description": "backlog | todo | in_progress | done | canceled" },
                 "project": { "type": "string", "description": "project id or prefix, e.g. TSK" },
+                "assignee": { "type": "string", "description": "assignee name" },
                 "trash": { "type": "string", "description": "pass \"1\" to list trashed tasks" }
             }),
             &[],
@@ -568,6 +578,7 @@ fn tools() -> Vec<Value> {
                 "due_date": { "type": "string", "description": "YYYY-MM-DD" },
                 "end_date": { "type": "string", "description": "YYYY-MM-DD" },
                 "estimate_minutes": { "type": "number" },
+                "assignee": { "type": "string", "description": "assign the task to an agent or person by name" },
                 "parent": { "type": "string", "description": "parent task uuid or display number" }
             }),
             &["title"],
@@ -585,6 +596,7 @@ fn tools() -> Vec<Value> {
                 "due_date": { "type": "string" },
                 "end_date": { "type": "string" },
                 "estimate_minutes": { "type": "number" },
+                "assignee": { "type": "string", "description": "assignee name; null or \"\" unassigns" },
                 "parent": { "type": "string" },
                 "pinned": { "type": "boolean" }
             }),
@@ -606,6 +618,20 @@ fn tools() -> Vec<Value> {
                 "id": { "type": "string", "description": "task uuid or display number" }
             }),
             &["id"],
+        ),
+        tool(
+            "tack_task_context",
+            "Everything about a task in one read: fields, labels, subtasks, relations and the last 10 activity entries. Prefer this over separate task_get + activity calls",
+            json!({
+                "id": { "type": "string", "description": "task uuid or display number" }
+            }),
+            &["id"],
+        ),
+        tool(
+            "tack_agent_list",
+            "Registered agents with open and in-progress task counts",
+            json!({}),
+            &[],
         ),
     ]
 }

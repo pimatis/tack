@@ -209,7 +209,7 @@ pub fn set_labels(conn: &Connection, task_id: &str, label_ids: &[String]) -> Res
             None,
             None,
             Some(&label_name),
-            "cli",
+            activity_source(),
         );
     }
     Ok(())

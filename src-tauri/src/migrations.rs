@@ -112,6 +112,16 @@ pub(crate) fn run_migrations(conn: &Connection) -> Result<(), String> {
             "backlog_estimates_relations_views",
             include_str!("../migrations/024_backlog_estimates_relations_views.sql"),
         ),
+        (
+            25,
+            "add_assignee_to_tasks",
+            include_str!("../migrations/025_assignee.sql"),
+        ),
+        (
+            26,
+            "create_agents_table",
+            include_str!("../migrations/026_agents.sql"),
+        ),
     ];
     let known: std::collections::HashSet<i64> =
         migrations.iter().map(|(v, _, _)| *v as i64).collect();

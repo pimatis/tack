@@ -25,6 +25,34 @@ pub(super) fn err(status: u16, msg: impl Into<String>) -> Response<std::io::Curs
     )
 }
 
+// the caller may name its harness via X-Tack-Agent; that name lands in the
+// activity log as "agent:<name>" so users can tell which agent did what.
+// letters, digits, dot, dash, underscore only - keeps headers and the
+// "agent:<name>" source format safe
+fn agent_source(request: &Request) -> String {
+    let raw = request
+        .headers()
+        .iter()
+        .find(|h| h.field.equiv("X-Tack-Agent"))
+        .map(|h| h.value.as_str())
+        .unwrap_or("");
+    let name: String = raw
+        .trim()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+        .take(64)
+        .collect();
+    if name.is_empty() {
+        return "agent".to_string();
+    }
+    format!("agent:{}", name)
+}
+
+fn agent_name(request: &Request) -> Option<String> {
+    let src = agent_source(request);
+    src.strip_prefix("agent:").map(str::to_string)
+}
+
 pub(super) fn read_body(request: &mut Request) -> Result<Value> {
     let mut body = String::new();
     request
@@ -50,12 +78,15 @@ pub(super) fn handle_request(request: Request, app: &tauri::AppHandle) {
             json!({ "ok": true, "name": "tack-agent", "version": env!("CARGO_PKG_VERSION") }),
         ),
         (Method::Get, "/api/agent/help") => json_response(StatusCode(200), help()),
-        (Method::Get, "/api/agent/snapshot") => snapshot_response(app, query),
-        (Method::Get, "/api/agent/screenshot") => screenshot_response(app),
-        (Method::Post, "/api/agent/action") => match read_body(&mut request) {
-            Ok(body) => action_response(app, &body),
-            Err(e) => err(400, e),
-        },
+        (Method::Get, "/api/agent/snapshot") => snapshot_response(app, query, agent_name(&request)),
+        (Method::Get, "/api/agent/screenshot") => screenshot_response(app, agent_name(&request)),
+        (Method::Post, "/api/agent/action") => {
+            let name = agent_name(&request);
+            match read_body(&mut request) {
+                Ok(body) => action_response(app, &body, name),
+                Err(e) => err(400, e),
+            }
+        }
         (Method::Post, "/api/agent/confirm") => match read_body(&mut request) {
             Ok(body) => confirm_response(app, &body),
             Err(e) => err(400, e),
@@ -63,24 +94,38 @@ pub(super) fn handle_request(request: Request, app: &tauri::AppHandle) {
         // structured data api: task crud straight to sqlite, so agents do not
         // have to depend on what the ui happens to look like
         (Method::Get, "/api/agent/tasks") => tasks::list(app, query),
-        (Method::Post, "/api/agent/tasks") => tasks::create(&mut request, app),
+        (Method::Post, "/api/agent/tasks") => {
+            let src = agent_source(&request);
+            tasks::create(&mut request, app, &src)
+        }
         (Method::Get, "/api/agent/projects") => tasks::projects(app),
         (Method::Get, "/api/agent/labels") => tasks::labels(app),
+        (Method::Get, "/api/agent/agents") => tasks::agents(app),
+        (Method::Get, p) if p.starts_with("/api/agent/tasks/") && p.ends_with("/context") => {
+            tasks::context(app, p)
+        }
         (Method::Post, p) if p.starts_with("/api/agent/tasks/") && p.ends_with("/restore") => {
-            tasks::restore(app, p)
+            tasks::restore(app, p, &agent_source(&request))
         }
         (Method::Get, p) if p.starts_with("/api/agent/tasks/") => tasks::get(app, p),
         (Method::Patch, p) if p.starts_with("/api/agent/tasks/") => {
-            tasks::update(&mut request, app, p)
+            let src = agent_source(&request);
+            tasks::update(&mut request, app, p, &src)
         }
-        (Method::Delete, p) if p.starts_with("/api/agent/tasks/") => tasks::delete(app, p, query),
+        (Method::Delete, p) if p.starts_with("/api/agent/tasks/") => {
+            tasks::delete(app, p, query, &agent_source(&request))
+        }
         _ => err(404, "not found - try /api/agent/help"),
     };
     let _ = request.respond(response);
 }
 
-fn snapshot_response(app: &tauri::AppHandle, query: &str) -> Response<std::io::Cursor<Vec<u8>>> {
-    match act(app, "snapshot", &json!({})) {
+fn snapshot_response(
+    app: &tauri::AppHandle,
+    query: &str,
+    agent: Option<String>,
+) -> Response<std::io::Cursor<Vec<u8>>> {
+    match act(app, "snapshot", &json!({}), agent.as_deref()) {
         Ok(value) => {
             let snapshot = value.get("snapshot").cloned().unwrap_or(value);
             if query.contains("format=text") {
@@ -142,10 +187,10 @@ fn text_response(text: String) -> Response<std::io::Cursor<Vec<u8>>> {
     )
 }
 
-fn screenshot_response(app: &tauri::AppHandle) -> Response<std::io::Cursor<Vec<u8>>> {
+fn screenshot_response(app: &tauri::AppHandle, agent: Option<String>) -> Response<std::io::Cursor<Vec<u8>>> {
     // swap the ghost cursor to a camera and flash the frame, so the user
     // sees the capture happen; best-effort, a missed marker is not an error
-    let _ = act(app, "notify", &json!({ "kind": "screenshot" }));
+    let _ = act(app, "notify", &json!({ "kind": "screenshot" }), agent.as_deref());
     match screenshot::capture(app) {
         Ok(png) => {
             let headers = vec![
@@ -168,7 +213,11 @@ fn screenshot_response(app: &tauri::AppHandle) -> Response<std::io::Cursor<Vec<u
 // the user-approval gate: actions the dom marks dangerous come back with
 // danger:true; we ask the user in a native dialog and only then replay the
 // action. denied or unanswered requests return ok:false so the agent stops
-fn action_response(app: &tauri::AppHandle, body: &Value) -> Response<std::io::Cursor<Vec<u8>>> {
+fn action_response(
+    app: &tauri::AppHandle,
+    body: &Value,
+    agent: Option<String>,
+) -> Response<std::io::Cursor<Vec<u8>>> {
     let name = body["action"].as_str().unwrap_or("").to_string();
     if name.is_empty() {
         return err(400, "missing \"action\"");
@@ -179,7 +228,7 @@ fn action_response(app: &tauri::AppHandle, body: &Value) -> Response<std::io::Cu
         params["confirmed"] = json!(true);
     }
 
-    let result = match act(app, &name, &params) {
+    let result = match act(app, &name, &params, agent.as_deref()) {
         Ok(v) => v,
         Err(e) => return err(500, e),
     };
@@ -196,7 +245,7 @@ fn action_response(app: &tauri::AppHandle, body: &Value) -> Response<std::io::Cu
             let mut p = params;
             p["confirmed"] = json!(true);
             p
-        }) {
+        }, agent.as_deref()) {
             Ok(v) => {
                 let mut v = v;
                 v["confirmedBy"] = json!("user");
@@ -246,12 +295,14 @@ fn help() -> Value {
             "GET /api/agent/screenshot": "png of the app window",
             "POST /api/agent/action": "{\"action\":name,\"params\":{...}} - see actions",
             "POST /api/agent/confirm": "{\"title\":...,\"body\":...} -> {approved} - asks the user in a native dialog; call before any irreversible action",
-            "GET /api/agent/tasks": "list tasks (?status=, ?project=prefix-or-id, ?trash=1)",
-            "POST /api/agent/tasks": "create task {title, description?, status?, priority?, project?, due_date?, end_date?, estimate_minutes?, parent?}",
+            "GET /api/agent/tasks": "list tasks (?status=, ?project=prefix-or-id, ?assignee=name, ?trash=1)",
+            "POST /api/agent/tasks": "create task {title, description?, status?, priority?, project?, due_date?, end_date?, estimate_minutes?, parent?, assignee?}",
             "GET /api/agent/tasks/{id}": "one task with labels and subtasks; id is a uuid or display number (TSK-4, #4)",
-            "PATCH /api/agent/tasks/{id}": "update fields; null or \"\" clears nullable fields",
+            "PATCH /api/agent/tasks/{id}": "update fields; null or \"\" clears nullable fields (assignee unassigns)",
             "DELETE /api/agent/tasks/{id}": "move to trash; ?permanent=1 deletes forever (asks the user first)",
             "POST /api/agent/tasks/{id}/restore": "restore a trashed task",
+            "GET /api/agent/tasks/{id}/context": "task + labels + subtasks + relations + last 10 activity entries in one read",
+            "GET /api/agent/agents": "registered agents with open/in-progress task counts",
             "GET /api/agent/projects": "projects with open task counts",
             "GET /api/agent/labels": "all labels",
             "GET /api/agent/help": "this document"
@@ -270,6 +321,7 @@ fn help() -> Value {
             "snapshot": "same as GET snapshot",
             "eval": "{code} - arbitrary js in the app; power tool, results are serialized"
         },
+        "identity": "send the X-Tack-Agent header with your harness name (e.g. claude, codex) so changes are logged as source 'agent:<name>' instead of plain 'agent'; the tack cli does this via --agent or TACK_AGENT",
         "safety": "elements flagged [danger] (delete/trash/reset/destructive) prompt the user for approval automatically; for anything else irreversible, POST /api/agent/confirm first. denied actions return {ok:false,denied:true} - do not retry"
     })
 }

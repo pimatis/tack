@@ -42,7 +42,7 @@ export async function findRecentAgentActivity(limit = 15): Promise<AgentActivity
 			FROM activity_log a
 			JOIN tasks t ON t.id = a.task_id
 			LEFT JOIN projects p ON p.id = t.project_id
-			WHERE a.source = 'agent'
+			WHERE a.source = 'agent' OR a.source LIKE 'agent:%'
 			ORDER BY a.created_at DESC LIMIT $1`,
 			[limit]
 		);
@@ -62,9 +62,11 @@ export async function log(
 		const db = await getDb();
 		const id = newId();
 		const now = new Date().toISOString();
+		// set by the agent server while an agent action runs in the webview
+		const source = (globalThis as { __tackAgentSource?: string }).__tackAgentSource ?? 'gui';
 		await db.execute(
 			`INSERT INTO activity_log (id, task_id, action, field, old_value, new_value, source, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-			[id, taskId, action, field ?? null, oldValue ?? null, newValue ?? null, 'gui', now]
+			[id, taskId, action, field ?? null, oldValue ?? null, newValue ?? null, source, now]
 		);
 	} catch {
 		// activity logging is non-critical, silently ignore

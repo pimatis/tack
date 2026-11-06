@@ -3,6 +3,7 @@ use rusqlite::{params, Connection};
 use serde_json::json;
 
 pub fn list(conn: &Connection, json: bool, task_id: &str) -> Result<()> {
+    let task_id = resolve_task_id(conn, task_id)?;
     let mut stmt = conn
         .prepare("SELECT id, action, field, old_value, new_value, source, created_at FROM activity_log WHERE task_id = ?1 ORDER BY created_at DESC LIMIT 50")
         .map_err(|e| format!("Failed to query activity: {}", e))?;
@@ -71,6 +72,16 @@ fn format_activity(
     let new = new_val.unwrap_or("");
     match action {
         "created" => "created this task".to_string(),
+        "assigned" => format!("assigned to {}", new),
+        "delegated" => format!("delegated to {}", new),
+        "unassigned" => {
+            if old.is_empty() {
+                "unassigned".to_string()
+            } else {
+                format!("unassigned {}", old)
+            }
+        }
+        "note" => new.to_string(),
         "status_changed" => format!("changed status from {} to {}", old, new),
         "priority_changed" => format!("set priority to {}", new),
         "title_changed" => "updated the title".to_string(),

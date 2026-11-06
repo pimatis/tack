@@ -9,6 +9,9 @@
 		findRecentAgentActivity,
 		type AgentActivityEntry
 	} from '$lib/repositories/activity.repository';
+	import { findWorkingTasks, findAgents, type Agent } from '$lib/repositories/task.repository';
+	import { agentColor } from '$lib/agents';
+	import type { Task } from '$lib/types/task';
 	import type { Settings } from '$lib/types/settings';
 	import Icon from '$lib/components/Icon.svelte';
 
@@ -28,18 +31,38 @@
 	let copied = $state(false);
 	let copyTimer: ReturnType<typeof setTimeout> | undefined;
 	let activity = $state<AgentActivityEntry[]>([]);
+	let working = $state<Task[]>([]);
+	let agents = $state<Agent[]>([]);
+	let sourceFilter = $state('all');
+
+	// one chip per distinct harness seen in the feed
+	let sources = $derived([
+		...new Set(activity.map((e) => (e.source?.startsWith('agent:') ? e.source.slice(6) : 'agent')))
+	]);
+	let filtered = $derived(
+		sourceFilter === 'all' ? activity : activity.filter((e) => agentName(e) === sourceFilter)
+	);
 
 	async function refresh() {
 		status = await getAgentStatus();
 		try {
 			activity = await findRecentAgentActivity();
+			working = await findWorkingTasks();
+			agents = await findAgents();
 		} catch {
 			activity = [];
+			working = [];
+			agents = [];
 		}
 	}
 
 	function actionText(entry: AgentActivityEntry): string {
 		return entry.action.replace(/_/g, ' ');
+	}
+
+	// 'agent' for anonymous writes, the harness name for 'agent:<name>'
+	function agentName(entry: AgentActivityEntry): string {
+		return entry.source?.startsWith('agent:') ? entry.source.slice(6) : 'agent';
 	}
 
 	function relativeTime(value: string): string {
@@ -184,6 +207,42 @@
 		</p>
 	</div>
 
+	{#if agents.length > 0}
+		<Separator />
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<div class="min-w-0">
+				<p class="text-[13px] font-medium">Known agents</p>
+				<p class="text-xs text-muted-foreground">Registered when first assigned or seen acting</p>
+			</div>
+			<div class="flex max-w-[60%] flex-wrap justify-end gap-1">
+				{#each agents as a (a.name)}
+					<span
+						class="rounded-full px-2 py-0.5 font-mono text-[10px]"
+						style="color: {agentColor(a.name)}; background: {agentColor(a.name)}1a"
+						title={a.harness ? `harness: ${a.harness}` : undefined}>@{a.name}</span
+					>
+				{/each}
+			</div>
+		</div>
+	{/if}
+
+	{#if working.length > 0}
+		<Separator />
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<div class="min-w-0">
+				<p class="text-[13px] font-medium">Currently working</p>
+				<p class="text-xs text-muted-foreground">In-progress tasks with an assignee</p>
+			</div>
+			<div class="flex max-w-[60%] flex-col items-end gap-0.5">
+				{#each working as t (t.id)}
+					<span class="font-mono text-[11px] text-muted-foreground" title={t.title}>
+						@{t.assignee} · {t.title}
+					</span>
+				{/each}
+			</div>
+		</div>
+	{/if}
+
 	<Separator />
 	<div class="flex flex-wrap items-center justify-between gap-3">
 		<div class="min-w-0">
@@ -193,13 +252,29 @@
 					? 'Nothing agents have changed through the api yet'
 					: 'Latest changes agents made through the api'}
 			</p>
+			{#if sources.length > 1}
+				<div class="mt-1.5 flex flex-wrap gap-1">
+					{#each ['all', ...sources] as s (s)}
+						<button
+							type="button"
+							onclick={() => (sourceFilter = s)}
+							class="rounded-full px-2 py-0.5 font-mono text-[10px] transition-colors {sourceFilter ===
+							s
+								? 'bg-indigo-500/15 text-indigo-500'
+								: 'bg-muted/40 text-muted-foreground hover:text-foreground'}"
+						>
+							{s}
+						</button>
+					{/each}
+				</div>
+			{/if}
 		</div>
-		{#if activity.length > 0}
+		{#if filtered.length > 0}
 			<div class="flex max-w-[60%] flex-col items-end gap-0.5">
-				{#each activity as entry (entry.id)}
+				{#each filtered as entry (entry.id)}
 					<span class="font-mono text-[11px] text-muted-foreground" title={entry.createdAt}>
 						{entry.displayNumber}
-						{actionText(entry)} · {relativeTime(entry.createdAt)}
+						{actionText(entry)} · {agentName(entry)} · {relativeTime(entry.createdAt)}
 					</span>
 				{/each}
 			</div>

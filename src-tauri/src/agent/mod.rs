@@ -74,12 +74,29 @@ fn eval(app: &tauri::AppHandle, expr: &str) -> Result<serde_json::Value> {
     }
 }
 
-// lazily injects the agent runtime, then calls __tackAgent.act(name, params)
-fn act(app: &tauri::AppHandle, name: &str, params: &serde_json::Value) -> Result<serde_json::Value> {
+// lazily injects the agent runtime, then calls __tackAgent.act(name, params).
+// a named agent also stamps window.__tackAgentSource, which the frontend's
+// activity logger picks up so ui-driven writes are attributed too
+fn act(
+    app: &tauri::AppHandle,
+    name: &str,
+    params: &serde_json::Value,
+    agent: Option<&str>,
+) -> Result<serde_json::Value> {
     let source = serde_json::to_string(AGENT_JS).map_err(|e| e.to_string())?;
     let args = serde_json::to_string(&json_map(name, params)).map_err(|e| e.to_string())?;
+    let stamp = match agent {
+        Some(n) => format!(
+            "window.__tackAgentSource={};",
+            serde_json::to_string(&format!("agent:{}", n)).map_err(|e| e.to_string())?
+        ),
+        None => "window.__tackAgentSource='agent';".to_string(),
+    };
+    // the stamp is cleared once the action settles, so a human's next click
+    // is logged as 'gui' again instead of inheriting the agent's name
     let expr = format!(
-        "(window.__tackAgent||(window.__tackAgent=eval({source}))).act({args}.name,{args}.params)",
+        "(async()=>{{{stamp}try{{const a=window.__tackAgent||(window.__tackAgent=eval({source}));return await a.act({args}.name,{args}.params)}}finally{{delete window.__tackAgentSource}}}})()",
+        stamp = stamp,
         source = source,
         args = args
     );

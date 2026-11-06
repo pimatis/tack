@@ -18,6 +18,13 @@ struct Cli {
     #[arg(long, global = true, help = "Output machine-readable JSON")]
     json: bool,
 
+    #[arg(
+        long,
+        global = true,
+        help = "Agent harness name for activity attribution; auto-detected from the harness env when omitted"
+    )]
+    agent: Option<String>,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -88,6 +95,21 @@ enum Commands {
     },
     /// Run an mcp stdio server exposing the app's ui tools
     Mcp,
+    /// List known agents (from task assignees)
+    Agent {
+        #[command(subcommand)]
+        action: AgentAction,
+    },
+    /// Your agent inbox: tasks you own plus activity that mentions them
+    Inbox,
+}
+
+#[derive(Subcommand)]
+enum AgentAction {
+    /// List every registered agent, with open counts and last activity
+    List,
+    /// One agent's workload and recent activity
+    Show { name: String },
 }
 
 #[derive(Subcommand)]
@@ -260,6 +282,8 @@ enum TaskAction {
         parent: Option<String>,
         #[arg(long, help = "Estimate: 90m, 2h, 1h30m")]
         estimate: Option<String>,
+        #[arg(long, help = "Assign the task to an agent or person by name")]
+        assignee: Option<String>,
     },
     /// Create a task from a natural language line, e.g.
     /// `tack task add tomorrow 15:00 finish report #work !high every friday`
@@ -291,6 +315,8 @@ enum TaskAction {
         pinned: bool,
         #[arg(long, help = "Show tasks updated since timestamp (ISO 8601)")]
         since: Option<String>,
+        #[arg(long, help = "Filter by assignee name")]
+        assignee: Option<String>,
     },
     /// Full-text search (title, description, subtasks, labels, project, issue number)
     Search {
@@ -333,7 +359,55 @@ enum TaskAction {
         parent: Option<String>,
         #[arg(long, help = "Estimate: 90m, 2h, 1h30m; empty clears")]
         estimate: Option<String>,
+        #[arg(long, help = "Assignee name; empty clears")]
+        assignee: Option<String>,
     },
+    /// Assign a task to an agent or person
+    Assign { id: String, name: String },
+    /// Clear a task's assignee
+    Unassign { id: String },
+    /// Assign a task to yourself (the detected agent, e.g. claude, codex, devin).
+    /// Refuses if someone else owns it; --force takes it anyway
+    Claim {
+        id: String,
+        #[arg(long, help = "Take the task even if another agent owns it")]
+        force: bool,
+    },
+    /// List tasks assigned to the detected agent
+    Mine,
+    /// List tasks currently in progress with an owner
+    Wip,
+    /// Show the single best open task to work on next (yours first, then unclaimed; blocked tasks excluded)
+    Next,
+    /// Mark a task done (same as update --status done; banks timers, rolls recurring tasks)
+    Done { id: String },
+    /// Assign a task to another agent or person, optionally with a note in the activity feed
+    Handoff {
+        id: String,
+        name: String,
+        #[arg(long, help = "Reason or context note logged to the activity feed")]
+        note: Option<String>,
+    },
+    /// Delegate a task to an agent: assign + start progress in one step
+    Delegate { id: String, name: String },
+    /// Log a progress note and refresh the task timestamp ("still working")
+    Progress {
+        id: String,
+        #[arg(long, help = "Note for the activity feed (default: still working on it)")]
+        note: Option<String>,
+    },
+    /// Move a task back to backlog with an optional reason note ("i'm stuck")
+    Block {
+        id: String,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// List open tasks nobody owns (the triage queue)
+    Inbox,
+    /// Everything about a task in one call: fields, labels, subtasks, relations, recent activity
+    Context { id: String },
+    /// Assignee x status workload matrix
+    Board,
     /// Delete a task
     Delete { id: String },
     /// Duplicate a task
@@ -592,6 +666,7 @@ fn parse_ids(s: &str) -> Vec<String> {
 
 fn main() {
     let cli = Cli::parse();
+    db::init_agent_name(cli.agent.as_deref());
     let db_path = cli.db.unwrap_or_else(db::get_db_path);
     let json = cli.json;
 
@@ -635,6 +710,7 @@ fn main() {
                 description,
                 parent,
                 estimate,
+                assignee,
             } => {
                 let dd = due_date.as_deref().filter(|s| !s.is_empty());
                 let ed = end_date.as_deref().filter(|s| !s.is_empty());
@@ -653,6 +729,7 @@ fn main() {
                     repeat.as_deref(),
                     parent.as_deref(),
                     estimate.as_deref(),
+                    assignee.as_deref(),
                 )
             }
             TaskAction::Add { text, dry_run } => {
@@ -668,6 +745,7 @@ fn main() {
                 priority,
                 pinned,
                 since,
+                assignee,
             } => commands::task::list(
                 &conn,
                 json,
@@ -677,6 +755,7 @@ fn main() {
                 priority,
                 pinned,
                 since.as_deref(),
+                assignee.as_deref(),
             ),
             TaskAction::Search {
                 query,
@@ -706,6 +785,7 @@ fn main() {
                 repeat,
                 parent,
                 estimate,
+                assignee,
             } => commands::task::update(
                 &conn,
                 json,
@@ -720,7 +800,30 @@ fn main() {
                 repeat.as_deref(),
                 parent.as_deref(),
                 estimate.as_deref(),
+                assignee.as_deref(),
             ),
+            TaskAction::Assign { id, name } => {
+                commands::task::assign(&conn, json, &id, &name)
+            }
+            TaskAction::Unassign { id } => commands::task::unassign(&conn, json, &id),
+            TaskAction::Claim { id, force } => commands::task::claim(&conn, json, &id, force),
+            TaskAction::Mine => commands::task::mine(&conn, json),
+            TaskAction::Wip => commands::task::wip(&conn, json),
+            TaskAction::Next => commands::task::next(&conn, json),
+            TaskAction::Done { id } => commands::task::done(&conn, json, &id),
+            TaskAction::Handoff { id, name, note } => {
+                commands::task::handoff(&conn, json, &id, &name, note.as_deref())
+            }
+            TaskAction::Delegate { id, name } => commands::task::delegate(&conn, json, &id, &name),
+            TaskAction::Progress { id, note } => {
+                commands::task::progress(&conn, json, &id, note.as_deref())
+            }
+            TaskAction::Block { id, reason } => {
+                commands::task::block(&conn, json, &id, reason.as_deref())
+            }
+            TaskAction::Inbox => commands::task::inbox_tasks(&conn, json),
+            TaskAction::Context { id } => commands::task::context(&conn, json, &id),
+            TaskAction::Board => commands::task::board(&conn, json),
             TaskAction::Delete { id } => commands::task::delete(&conn, json, &id),
             TaskAction::Duplicate { id } => commands::task::duplicate(&conn, json, &id),
             TaskAction::Pin { id } => commands::task::toggle_pin(&conn, json, &id, true),
@@ -896,6 +999,11 @@ fn main() {
             UiAction::Confirm { title, body } => commands::ui::confirm(&conn, json, title, body),
         },
         Commands::Mcp => mcp::serve(&conn),
+        Commands::Agent { action } => match action {
+            AgentAction::List => commands::agents::list(&conn, json),
+            AgentAction::Show { name } => commands::agents::show(&conn, json, &name),
+        },
+        Commands::Inbox => commands::task::agent_inbox(&conn, json),
     };
 
     if let Err(e) = result {

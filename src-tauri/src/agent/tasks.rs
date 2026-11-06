@@ -15,13 +15,12 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tiny_http::{Request, Response, StatusCode};
 
-const SOURCE: &str = "agent";
 const STATUSES: [&str; 5] = ["backlog", "todo", "in_progress", "done", "canceled"];
 
 const TASK_COLS: &str = "t.id, t.number, p.prefix, t.project_id, t.title, t.description,
     t.status, t.priority, t.due_date, t.end_date, t.reminder_at, t.recurrence_rule,
     t.parent_id, t.estimate_minutes, t.tracked_seconds, t.timer_started_at, t.pinned,
-    t.created_at, t.updated_at, t.deleted_at";
+    t.created_at, t.updated_at, t.deleted_at, t.assignee";
 
 fn open(app: &AppHandle) -> Result<Connection> {
     let conn = Connection::open(app_db_path(app)?).map_err(|e| e.to_string())?;
@@ -49,6 +48,7 @@ fn now_iso() -> String {
 
 fn log_activity(
     conn: &Connection,
+    src: &str,
     task_id: &str,
     action: &str,
     field: Option<&str>,
@@ -58,10 +58,40 @@ fn log_activity(
     conn.execute(
         "INSERT INTO activity_log (id, task_id, action, field, old_value, new_value, source, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        params![new_id(), task_id, action, field, old_value, new_value, SOURCE, now_iso()],
+        params![new_id(), task_id, action, field, old_value, new_value, src, now_iso()],
     )
     .map_err(|e| format!("failed to log activity: {}", e))?;
+    if let Some(name) = src.strip_prefix("agent:") {
+        ensure_agent(conn, name, src);
+        let _ = conn.execute(
+            "UPDATE agents SET last_seen_at = ?1 WHERE name = ?2",
+            params![now_iso(), name],
+        );
+    }
     Ok(())
+}
+
+// deterministic badge color, same palette as the cli
+const AGENT_COLORS: &[&str] = &[
+    "indigo", "amber", "emerald", "rose", "sky", "violet",
+    "orange", "teal", "pink", "lime", "cyan", "fuchsia",
+];
+
+fn agent_color(name: &str) -> &'static str {
+    let h: u32 = name.bytes().fold(5381u32, |h, b| h.wrapping_mul(33).wrapping_add(b as u32));
+    AGENT_COLORS[((h ^ (h >> 16)) as usize) % AGENT_COLORS.len()]
+}
+
+fn ensure_agent(conn: &Connection, name: &str, harness: &str) {
+    let name = name.trim();
+    if name.is_empty() {
+        return;
+    }
+    let h = harness.strip_prefix("agent:").unwrap_or(harness);
+    let _ = conn.execute(
+        "INSERT OR IGNORE INTO agents (id, name, harness, color, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![new_id(), name, h, agent_color(name), now_iso()],
+    );
 }
 
 // issue number as shown in the app: PREFIX-N, or #N without a project
@@ -166,6 +196,7 @@ fn row_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
         "created_at": r.get::<_, String>(17)?,
         "updated_at": r.get::<_, String>(18)?,
         "deleted_at": r.get::<_, Option<String>>(19)?,
+        "assignee": r.get::<_, Option<String>>(20)?,
     }))
 }
 
@@ -229,6 +260,10 @@ pub(super) fn list(app: &AppHandle, query: &str) -> Response<Cursor<Vec<u8>>> {
             Err(e) => return err(404, e),
         }
     }
+    if let Some(assignee) = params_map.get("assignee") {
+        sql.push_str(" AND t.assignee = ? COLLATE NOCASE");
+        args.push(Box::new(assignee.clone()));
+    }
     sql.push_str(" ORDER BY t.pinned DESC, t.updated_at DESC");
     let tasks: Vec<Value> = match conn.prepare(&sql) {
         Ok(mut stmt) => {
@@ -290,7 +325,7 @@ pub(super) fn get(app: &AppHandle, path: &str) -> Response<Cursor<Vec<u8>>> {
     json_response(StatusCode(200), json!({ "ok": true, "task": task }))
 }
 
-pub(super) fn create(request: &mut Request, app: &AppHandle) -> Response<Cursor<Vec<u8>>> {
+pub(super) fn create(request: &mut Request, app: &AppHandle, src: &str) -> Response<Cursor<Vec<u8>>> {
     let body = match read_body(request) {
         Ok(b) => b,
         Err(e) => return err(400, e),
@@ -407,6 +442,13 @@ pub(super) fn create(request: &mut Request, app: &AppHandle) -> Response<Cursor<
         .get("pinned")
         .and_then(|v| v.as_bool())
         .unwrap_or_else(|| parsed.as_ref().is_some_and(|p| p.pinned));
+    // explicit assignee wins; a named harness claims its own work
+    let assignee = body
+        .get("assignee")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| src.strip_prefix("agent:"));
 
     let id = new_id();
     let now = now_iso();
@@ -427,13 +469,17 @@ pub(super) fn create(request: &mut Request, app: &AppHandle) -> Response<Cursor<
 
     if let Err(e) = conn.execute(
         "INSERT INTO tasks (id, number, project_id, title, description, status, priority,
-         due_date, end_date, parent_id, estimate_minutes, reminder_at, recurrence_rule, sort_order, pinned, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 0, ?14, ?15, ?16)",
-        params![id, number, project_id, title, description, status, priority, due_date, end_date, parent_id, estimate, reminder_at, recurrence_rule, pinned as i64, now, now],
+         due_date, end_date, parent_id, estimate_minutes, reminder_at, recurrence_rule, assignee, sort_order, pinned, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, 0, ?15, ?16, ?17)",
+        params![id, number, project_id, title, description, status, priority, due_date, end_date, parent_id, estimate, reminder_at, recurrence_rule, assignee, pinned as i64, now, now],
     ) {
         return err(500, format!("failed to create task: {}", e));
     }
-    let _ = log_activity(&conn, &id, "created", None, None, None);
+    let _ = log_activity(&conn, src, &id, "created", None, None, None);
+    if let Some(a) = assignee {
+        ensure_agent(&conn, a, a);
+        let _ = log_activity(&conn, src, &id, "assigned", Some("assignee"), None, Some(a));
+    }
     let mut missing_labels = Vec::new();
     if let Some(p) = &parsed {
         for name in &p.label_names {
@@ -468,7 +514,7 @@ pub(super) fn create(request: &mut Request, app: &AppHandle) -> Response<Cursor<
 
 // fields that can be updated; absent keys keep the current value, explicit
 // null or "" clears the nullable ones
-pub(super) fn update(request: &mut Request, app: &AppHandle, path: &str) -> Response<Cursor<Vec<u8>>> {
+pub(super) fn update(request: &mut Request, app: &AppHandle, path: &str, src: &str) -> Response<Cursor<Vec<u8>>> {
     let body = match read_body(request) {
         Ok(b) => b,
         Err(e) => return err(400, e),
@@ -482,7 +528,7 @@ pub(super) fn update(request: &mut Request, app: &AppHandle, path: &str) -> Resp
         Err(e) => return err(404, e),
     };
     let current = match conn.query_row(
-        "SELECT title, description, status, priority, due_date, end_date, project_id, parent_id, estimate_minutes, pinned
+        "SELECT title, description, status, priority, due_date, end_date, project_id, parent_id, estimate_minutes, pinned, assignee
          FROM tasks WHERE id = ?1",
         params![id],
         |row| {
@@ -497,13 +543,14 @@ pub(super) fn update(request: &mut Request, app: &AppHandle, path: &str) -> Resp
                 row.get::<_, Option<String>>(7)?,
                 row.get::<_, Option<i64>>(8)?,
                 row.get::<_, i64>(9)?,
+                row.get::<_, Option<String>>(10)?,
             ))
         },
     ) {
         Ok(c) => c,
         Err(_) => return err(404, format!("task {} not found", id)),
     };
-    let (cur_title, cur_desc, cur_status, cur_priority, cur_due, cur_end, cur_project, cur_parent, cur_estimate, cur_pinned) =
+    let (cur_title, cur_desc, cur_status, cur_priority, cur_due, cur_end, cur_project, cur_parent, cur_estimate, cur_pinned, cur_assignee) =
         current;
 
     if let Some(t) = body.get("title").and_then(|v| v.as_str()) {
@@ -598,12 +645,13 @@ pub(super) fn update(request: &mut Request, app: &AppHandle, path: &str) -> Resp
         None => cur_parent.clone(),
     };
 
+    let new_assignee = str_opt(&body, "assignee").unwrap_or(cur_assignee.clone());
     let now = now_iso();
     let changed = conn.execute(
         "UPDATE tasks SET title = ?1, description = ?2, status = ?3, priority = ?4,
          due_date = ?5, end_date = ?6, project_id = ?7, parent_id = ?8,
-         estimate_minutes = ?9, pinned = ?10, updated_at = ?11 WHERE id = ?12",
-        params![new_title, new_desc, new_status, new_priority, new_due, new_end, new_project, new_parent, new_estimate, new_pinned, now, id],
+         estimate_minutes = ?9, pinned = ?10, assignee = ?11, updated_at = ?12 WHERE id = ?13",
+        params![new_title, new_desc, new_status, new_priority, new_due, new_end, new_project, new_parent, new_estimate, new_pinned, new_assignee, now, id],
     );
     match changed {
         Ok(0) => return err(404, format!("task {} not found", id)),
@@ -622,6 +670,7 @@ pub(super) fn update(request: &mut Request, app: &AppHandle, path: &str) -> Resp
     if new_status != cur_status {
         let _ = log_activity(
             &conn,
+            src,
             &id,
             "status_changed",
             Some("status"),
@@ -632,6 +681,7 @@ pub(super) fn update(request: &mut Request, app: &AppHandle, path: &str) -> Resp
     if new_priority != cur_priority {
         let _ = log_activity(
             &conn,
+            src,
             &id,
             "priority_changed",
             Some("priority"),
@@ -640,20 +690,21 @@ pub(super) fn update(request: &mut Request, app: &AppHandle, path: &str) -> Resp
         );
     }
     if new_title != cur_title {
-        let _ = log_activity(&conn, &id, "title_changed", Some("title"), Some(&cur_title), Some(&new_title));
+        let _ = log_activity(&conn, src, &id, "title_changed", Some("title"), Some(&cur_title), Some(&new_title));
     }
     if new_desc != cur_desc {
-        let _ = log_activity(&conn, &id, "description_changed", Some("description"), None, None);
+        let _ = log_activity(&conn, src, &id, "description_changed", Some("description"), None, None);
     }
     if new_due != cur_due {
-        let _ = log_activity(&conn, &id, "due_date_changed", Some("due_date"), cur_due.as_deref(), new_due.as_deref());
+        let _ = log_activity(&conn, src, &id, "due_date_changed", Some("due_date"), cur_due.as_deref(), new_due.as_deref());
     }
     if new_end != cur_end {
-        let _ = log_activity(&conn, &id, "end_date_changed", Some("end_date"), cur_end.as_deref(), new_end.as_deref());
+        let _ = log_activity(&conn, src, &id, "end_date_changed", Some("end_date"), cur_end.as_deref(), new_end.as_deref());
     }
     if new_estimate != cur_estimate {
         let _ = log_activity(
             &conn,
+            src,
             &id,
             "estimate_changed",
             Some("estimate_minutes"),
@@ -662,7 +713,14 @@ pub(super) fn update(request: &mut Request, app: &AppHandle, path: &str) -> Resp
         );
     }
     if new_parent != cur_parent {
-        let _ = log_activity(&conn, &id, "parent_changed", Some("parent_id"), None, new_parent.as_deref());
+        let _ = log_activity(&conn, src, &id, "parent_changed", Some("parent_id"), None, new_parent.as_deref());
+    }
+    if new_assignee != cur_assignee {
+        let action = if new_assignee.is_some() { "assigned" } else { "unassigned" };
+        if let Some(a) = &new_assignee {
+            ensure_agent(&conn, a, a);
+        }
+        let _ = log_activity(&conn, src, &id, action, Some("assignee"), cur_assignee.as_deref(), new_assignee.as_deref());
     }
 
     notify(app);
@@ -674,7 +732,7 @@ pub(super) fn update(request: &mut Request, app: &AppHandle, path: &str) -> Resp
 
 // default is a move to trash (recoverable). ?permanent=1 hard-deletes a
 // trashed task and always asks the user first - it cannot be undone
-pub(super) fn delete(app: &AppHandle, path: &str, query: &str) -> Response<Cursor<Vec<u8>>> {
+pub(super) fn delete(app: &AppHandle, path: &str, query: &str, src: &str) -> Response<Cursor<Vec<u8>>> {
     let conn = match open(app) {
         Ok(c) => c,
         Err(e) => return err(500, e),
@@ -724,7 +782,7 @@ pub(super) fn delete(app: &AppHandle, path: &str, query: &str) -> Response<Curso
     ) {
         Ok(0) => err(404, "task not found or already trashed"),
         Ok(_) => {
-            let _ = log_activity(&conn, &id, "trashed", None, None, None);
+            let _ = log_activity(&conn, src, &id, "trashed", None, None, None);
             notify(app);
             json_response(StatusCode(200), json!({ "ok": true, "trashed": id }))
         }
@@ -732,7 +790,7 @@ pub(super) fn delete(app: &AppHandle, path: &str, query: &str) -> Response<Curso
     }
 }
 
-pub(super) fn restore(app: &AppHandle, path: &str) -> Response<Cursor<Vec<u8>>> {
+pub(super) fn restore(app: &AppHandle, path: &str, src: &str) -> Response<Cursor<Vec<u8>>> {
     let conn = match open(app) {
         Ok(c) => c,
         Err(e) => return err(500, e),
@@ -748,7 +806,7 @@ pub(super) fn restore(app: &AppHandle, path: &str) -> Response<Cursor<Vec<u8>>> 
     ) {
         Ok(0) => err(404, "task not found in trash"),
         Ok(_) => {
-            let _ = log_activity(&conn, &id, "restored", None, None, None);
+            let _ = log_activity(&conn, src, &id, "restored", None, None, None);
             notify(app);
             match task_by_id(&conn, &id) {
                 Ok(task) => json_response(StatusCode(200), json!({ "ok": true, "task": task })),
@@ -757,6 +815,106 @@ pub(super) fn restore(app: &AppHandle, path: &str) -> Response<Cursor<Vec<u8>>> 
         }
         Err(e) => err(500, format!("failed to restore task: {}", e)),
     }
+}
+
+// the registered agents with their workload, same shape the cli reports
+pub(super) fn agents(app: &AppHandle) -> Response<Cursor<Vec<u8>>> {
+    let conn = match open(app) {
+        Ok(c) => c,
+        Err(e) => return err(500, e),
+    };
+    let rows: Vec<Value> = conn
+        .prepare(
+            "SELECT a.name, a.harness, a.color, a.last_seen_at,
+             (SELECT COUNT(*) FROM tasks t WHERE t.assignee = a.name COLLATE NOCASE
+               AND t.deleted_at IS NULL AND t.status NOT IN ('done','canceled')) AS open_tasks,
+             (SELECT COUNT(*) FROM tasks t WHERE t.assignee = a.name COLLATE NOCASE
+               AND t.deleted_at IS NULL AND t.status = 'in_progress') AS wip
+             FROM agents a ORDER BY open_tasks DESC, a.name",
+        )
+        .and_then(|mut s| {
+            s.query_map([], |r| {
+                Ok(json!({
+                    "name": r.get::<_, String>(0)?,
+                    "harness": r.get::<_, Option<String>>(1)?,
+                    "color": r.get::<_, String>(2)?,
+                    "last_seen_at": r.get::<_, Option<String>>(3)?,
+                    "open_tasks": r.get::<_, i64>(4)?,
+                    "in_progress": r.get::<_, i64>(5)?,
+                }))
+            })
+            .map(|rows| rows.filter_map(|r| r.ok()).collect::<Vec<Value>>())
+        })
+        .unwrap_or_default();
+    json_response(StatusCode(200), json!({ "ok": true, "agents": rows }))
+}
+
+// one read for everything an agent needs: task + labels + subtasks +
+// relations + last 10 activity entries
+pub(super) fn context(app: &AppHandle, path: &str) -> Response<Cursor<Vec<u8>>> {
+    let conn = match open(app) {
+        Ok(c) => c,
+        Err(e) => return err(500, e),
+    };
+    let ref_id = path
+        .strip_prefix("/api/agent/tasks/")
+        .unwrap_or_default()
+        .strip_suffix("/context")
+        .unwrap_or_default();
+    let id = match resolve_task_id(&conn, &percent_decode(ref_id)) {
+        Ok(id) => id,
+        Err(e) => return err(404, e),
+    };
+    let mut task = match task_by_id(&conn, &id) {
+        Ok(t) => t,
+        Err(e) => return err(404, e),
+    };
+    task["labels"] = conn
+        .prepare("SELECT l.name FROM labels l JOIN task_labels tl ON tl.label_id = l.id WHERE tl.task_id = ?1")
+        .and_then(|mut s| {
+            s.query_map(params![id], |r| r.get::<_, String>(0))
+                .map(|rows| Value::Array(rows.filter_map(|r| r.ok()).map(Value::String).collect()))
+        })
+        .unwrap_or(json!([]));
+    task["subtasks"] = conn
+        .prepare("SELECT title, completed FROM subtasks WHERE task_id = ?1 ORDER BY sort_order")
+        .and_then(|mut s| {
+            s.query_map(params![id], |r| {
+                Ok(json!({ "title": r.get::<_, String>(0)?, "completed": r.get::<_, i64>(1)? == 1 }))
+            })
+            .map(|rows| Value::Array(rows.filter_map(|r| r.ok()).collect()))
+        })
+        .unwrap_or(json!([]));
+    task["relations"] = conn
+        .prepare(
+            "SELECT r.type, r.related_task_id, o.title FROM task_relations r
+             JOIN tasks o ON o.id = r.related_task_id WHERE r.task_id = ?1",
+        )
+        .and_then(|mut s| {
+            s.query_map(params![id], |r| {
+                Ok(json!({ "type": r.get::<_, String>(0)?, "task_id": r.get::<_, String>(1)?, "title": r.get::<_, String>(2)? }))
+            })
+            .map(|rows| Value::Array(rows.filter_map(|r| r.ok()).collect()))
+        })
+        .unwrap_or(json!([]));
+    task["recent_activity"] = conn
+        .prepare(
+            "SELECT action, new_value, source, created_at FROM activity_log
+             WHERE task_id = ?1 ORDER BY created_at DESC LIMIT 10",
+        )
+        .and_then(|mut s| {
+            s.query_map(params![id], |r| {
+                Ok(json!({
+                    "action": r.get::<_, String>(0)?,
+                    "new_value": r.get::<_, Option<String>>(1)?,
+                    "source": r.get::<_, String>(2)?,
+                    "created_at": r.get::<_, String>(3)?,
+                }))
+            })
+            .map(|rows| Value::Array(rows.filter_map(|r| r.ok()).collect()))
+        })
+        .unwrap_or(json!([]));
+    json_response(StatusCode(200), json!({ "ok": true, "task": task }))
 }
 
 pub(super) fn projects(app: &AppHandle) -> Response<Cursor<Vec<u8>>> {

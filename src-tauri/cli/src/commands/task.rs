@@ -49,6 +49,7 @@ struct TaskRow {
     updated_at: String,
     created_at: String,
     recurrence_rule: Option<String>,
+    assignee: Option<String>,
 }
 
 fn map_task_row(row: &rusqlite::Row) -> rusqlite::Result<TaskRow> {
@@ -65,6 +66,7 @@ fn map_task_row(row: &rusqlite::Row) -> rusqlite::Result<TaskRow> {
         updated_at: row.get(9)?,
         created_at: row.get(10)?,
         recurrence_rule: row.get(11)?,
+        assignee: row.get(12)?,
     })
 }
 
@@ -92,6 +94,7 @@ fn render_task_rows(json: bool, rows: &[TaskRow]) -> Result<()> {
                     "end_date": r.end_date,
                     "pinned": r.pinned,
                     "recurrence_rule": r.recurrence_rule,
+                    "assignee": r.assignee,
                     "repeat": r.recurrence_rule.as_deref().and_then(recurrence::label),
                     "project_prefix": r.prefix,
                     "updated_at": r.updated_at,
@@ -119,12 +122,14 @@ fn render_task_rows(json: bool, rows: &[TaskRow]) -> Result<()> {
                         .as_deref()
                         .and_then(recurrence::label)
                         .unwrap_or("-".to_string()),
+                    r.assignee.clone().unwrap_or("-".to_string()),
                 ]
             })
             .collect();
         print_table(
             &[
                 "ID", "NUMBER", "TITLE", "STATUS", "PRIORITY", "DUE DATE", "PINNED", "REPEAT",
+                "ASSIGNEE",
             ],
             &table_rows,
         );
@@ -179,7 +184,7 @@ fn format_estimate(minutes: i64) -> String {
 // structured "key:value" tokens pulled out of a search query; the rest stays
 // free text for fts. mirrors src/lib/search/operators.ts
 fn split_search(query: &str) -> (String, Vec<(String, String)>) {
-    const KEYS: [&str; 10] = ["status", "priority", "p", "project", "label", "due", "pinned", "is", "has", "type"];
+    const KEYS: [&str; 11] = ["status", "priority", "p", "project", "label", "due", "pinned", "is", "has", "type", "assignee"];
     let mut text = Vec::new();
     let mut ops = Vec::new();
     for token in query.split_whitespace() {
@@ -275,6 +280,14 @@ fn search_op_sql(ops: &[(String, String)]) -> (String, Vec<String>) {
                     sql.push_str(" AND t.pinned = 0");
                 }
             }
+            "assignee" => {
+                if value == "none" {
+                    sql.push_str(" AND t.assignee IS NULL");
+                } else {
+                    sql.push_str(" AND t.assignee = ? COLLATE NOCASE");
+                    args.push(value.clone());
+                }
+            }
             _ => {}
         }
     }
@@ -296,6 +309,7 @@ pub fn create(
     repeat: Option<&str>,
     parent: Option<&str>,
     estimate: Option<&str>,
+    assignee: Option<&str>,
 ) -> Result<()> {
     let project_id = resolve_project_id(conn, project, project_prefix)?;
     let parent_id = match parent {
@@ -339,6 +353,12 @@ pub fn create(
         false,
     )?;
 
+    // explicit --assignee wins; a detected harness claims its own work
+    let owner: Option<&str> = assignee.or(agent_name());
+    if let Some(name) = owner {
+        set_assignee(conn, &id, Some(name))?;
+    }
+
     if json {
         println!(
             "{}",
@@ -356,6 +376,7 @@ pub fn create(
                     "reminder_at": reminder_at,
                     "recurrence_rule": recurrence_rule,
                     "project_id": project_id,
+                    "assignee": owner,
                     "created_at": now,
                 }
             }))
@@ -414,7 +435,7 @@ fn insert_task(
         params![id, number, project_id, title, description, status, priority, due_date, end_date, reminder_at, recurrence_rule, parent_id, estimate_minutes, pinned, now, now],
     ).map_err(|e| format!("Failed to create task: {}", e))?;
 
-    log_activity(conn, &id, "created", None, None, None, "cli")?;
+    log_activity(conn, &id, "created", None, None, None, activity_source())?;
     Ok((id, number, now))
 }
 
@@ -519,6 +540,11 @@ pub fn add(conn: &Connection, json: bool, text: &str, dry_run: bool) -> Result<(
         label::set_labels(conn, &id, &label_ids)?;
     }
 
+    // a detected harness claims what it adds
+    if let Some(name) = agent_name() {
+        set_assignee(conn, &id, Some(name))?;
+    }
+
     if json {
         println!(
             "{}",
@@ -538,6 +564,7 @@ pub fn add(conn: &Connection, json: bool, text: &str, dry_run: bool) -> Result<(
                     "project_id": project_id,
                     "pinned": parsed.pinned,
                     "estimate_minutes": parsed.estimate_minutes,
+                    "assignee": agent_name(),
                     "created_at": created,
                 },
                 "label_ids": label_ids,
@@ -569,11 +596,12 @@ pub fn list(
     priority: Option<i32>,
     pinned: bool,
     since: Option<&str>,
+    assignee: Option<&str>,
 ) -> Result<()> {
     let project_id = resolve_project_id(conn, project, project_prefix)?;
 
     let mut sql = String::from(
-        "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule
+        "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule, t.assignee
          FROM tasks t
          LEFT JOIN projects p ON t.project_id = p.id
          WHERE t.deleted_at IS NULL",
@@ -598,6 +626,14 @@ pub fn list(
     if let Some(s) = since {
         sql.push_str(" AND t.updated_at > ?");
         args.push(Box::new(s.to_string()));
+    }
+    if let Some(a) = assignee {
+        if a.eq_ignore_ascii_case("none") {
+            sql.push_str(" AND t.assignee IS NULL");
+        } else {
+            sql.push_str(" AND t.assignee = ? COLLATE NOCASE");
+            args.push(Box::new(a.to_string()));
+        }
     }
     sql.push_str(" ORDER BY t.pinned DESC, t.updated_at DESC");
 
@@ -637,14 +673,14 @@ pub fn search(
     // text to match, so the fts table joins as a plain task listing
     let mut sql = if match_query.is_empty() {
         String::from(
-            "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule
+            "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule, t.assignee
              FROM tasks t
              LEFT JOIN projects p ON t.project_id = p.id
              WHERE t.deleted_at IS NULL",
         )
     } else {
         String::from(
-            "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule
+            "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule, t.assignee
              FROM tasks_fts
              JOIN tasks t ON t.id = tasks_fts.task_id
              LEFT JOIN projects p ON t.project_id = p.id
@@ -695,7 +731,7 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
     let task = conn.query_row(
         "SELECT t.id, t.number, t.title, t.description, t.status, t.priority, t.due_date, t.end_date, t.pinned,
                 t.project_id, p.name, p.prefix, t.created_at, t.updated_at, t.reminder_at,
-                t.recurrence_rule, t.recurrence_parent_id, t.estimate_minutes, t.tracked_seconds
+                t.recurrence_rule, t.recurrence_parent_id, t.estimate_minutes, t.tracked_seconds, t.assignee
          FROM tasks t
          LEFT JOIN projects p ON t.project_id = p.id
          WHERE t.id = ?1",
@@ -721,6 +757,7 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
                 row.get::<_, Option<String>>(16)?,
                 row.get::<_, Option<i64>>(17)?,
                 row.get::<_, i64>(18)?,
+                row.get::<_, Option<String>>(19)?,
             ))
         },
     ).map_err(|_| format!("Task {} not found", id))?;
@@ -745,6 +782,7 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
         recurrence_parent_id,
         estimate_minutes,
         tracked_seconds,
+        assignee,
     ) = task;
 
     let display_number = match &project_prefix {
@@ -822,6 +860,7 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
                     "pinned": pinned == 1,
                     "estimate_minutes": estimate_minutes,
                     "tracked_seconds": tracked_seconds,
+                    "assignee": assignee,
                     "project": {
                         "name": project_name,
                         "prefix": project_prefix,
@@ -868,6 +907,7 @@ pub fn show(conn: &Connection, json: bool, id: &str) -> Result<()> {
                 .unwrap_or("-".to_string())
         );
         println!("Tracked:     {}", format_estimate(tracked_seconds / 60));
+        println!("Assignee:    {}", assignee.unwrap_or("-".to_string()));
         if let Some(pname) = project_name {
             println!(
                 "Project:     {} ({})",
@@ -994,7 +1034,7 @@ pub fn edit(conn: &Connection, json: bool, id: &str, text: &str) -> Result<()> {
         args.push(Box::new(id.clone()));
         let refs: Vec<&dyn rusqlite::ToSql> = args.iter().map(|a| a.as_ref()).collect();
         conn.execute(&sql, &refs[..]).map_err(|e| e.to_string())?;
-        let _ = log_activity(conn, &id, "updated", None, None, None, "cli");
+        let _ = log_activity(conn, &id, "updated", None, None, None, activity_source());
     }
 
     // +label tokens add to the task's labels without dropping existing ones
@@ -1040,6 +1080,7 @@ pub fn update(
     repeat: Option<&str>,
     parent: Option<&str>,
     estimate: Option<&str>,
+    assignee: Option<&str>,
 ) -> Result<()> {
     let id = resolve_task_id(conn, id)?;
     let current = conn.query_row(
@@ -1134,7 +1175,11 @@ pub fn update(
             params![new_parent, now, id],
         )
         .map_err(|e| format!("Failed to update task: {}", e))?;
-        log_activity(conn, &id, "parent_changed", Some("parent_id"), None, new_parent.as_deref(), "cli")?;
+        log_activity(conn, &id, "parent_changed", Some("parent_id"), None, new_parent.as_deref(), activity_source())?;
+    }
+    if let Some(a) = assignee {
+        let name = if a.trim().is_empty() { None } else { Some(a) };
+        set_assignee(conn, &id, name)?;
     }
     if let Some(e) = estimate {
         let minutes = parse_estimate(e)?;
@@ -1150,7 +1195,7 @@ pub fn update(
             Some("estimate_minutes"),
             None,
             minutes.map(|m| m.to_string()).as_deref(),
-            "cli",
+            activity_source(),
         )?;
     }
     if new_status == "done" || new_status == "canceled" {
@@ -1165,7 +1210,7 @@ pub fn update(
             Some("status"),
             Some(status_label(&cur_status)),
             Some(status_label(new_status)),
-            "cli",
+            activity_source(),
         )?;
     }
     if new_priority != cur_priority {
@@ -1176,7 +1221,7 @@ pub fn update(
             Some("priority"),
             Some(priority_label(cur_priority)),
             Some(priority_label(new_priority)),
-            "cli",
+            activity_source(),
         )?;
     }
     if new_title != cur_title {
@@ -1187,7 +1232,7 @@ pub fn update(
             Some("title"),
             Some(&cur_title),
             Some(new_title),
-            "cli",
+            activity_source(),
         )?;
     }
 
@@ -1199,7 +1244,7 @@ pub fn update(
             Some("reminder_at"),
             cur_reminder.as_deref(),
             new_reminder.as_deref(),
-            "cli",
+            activity_source(),
         )?;
     }
 
@@ -1213,7 +1258,7 @@ pub fn update(
             Some("recurrence_rule"),
             old_label.as_deref(),
             new_label.as_deref(),
-            "cli",
+            activity_source(),
         )?;
     }
 
@@ -1236,6 +1281,585 @@ pub fn update(
         println!("Updated task: {}", id);
     }
     Ok(())
+}
+
+// write the assignee and log who owns the task now; shared by create,
+// update, assign and unassign
+fn set_assignee(conn: &Connection, id: &str, name: Option<&str>) -> Result<()> {
+    let old: Option<String> = conn
+        .query_row(
+            "SELECT assignee FROM tasks WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("Failed to read assignee: {}", e))?;
+    let new = name.map(|n| n.trim()).filter(|n| !n.is_empty());
+    if new == old.as_deref() {
+        return Ok(());
+    }
+    conn.execute(
+        "UPDATE tasks SET assignee = ?1, updated_at = ?2 WHERE id = ?3",
+        params![new, now_iso(), id],
+    )
+    .map_err(|e| format!("Failed to set assignee: {}", e))?;
+    if let Some(n) = new {
+        ensure_agent(conn, n);
+    }
+    let action = if new.is_some() { "assigned" } else { "unassigned" };
+    log_activity(
+        conn,
+        id,
+        action,
+        Some("assignee"),
+        old.as_deref(),
+        new,
+        activity_source(),
+    )?;
+    Ok(())
+}
+
+pub fn assign(conn: &Connection, json: bool, id: &str, name: &str) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
+    if name.trim().is_empty() {
+        return Err("Assignee name cannot be empty".to_string());
+    }
+    set_assignee(conn, &id, Some(name))?;
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(
+                &json!({ "success": true, "action": "assigned", "task_id": id, "assignee": name.trim() })
+            )
+            .map_err(|e| e.to_string())?
+        );
+    } else {
+        println!("Assigned {} to {}", id, name.trim());
+    }
+    Ok(())
+}
+
+pub fn unassign(conn: &Connection, json: bool, id: &str) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
+    set_assignee(conn, &id, None)?;
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(
+                &json!({ "success": true, "action": "unassigned", "task_id": id })
+            )
+            .map_err(|e| e.to_string())?
+        );
+    } else {
+        println!("Unassigned {}", id);
+    }
+    Ok(())
+}
+
+// assign to whoever is running: the detected harness or --agent value.
+// atomic by default - a task someone already owns refuses the claim so two
+// agents cannot split the same work; --force hands it over anyway
+pub fn claim(conn: &Connection, json: bool, id: &str, force: bool) -> Result<()> {
+    let name = agent_name().ok_or_else(|| {
+        "no agent detected - pass --agent <name> or set TACK_AGENT".to_string()
+    })?;
+    let id = resolve_task_id(conn, id)?;
+    if force {
+        return assign(conn, json, &id, name);
+    }
+    let changed = conn
+        .execute(
+            "UPDATE tasks SET assignee = ?1, updated_at = ?2 WHERE id = ?3 AND assignee IS NULL AND deleted_at IS NULL",
+            params![name, now_iso(), id],
+        )
+        .map_err(|e| format!("Failed to claim task: {}", e))?;
+    if changed == 0 {
+        let owner: Option<String> = conn
+            .query_row(
+                "SELECT assignee FROM tasks WHERE id = ?1 AND deleted_at IS NULL",
+                params![id],
+                |row| row.get(0),
+            )
+            .map_err(|_| format!("Task {} not found", id))?;
+        return Err(match owner {
+            Some(o) if o == name => format!("Task {} is already claimed by you", id),
+            Some(o) => format!("Task {} is already claimed by {} - use --force to take it", id, o),
+            None => format!("Task {} not found", id),
+        });
+    }
+    log_activity(
+        conn,
+        &id,
+        "assigned",
+        Some("assignee"),
+        None,
+        Some(name),
+        activity_source(),
+    )?;
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(
+                &json!({ "success": true, "action": "claimed", "task_id": id, "assignee": name })
+            )
+            .map_err(|e| e.to_string())?
+        );
+    } else {
+        println!("Claimed {} for {}", id, name);
+    }
+    Ok(())
+}
+
+// assign plus an optional reason note in the activity feed; handy for
+// agent-to-agent handoffs where the "why" matters
+pub fn handoff(
+    conn: &Connection,
+    json: bool,
+    id: &str,
+    name: &str,
+    note: Option<&str>,
+) -> Result<()> {
+    assign(conn, json, id, name)?;
+    let task_id = resolve_task_id(conn, id)?;
+    if let Some(text) = note.map(str::trim).filter(|t| !t.is_empty()) {
+        log_activity(
+            conn,
+            &task_id,
+            "note",
+            None,
+            None,
+            Some(text),
+            activity_source(),
+        )?;
+    }
+    Ok(())
+}
+
+// tasks the detected agent owns
+pub fn mine(conn: &Connection, json: bool) -> Result<()> {
+    let name = agent_name().ok_or_else(|| {
+        "no agent detected - pass --agent <name> or set TACK_AGENT".to_string()
+    })?;
+    list(conn, json, None, None, None, None, false, None, Some(name))
+}
+
+// every task currently being worked: in_progress with an owner
+pub fn wip(conn: &Connection, json: bool) -> Result<()> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule, t.assignee
+             FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
+             WHERE t.deleted_at IS NULL AND t.status = 'in_progress' AND t.assignee IS NOT NULL
+             ORDER BY t.assignee, t.updated_at DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<TaskRow> = stmt
+        .query_map([], map_task_row)
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    render_task_rows(json, &rows)
+}
+
+// the single best task to pick up next: tasks the agent owns first, then
+// unclaimed ones, blocked work excluded. ordered by pinned, priority
+// (urgent first, none last) and earliest due date
+pub fn next(conn: &Connection, json: bool) -> Result<()> {
+    let name = agent_name();
+    let mut sql = String::from(
+        "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule, t.assignee
+         FROM tasks t
+         LEFT JOIN projects p ON t.project_id = p.id
+         WHERE t.deleted_at IS NULL AND t.status NOT IN ('done', 'canceled')
+           AND NOT EXISTS (
+             SELECT 1 FROM task_relations r JOIN tasks b ON b.id = r.task_id
+             WHERE r.related_task_id = t.id AND r.type = 'blocks'
+               AND b.status NOT IN ('done', 'canceled') AND b.deleted_at IS NULL
+           )",
+    );
+    let mut args: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+    match name {
+        Some(n) => {
+            sql.push_str(" AND (t.assignee = ? COLLATE NOCASE OR t.assignee IS NULL)");
+            args.push(Box::new(n.to_string()));
+            sql.push_str(
+                " ORDER BY t.assignee IS NULL, t.pinned DESC,
+                 CASE WHEN t.priority = 0 THEN 5 ELSE t.priority END,
+                 t.due_date IS NULL, t.due_date, t.created_at LIMIT 1",
+            );
+        }
+        None => {
+            sql.push_str(" AND t.assignee IS NULL");
+            sql.push_str(
+                " ORDER BY t.pinned DESC,
+                 CASE WHEN t.priority = 0 THEN 5 ELSE t.priority END,
+                 t.due_date IS NULL, t.due_date, t.created_at LIMIT 1",
+            );
+        }
+    }
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let arg_refs: Vec<&dyn rusqlite::ToSql> = args.iter().map(|a| a.as_ref()).collect();
+    let rows: Vec<TaskRow> = stmt
+        .query_map(&arg_refs[..], map_task_row)
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    match rows.first() {
+        Some(_) => render_task_rows(json, &rows[..1]),
+        None => {
+            if json {
+                println!("{}", serde_json::to_string_pretty(&json!({ "task": null })).map_err(|e| e.to_string())?);
+            } else {
+                println!("No open task to pick up");
+            }
+            Ok(())
+        }
+    }
+}
+
+// mark done the agent-friendly way: same as update --status done, banks any
+// running timer and rolls recurring tasks forward via the shared path
+pub fn done(conn: &Connection, json: bool, id: &str) -> Result<()> {
+    update(
+        conn,
+        json,
+        id,
+        None,
+        None,
+        Some("done"),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+}
+
+// the triage queue: open work nobody owns yet
+pub fn inbox_tasks(conn: &Connection, json: bool) -> Result<()> {
+    list(
+        conn,
+        json,
+        None,
+        None,
+        None,
+        None,
+        false,
+        None,
+        Some("none"),
+    )
+}
+
+// hand a task to an agent and start it: assign + in_progress, logged as
+// 'delegated' so the feed shows intent rather than two bare field diffs
+pub fn delegate(conn: &Connection, json: bool, id: &str, name: &str) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
+    if name.trim().is_empty() {
+        return Err("Agent name cannot be empty".to_string());
+    }
+    let old: Option<String> = conn
+        .query_row(
+            "SELECT assignee FROM tasks WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
+        .map_err(|_| format!("Task {} not found", id))?;
+    let trimmed = name.trim();
+    conn.execute(
+        "UPDATE tasks SET assignee = ?1, status = CASE WHEN status IN ('done','canceled') THEN 'todo' ELSE 'in_progress' END, updated_at = ?2 WHERE id = ?3",
+        params![trimmed, now_iso(), id],
+    )
+    .map_err(|e| format!("Failed to delegate task: {}", e))?;
+    ensure_agent(conn, trimmed);
+    log_activity(
+        conn,
+        &id,
+        "delegated",
+        Some("assignee"),
+        old.as_deref(),
+        Some(trimmed),
+        activity_source(),
+    )?;
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(
+                &json!({ "success": true, "action": "delegated", "task_id": id, "assignee": trimmed })
+            )
+            .map_err(|e| e.to_string())?
+        );
+    } else {
+        println!("Delegated {} to {}", id, trimmed);
+    }
+    Ok(())
+}
+
+// an agent heartbeat: a note in the feed + updated_at bump so the app shows
+// "still working" instead of a stale timestamp
+pub fn progress(conn: &Connection, json: bool, id: &str, note: Option<&str>) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
+    let text = note
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .unwrap_or("still working on it");
+    conn.execute(
+        "UPDATE tasks SET updated_at = ?1 WHERE id = ?2",
+        params![now_iso(), id],
+    )
+    .map_err(|e| format!("Failed to update task: {}", e))?;
+    log_activity(conn, &id, "note", None, None, Some(text), activity_source())?;
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({ "success": true, "action": "progress", "task_id": id }))
+                .map_err(|e| e.to_string())?
+        );
+    } else {
+        println!("Logged progress on {}", id);
+    }
+    Ok(())
+}
+
+// the "i'm stuck" signal: back to backlog plus a reason note in the feed
+pub fn block(conn: &Connection, json: bool, id: &str, reason: Option<&str>) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
+    conn.execute(
+        "UPDATE tasks SET status = 'backlog', updated_at = ?1 WHERE id = ?2",
+        params![now_iso(), id],
+    )
+    .map_err(|e| format!("Failed to update task: {}", e))?;
+    log_activity(
+        conn,
+        &id,
+        "status_changed",
+        Some("status"),
+        None,
+        Some("Backlog"),
+        activity_source(),
+    )?;
+    if let Some(r) = reason.map(str::trim).filter(|r| !r.is_empty()) {
+        log_activity(conn, &id, "note", None, None, Some(r), activity_source())?;
+    }
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({ "success": true, "action": "blocked", "task_id": id }))
+                .map_err(|e| e.to_string())?
+        );
+    } else {
+        println!("Moved {} to backlog", id);
+    }
+    Ok(())
+}
+
+// everything an agent needs in one call: the task, its labels, subtasks,
+// relations and the last 10 activity entries. the mcp tool mirrors this
+pub fn context(conn: &Connection, json: bool, id: &str) -> Result<()> {
+    let id = resolve_task_id(conn, id)?;
+    let task = conn
+        .query_row(
+            "SELECT t.id, t.number, t.title, t.description, t.status, t.priority,
+                    t.due_date, t.end_date, t.assignee, p.prefix, t.parent_id,
+                    t.estimate_minutes, t.tracked_seconds, t.created_at, t.updated_at
+             FROM tasks t LEFT JOIN projects p ON t.project_id = p.id WHERE t.id = ?1",
+            params![id],
+            |row| {
+                Ok(json!({
+                    "id": row.get::<_, String>(0)?,
+                    "number": row.get::<_, i32>(1)?,
+                    "display_number": display_number(row.get::<_, i32>(1)?, row.get::<_, Option<String>>(9)?.as_deref()),
+                    "title": row.get::<_, String>(2)?,
+                    "description": row.get::<_, Option<String>>(3)?,
+                    "status": row.get::<_, String>(4)?,
+                    "priority": row.get::<_, i32>(5)?,
+                    "due_date": row.get::<_, Option<String>>(6)?,
+                    "end_date": row.get::<_, Option<String>>(7)?,
+                    "assignee": row.get::<_, Option<String>>(8)?,
+                    "project_prefix": row.get::<_, Option<String>>(9)?,
+                    "parent_id": row.get::<_, Option<String>>(10)?,
+                    "estimate_minutes": row.get::<_, Option<i64>>(11)?,
+                    "tracked_seconds": row.get::<_, i64>(12)?,
+                    "created_at": row.get::<_, String>(13)?,
+                    "updated_at": row.get::<_, String>(14)?,
+                }))
+            },
+        )
+        .map_err(|_| format!("Task {} not found", id))?;
+
+    let labels: Vec<String> = conn
+        .prepare("SELECT l.name FROM task_labels tl JOIN labels l ON l.id = tl.label_id WHERE tl.task_id = ?1")
+        .and_then(|mut s| s.query_map(params![id], |r| r.get(0)).map(|r| r.filter_map(|x| x.ok()).collect()))
+        .unwrap_or_default();
+    let subtasks: Vec<serde_json::Value> = conn
+        .prepare("SELECT title, completed FROM subtasks WHERE task_id = ?1 ORDER BY sort_order")
+        .and_then(|mut s| {
+            s.query_map(params![id], |r| {
+                Ok(json!({ "title": r.get::<_, String>(0)?, "completed": r.get::<_, i32>(1)? == 1 }))
+            })
+            .map(|r| r.filter_map(|x| x.ok()).collect())
+        })
+        .unwrap_or_default();
+    let relations: Vec<serde_json::Value> = conn
+        .prepare(
+            "SELECT r.type, o.id, o.title FROM task_relations r
+             JOIN tasks o ON o.id = r.related_task_id WHERE r.task_id = ?1",
+        )
+        .and_then(|mut s| {
+            s.query_map(params![id], |r| {
+                Ok(json!({ "type": r.get::<_, String>(0)?, "task_id": r.get::<_, String>(1)?, "title": r.get::<_, String>(2)? }))
+            })
+            .map(|r| r.filter_map(|x| x.ok()).collect())
+        })
+        .unwrap_or_default();
+    let activity: Vec<serde_json::Value> = conn
+        .prepare(
+            "SELECT action, old_value, new_value, source, created_at FROM activity_log
+             WHERE task_id = ?1 ORDER BY created_at DESC LIMIT 10",
+        )
+        .and_then(|mut s| {
+            s.query_map(params![id], |r| {
+                Ok(json!({
+                    "action": r.get::<_, String>(0)?,
+                    "old_value": r.get::<_, Option<String>>(1)?,
+                    "new_value": r.get::<_, Option<String>>(2)?,
+                    "source": r.get::<_, String>(3)?,
+                    "created_at": r.get::<_, String>(4)?,
+                }))
+            })
+            .map(|r| r.filter_map(|x| x.ok()).collect())
+        })
+        .unwrap_or_default();
+
+    let out = json!({
+        "task": task,
+        "labels": labels,
+        "subtasks": subtasks,
+        "relations": relations,
+        "recent_activity": activity,
+    });
+    println!(
+        "{}",
+        if json {
+            serde_json::to_string_pretty(&out).map_err(|e| e.to_string())?
+        } else {
+            out.to_string()
+        }
+    );
+    Ok(())
+}
+
+// who owns what: assignee x open-status counts, linear-style workload view
+pub fn board(conn: &Connection, json: bool) -> Result<()> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT COALESCE(t.assignee, '(unassigned)'),
+                COALESCE(SUM(CASE WHEN t.status = 'backlog' THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN t.status = 'todo' THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN t.status = 'canceled' THEN 1 ELSE 0 END), 0)
+             FROM tasks t WHERE t.deleted_at IS NULL
+             GROUP BY t.assignee ORDER BY 1",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<(String, i64, i64, i64, i64, i64)> = stmt
+        .query_map([], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?))
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    if json {
+        let items: Vec<_> = rows
+            .iter()
+            .map(|(a, b, t, p, d, c)| {
+                json!({ "assignee": a, "backlog": b, "todo": t, "in_progress": p, "done": d, "canceled": c })
+            })
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&json!({ "board": items })).map_err(|e| e.to_string())?);
+        return Ok(());
+    }
+    let table: Vec<Vec<String>> = rows
+        .iter()
+        .map(|(a, b, t, p, d, c)| {
+            vec![a.clone(), b.to_string(), t.to_string(), p.to_string(), d.to_string(), c.to_string()]
+        })
+        .collect();
+    print_table(
+        &["ASSIGNEE", "BACKLOG", "TODO", "IN PROGRESS", "DONE", "CANCELED"],
+        &table,
+    );
+    Ok(())
+}
+
+// the agent's inbox: tasks it owns plus the latest activity touching them,
+// so mentions and handoffs are visible in one read
+pub fn agent_inbox(conn: &Connection, json: bool) -> Result<()> {
+    let name = agent_name().ok_or_else(|| {
+        "no agent detected - pass --agent <name> or set TACK_AGENT".to_string()
+    })?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule, t.assignee
+             FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
+             WHERE t.deleted_at IS NULL AND t.assignee = ?1 COLLATE NOCASE
+               AND t.status NOT IN ('done', 'canceled')
+             ORDER BY t.pinned DESC, t.priority ASC, t.due_date",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<TaskRow> = stmt
+        .query_map(params![name], map_task_row)
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    if json {
+        // json callers get tasks plus the mention-ish activity tail
+        let mut acts = conn
+            .prepare(
+                "SELECT a.task_id, a.action, a.new_value, a.source, a.created_at
+                 FROM activity_log a JOIN tasks t ON t.id = a.task_id
+                 WHERE t.assignee = ?1 COLLATE NOCASE AND a.source != ?2
+                 ORDER BY a.created_at DESC LIMIT 20",
+            )
+            .map_err(|e| e.to_string())?;
+        let my_source = format!("agent:{}", name);
+        let entries: Vec<serde_json::Value> = acts
+            .query_map(params![name, my_source], |r| {
+                Ok(json!({
+                    "task_id": r.get::<_, String>(0)?,
+                    "action": r.get::<_, String>(1)?,
+                    "new_value": r.get::<_, Option<String>>(2)?,
+                    "source": r.get::<_, String>(3)?,
+                    "created_at": r.get::<_, String>(4)?,
+                }))
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        let items: Vec<serde_json::Value> = rows
+            .iter()
+            .map(|r| {
+                json!({
+                    "id": r.id,
+                    "display_number": display_number(r.number, r.prefix.as_deref()),
+                    "title": r.title,
+                    "status": r.status,
+                    "priority": r.priority,
+                    "due_date": r.due_date,
+                })
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({ "agent": name, "tasks": items, "recent_activity": entries }))
+                .map_err(|e| e.to_string())?
+        );
+        return Ok(());
+    }
+    render_task_rows(false, &rows)
 }
 
 // completing a recurring task creates its next occurrence and links it back
@@ -1321,7 +1945,7 @@ fn spawn_occurrence(conn: &Connection, parent_id: &str) -> Result<Option<String>
     )
     .map_err(|e| format!("Failed to copy labels: {}", e))?;
 
-    log_activity(conn, &id, "created", None, None, None, "cli")?;
+    log_activity(conn, &id, "created", None, None, None, activity_source())?;
     log_activity(
         conn,
         parent_id,
@@ -1329,7 +1953,7 @@ fn spawn_occurrence(conn: &Connection, parent_id: &str) -> Result<Option<String>
         Some("due_date"),
         due_date.as_deref(),
         Some(&next_due),
-        "cli",
+        activity_source(),
     )?;
 
     Ok(Some(id))
@@ -1345,7 +1969,7 @@ pub fn delete(conn: &Connection, json: bool, id: &str) -> Result<()> {
     if result == 0 {
         return Err(format!("Task {} not found or already trashed", id));
     }
-    log_activity(conn, &id, "trashed", None, None, None, "cli")?;
+    log_activity(conn, &id, "trashed", None, None, None, activity_source())?;
     if json {
         println!(
             "{}",
@@ -1398,6 +2022,7 @@ pub fn duplicate(conn: &Connection, json: bool, id: &str) -> Result<()> {
         desc.as_deref(),
         reminder.as_deref(),
         rule.as_deref(),
+        None,
         None,
         None,
     )?;
@@ -1500,7 +2125,7 @@ pub fn bulk_delete(conn: &Connection, json: bool, ids: &[String]) -> Result<()> 
         .map_err(|e| format!("Failed to delete tasks: {}", e))?;
 
     for id in ids {
-        let _ = log_activity(conn, &id, "trashed", None, None, None, "cli");
+        let _ = log_activity(conn, &id, "trashed", None, None, None, activity_source());
     }
     if json {
         println!(
@@ -1581,7 +2206,7 @@ pub fn bulk_status(conn: &Connection, json: bool, ids: &[String], status: &str) 
             Some("status"),
             None,
             Some(status_label(status)),
-            "cli",
+            activity_source(),
         );
     }
     for id in &recurring {
@@ -1638,7 +2263,7 @@ pub fn bulk_priority(conn: &Connection, json: bool, ids: &[String], priority: i3
             Some("priority"),
             None,
             Some(priority_label(priority)),
-            "cli",
+            activity_source(),
         );
     }
     if json {
@@ -1772,7 +2397,7 @@ pub fn bulk_label(
             None,
             if remove { Some(&label_name) } else { None },
             if remove { None } else { Some(&label_name) },
-            "cli",
+            activity_source(),
         );
     }
 
@@ -1870,7 +2495,7 @@ pub fn restore(conn: &Connection, json: bool, id: &str) -> Result<()> {
     if result == 0 {
         return Err(format!("Task {} not found in trash", id));
     }
-    log_activity(conn, &id, "restored", None, None, None, "cli")?;
+    log_activity(conn, &id, "restored", None, None, None, activity_source())?;
     if json {
         println!(
             "{}",
@@ -1959,7 +2584,7 @@ pub fn timer_start(conn: &Connection, json: bool, id: &str) -> Result<()> {
         params![now, id],
     )
     .map_err(|e| format!("Failed to start timer: {}", e))?;
-    log_activity(conn, &id, "timer_started", None, None, None, "cli")?;
+    log_activity(conn, &id, "timer_started", None, None, None, activity_source())?;
     if json {
         println!("{}", json!({ "success": true, "action": "timer_started", "id": id }));
     } else {
@@ -1976,7 +2601,7 @@ pub fn timer_stop(conn: &Connection, json: bool, id: &str) -> Result<()> {
         params![now, id],
     )
     .map_err(|e| format!("Failed to stop timer: {}", e))?;
-    log_activity(conn, &id, "timer_stopped", None, None, None, "cli")?;
+    log_activity(conn, &id, "timer_stopped", None, None, None, activity_source())?;
     if json {
         println!("{}", json!({ "success": true, "action": "timer_stopped", "id": id }));
     } else {
@@ -1989,7 +2614,7 @@ pub fn children(conn: &Connection, json: bool, id: &str) -> Result<()> {
     let id = resolve_task_id(conn, id)?;
     let mut stmt = conn
         .prepare(
-            "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule
+            "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule, t.assignee
              FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
              WHERE t.parent_id = ?1 AND t.deleted_at IS NULL
              ORDER BY t.sort_order, t.created_at",
@@ -2025,7 +2650,7 @@ pub fn relation_add(
         params![id, other_id, kind, now_iso()],
     )
     .map_err(|e| format!("Failed to add relation: {}", e))?;
-    log_activity(conn, &id, "relation_added", Some("relation"), None, Some(&format!("{}:{}", kind, other_id)), "cli")?;
+    log_activity(conn, &id, "relation_added", Some("relation"), None, Some(&format!("{}:{}", kind, other_id)), activity_source())?;
     if json {
         println!("{}", json!({ "success": true, "action": "relation_added", "task_id": id, "related_task_id": other_id, "type": kind }));
     } else {
@@ -2048,7 +2673,7 @@ pub fn relation_remove(
         params![id, other_id, kind],
     )
     .map_err(|e| format!("Failed to remove relation: {}", e))?;
-    log_activity(conn, &id, "relation_removed", Some("relation"), Some(&format!("{}:{}", kind, other_id)), None, "cli")?;
+    log_activity(conn, &id, "relation_removed", Some("relation"), Some(&format!("{}:{}", kind, other_id)), None, activity_source())?;
     if json {
         println!("{}", json!({ "success": true, "action": "relation_removed" }));
     } else {
@@ -2141,7 +2766,7 @@ fn bank_terminal_timers(conn: &Connection, ids: &[String]) -> Result<()> {
 pub fn today(conn: &Connection, json: bool) -> Result<()> {
     let mut stmt = conn
         .prepare(
-            "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule
+            "SELECT t.id, t.number, t.title, t.status, t.priority, t.due_date, t.end_date, t.pinned, p.prefix, t.updated_at, t.created_at, t.recurrence_rule, t.assignee
              FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
              WHERE t.deleted_at IS NULL AND t.status NOT IN ('done', 'canceled')
                AND (t.due_date IS NOT NULL OR t.end_date IS NOT NULL)
