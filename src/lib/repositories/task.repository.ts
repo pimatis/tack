@@ -34,6 +34,7 @@ type CreateTaskInput = Pick<Task, 'title'> &
 			| 'recurrenceParentId'
 			| 'parentId'
 			| 'estimateMinutes'
+			| 'assignee'
 		>
 	>;
 
@@ -127,6 +128,7 @@ export async function create(input: CreateTaskInput): Promise<Task> {
 			recurrenceParentId: input.recurrenceParentId ?? null,
 			parentId: input.parentId ?? null,
 			estimateMinutes: input.estimateMinutes ?? null,
+			assignee: input.assignee ?? null,
 			trackedSeconds: 0,
 			timerStartedAt: null,
 			sortOrder: 0,
@@ -136,8 +138,8 @@ export async function create(input: CreateTaskInput): Promise<Task> {
 		};
 
 		await db.execute(
-			`INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, reminder_at, recurrence_rule, recurrence_parent_id, parent_id, estimate_minutes, sort_order, created_at, updated_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 0, $15, $16)`,
+			`INSERT INTO tasks (id, number, project_id, title, description, status, priority, due_date, end_date, reminder_at, recurrence_rule, recurrence_parent_id, parent_id, estimate_minutes, assignee, sort_order, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 0, $16, $17)`,
 			[
 				task.id,
 				task.number,
@@ -153,6 +155,7 @@ export async function create(input: CreateTaskInput): Promise<Task> {
 				task.recurrenceParentId,
 				task.parentId,
 				task.estimateMinutes,
+				task.assignee,
 				task.createdAt,
 				task.updatedAt
 			]

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { create, togglePin } from '$lib/repositories/task.repository';
+	import { create, togglePin, findAssignees } from '$lib/repositories/task.repository';
 	import { parseQuickAdd } from '$lib/quickadd/parse';
 	import { create as createAttachment } from '$lib/repositories/attachment.repository';
 	import { setTaskLabels } from '$lib/repositories/label.repository';
@@ -25,6 +25,7 @@
 	import ReminderPicker from './ReminderPicker.svelte';
 	import { getSettings } from '$lib/stores/settings';
 	import { parseEstimate } from '$lib/task/time';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import Icon from '$lib/components/Icon.svelte';
 
 	type PendingAttachment = {
@@ -73,6 +74,8 @@
 	let reminderAt = $state<string>('');
 	let recurrenceRule = $state('');
 	let estimateText = $state('');
+	let assigneeText = $state('');
+	let knownAssignees = $state<string[]>([]);
 	let selectedLabelIds = $state<string[]>([]);
 	let parsedPinned = $state(false);
 	let lastParsedKey = '';
@@ -180,6 +183,11 @@
 		if (open) requestAnimationFrame(() => titleRef?.focus());
 	});
 
+	$effect(() => {
+		if (!open) return;
+		void findAssignees().then((a) => (knownAssignees = a));
+	});
+
 	// draft autosave: a dialog closed without submitting keeps its fields in
 	// localStorage; an explicit opener (palette prefill, calendar "+", new
 	// sub-task) starts a draftless session and clears any older draft
@@ -261,6 +269,7 @@
 		endDate = '';
 		recurrenceRule = '';
 		estimateText = '';
+		assigneeText = '';
 		error = null;
 		createMore = false;
 		attachments = [];
@@ -352,7 +361,8 @@
 				reminderAt: reminderAt || null,
 				recurrenceRule: recurrenceRule || null,
 				parentId: initialParentId ?? null,
-				estimateMinutes: parseEstimate(estimateText)
+				estimateMinutes: parseEstimate(estimateText),
+				assignee: assigneeText || null
 			});
 
 			clearDraft();
@@ -384,6 +394,7 @@
 				endDate = '';
 				recurrenceRule = '';
 				estimateText = '';
+				assigneeText = '';
 				previewMode = false;
 				requestAnimationFrame(() => titleRef?.focus());
 			} else {
@@ -621,6 +632,46 @@
 							class="h-8 w-full rounded-lg border-input bg-transparent pr-3 pl-8 text-[12px] text-foreground outline-none placeholder:text-muted-foreground/50 dark:bg-input/30"
 						/>
 					</div>
+
+					<!-- assignee -->
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger>
+							{#snippet child({ props })}
+								<Button
+									{...props}
+									variant="outline"
+									size="sm"
+									class="h-8 w-full justify-start rounded-lg border-input bg-transparent px-2.5 text-[12px] font-normal shadow-none hover:bg-muted/50 {assigneeText
+										? 'text-foreground'
+										: 'text-muted-foreground/50'}"
+								>
+									{assigneeText ? `@${assigneeText}` : 'Assignee'}
+								</Button>
+							{/snippet}
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content class="w-40 p-1.5" align="start">
+							<DropdownMenu.Item
+								class="gap-2.5 py-1.5 text-[13px]"
+								onclick={() => (assigneeText = '')}
+							>
+								Unassigned
+								{#if !assigneeText}
+									<Icon icon="check" size={14} class="ml-auto text-muted-foreground" />
+								{/if}
+							</DropdownMenu.Item>
+							{#each knownAssignees as a (a)}
+								<DropdownMenu.Item
+									class="gap-2.5 py-1.5 text-[13px]"
+									onclick={() => (assigneeText = a)}
+								>
+									{a}
+									{#if assigneeText === a}
+										<Icon icon="check" size={14} class="ml-auto text-muted-foreground" />
+									{/if}
+								</DropdownMenu.Item>
+							{/each}
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
 				</div>
 
 				{#if error}
