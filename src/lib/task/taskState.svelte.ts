@@ -42,6 +42,19 @@ import { isTypingTarget, groupedTasks as computeGroups } from './utils';
 
 // persist collapsed status accordions across page reloads
 const COLLAPSED_KEY = 'tack-collapsed-statuses';
+const BOARD_GROUP_KEY = 'tack-board-group';
+
+export type BoardGroupBy = 'status' | 'assignee' | 'priority' | 'label';
+
+function loadBoardGroup(): BoardGroupBy {
+	try {
+		const v = localStorage.getItem(BOARD_GROUP_KEY);
+		if (v === 'status' || v === 'assignee' || v === 'priority' || v === 'label') return v;
+	} catch {
+		// localStorage unavailable (ssr) - start fresh
+	}
+	return 'status';
+}
 
 function loadCollapsed(): Set<TaskStatus> {
 	try {
@@ -99,7 +112,8 @@ export class TaskPageState {
 	selectedIds = $state<Set<string>>(new Set());
 	lastSelectedId = $state<string | null>(null);
 	collapsedStatuses = $state<Set<TaskStatus>>(loadCollapsed());
-	viewMode = $state<'list' | 'board' | 'calendar'>(getSettings().defaultViewMode);
+	viewMode = $state<'list' | 'board' | 'calendar' | 'timeline'>(getSettings().defaultViewMode);
+	boardGroupBy = $state<BoardGroupBy>(loadBoardGroup());
 	appSettings = $state<Settings>(getSettings());
 	pinnedFilter = $state(false);
 	todayFilter = $state(false);
@@ -711,6 +725,42 @@ export class TaskPageState {
 		}
 	}
 
+	// board drop when columns are grouped by a field other than status:
+	// the column key is the new value, no reorder is persisted
+	async handleBoardFieldDrop(state: DragDropState<Task>, columnKey: string) {
+		const task = state.draggedItem;
+		if (!task?.id) return;
+		if (this.boardGroupBy === 'priority') {
+			await this.changePriority(task, Number(columnKey) as TaskPriority);
+			return;
+		}
+		if (this.boardGroupBy === 'assignee') {
+			await this.changeAssignee(task, columnKey || null);
+			return;
+		}
+		// label mode: dropping onto a label column adds that label; the
+		// "No label" column is not a drop target
+		if (this.boardGroupBy === 'label') {
+			if (!columnKey || (task.labelIds ?? []).includes(columnKey)) return;
+			try {
+				await addLabelToTasks([task.id], columnKey);
+				await this.refresh();
+			} catch {
+				this.error = 'Failed to update labels';
+			}
+		}
+	}
+
+	async changeAssignee(task: Task, assignee: string | null) {
+		if ((task.assignee ?? null) === assignee) return;
+		try {
+			const updated = await update(task.id, { assignee });
+			if (updated) this.handleUpdated(updated);
+		} catch {
+			this.error = 'Failed to update assignee';
+		}
+	}
+
 	async handleListDrop(state: DragDropState<Task>, targetTask: Task) {
 		const draggedTask = state.draggedItem;
 		if (!draggedTask || !draggedTask.id || !state.dropPosition) return;
@@ -751,6 +801,13 @@ export class TaskPageState {
 		this.seedFromCache();
 		$effect(() => {
 			setSettings({ defaultViewMode: this.viewMode });
+		});
+		$effect(() => {
+			try {
+				localStorage.setItem(BOARD_GROUP_KEY, this.boardGroupBy);
+			} catch {
+				// ignore quota errors
+			}
 		});
 		$effect(() => {
 			useDndActive();
@@ -926,7 +983,8 @@ export class TaskPageState {
 		};
 		const setView = (event: Event) => {
 			const mode = (event as CustomEvent<string>).detail;
-			if (mode === 'list' || mode === 'board' || mode === 'calendar') this.viewMode = mode;
+			if (mode === 'list' || mode === 'board' || mode === 'calendar' || mode === 'timeline')
+				this.viewMode = mode;
 		};
 		const registry = getShortcutRegistry();
 
@@ -939,7 +997,7 @@ export class TaskPageState {
 		const unregisterToggleView = registry.register({
 			id: 'toggle-view',
 			run: () => {
-				const order = ['list', 'board', 'calendar'] as const;
+				const order = ['list', 'board', 'calendar', 'timeline'] as const;
 				const next = order[(order.indexOf(this.viewMode) + 1) % order.length];
 				this.viewMode = next;
 			}
@@ -952,7 +1010,12 @@ export class TaskPageState {
 		});
 
 		const savedView = getSettings().defaultViewMode;
-		if (savedView === 'list' || savedView === 'board' || savedView === 'calendar')
+		if (
+			savedView === 'list' ||
+			savedView === 'board' ||
+			savedView === 'calendar' ||
+			savedView === 'timeline'
+		)
 			this.viewMode = savedView;
 
 		window.addEventListener('open-task-dialog', openDialog);

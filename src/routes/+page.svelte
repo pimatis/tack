@@ -148,12 +148,14 @@
 		{#await import('../components/task/BoardView.svelte') then { default: BoardViewComponent }}
 			<svelte:component
 				this={BoardViewComponent}
+				tasks={state.filteredTasks}
 				groups={state.groupedTasks}
 				statusOrderList={statusOrder}
 				projects={state.projects}
 				appSettings={state.appSettings}
 				labelMap={state.labelMap}
 				selectedIds={state.selectedIds}
+				bind:groupBy={state.boardGroupBy}
 				bind:dialogOpen={state.dialogOpen}
 				onEdit={(t) => state.handleEdit(t)}
 				onChangeStatus={(t, s) => state.changeStatus(t, s)}
@@ -162,6 +164,7 @@
 				onDuplicate={(id) => state.duplicateTask(id)}
 				onDelete={(id) => state.handleDelete(id)}
 				onBoardDrop={(s, t) => state.handleBoardDrop(s, t)}
+				onFieldDrop={(s, k) => state.handleBoardFieldDrop(s, k)}
 			/>
 		{/await}
 	{:else if state.viewMode === 'calendar'}
@@ -182,6 +185,17 @@
 					state.createDueDate = d;
 					state.dialogOpen = true;
 				}}
+			/>
+		{/await}
+	{:else if state.viewMode === 'timeline'}
+		{#await import('../components/task/TimelineView.svelte') then { default: TimelineViewComponent }}
+			<svelte:component
+				this={TimelineViewComponent}
+				tasks={state.filteredTasks}
+				projects={state.projects}
+				appSettings={state.appSettings}
+				labelMap={state.labelMap}
+				onEdit={(t) => state.handleEdit(t)}
 			/>
 		{/await}
 	{/if}

@@ -10,13 +10,13 @@
 		hasFilters,
 		filteredCount,
 		totalCount,
-		viewMode = $bindable<'list' | 'board' | 'calendar'>()
+		viewMode = $bindable<'list' | 'board' | 'calendar' | 'timeline'>()
 	}: {
 		pinnedFilter: boolean;
 		hasFilters: boolean;
 		filteredCount: number;
 		totalCount: number;
-		viewMode: 'list' | 'board' | 'calendar';
+		viewMode: 'list' | 'board' | 'calendar' | 'timeline';
 	} = $props();
 </script>
 
@@ -101,6 +101,28 @@
 			</Tooltip.Trigger>
 			<Tooltip.Content side="bottom"
 				>Calendar view {@render shortcut('toggle-view')}</Tooltip.Content
+			>
+		</Tooltip.Root>
+		<Tooltip.Root>
+			<Tooltip.Trigger>
+				{#snippet child({ props })}
+					<Button
+						{...props}
+						variant="ghost"
+						size="icon-sm"
+						class="flex h-7 w-7 items-center justify-center rounded-md transition-colors {viewMode ===
+						'timeline'
+							? 'bg-foreground/10 text-foreground'
+							: 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'}"
+						onclick={() => (viewMode = 'timeline')}
+						aria-label="Timeline view"
+					>
+						<Icon icon="timeline" size={15} />
+					</Button>
+				{/snippet}
+			</Tooltip.Trigger>
+			<Tooltip.Content side="bottom"
+				>Timeline view {@render shortcut('toggle-view')}</Tooltip.Content
 			>
 		</Tooltip.Root>
 	</div>

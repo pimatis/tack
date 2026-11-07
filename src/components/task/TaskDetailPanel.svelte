@@ -33,7 +33,7 @@
 	import { startTimer, stopTimer } from '$lib/repositories/task.repository';
 	import type { TaskRelation, RelationType } from '$lib/types/relation';
 	import { relationLabels } from '$lib/types/relation';
-	import { parseEstimate, formatMinutes, trackedSeconds, formatSeconds } from '$lib/task/time';
+	import { parseEstimate, formatMinutes, formatSeconds } from '$lib/task/time';
 	import RelationPicker from './RelationPicker.svelte';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import type { Label } from '$lib/types/label';

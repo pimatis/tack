@@ -77,19 +77,23 @@
 	<Select.Root
 		type="single"
 		value={settings.defaultViewMode}
-		onValueChange={(v) => update('defaultViewMode', v as 'list' | 'board' | 'calendar')}
+		onValueChange={(v) =>
+			update('defaultViewMode', v as 'list' | 'board' | 'calendar' | 'timeline')}
 	>
 		<Select.Trigger class="w-32">
 			{settings.defaultViewMode === 'list'
 				? 'List'
 				: settings.defaultViewMode === 'board'
 					? 'Board'
-					: 'Calendar'}
+					: settings.defaultViewMode === 'calendar'
+						? 'Calendar'
+						: 'Timeline'}
 		</Select.Trigger>
 		<Select.Content>
 			<Select.Item value="list" label="List">List</Select.Item>
 			<Select.Item value="board" label="Board">Board</Select.Item>
 			<Select.Item value="calendar" label="Calendar">Calendar</Select.Item>
+			<Select.Item value="timeline" label="Timeline">Timeline</Select.Item>
 		</Select.Content>
 	</Select.Root>
 </div>

@@ -60,6 +60,7 @@ export const ICONS = {
 	stop: 'stop-circle',
 	stopwatch: 'timer',
 	tag: 'sell',
+	timeline: 'view-timeline',
 	trash: 'delete',
 	undo: 'undo',
 	widget: 'widgets'

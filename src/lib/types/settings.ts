@@ -17,7 +17,7 @@ export type Settings = {
 	// color palette preset; `default` is the built-in monochrome theme
 	themePreset: ColorPresetId;
 	sidebarCollapsed: boolean;
-	defaultViewMode: 'list' | 'board' | 'calendar';
+	defaultViewMode: 'list' | 'board' | 'calendar' | 'timeline';
 	defaultStatus: 'backlog' | 'todo' | 'in_progress';
 	defaultPriority: 0 | 1 | 2 | 3 | 4;
 	dueSoonThreshold: number;

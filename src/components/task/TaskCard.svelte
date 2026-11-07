@@ -33,9 +33,11 @@
 		onTogglePin,
 		onDuplicate,
 		onDelete,
-		onBoardDrop
+		onBoardDrop,
+		container
 	}: {
 		task: Task;
+		container: string;
 		projects: Project[];
 		appSettings: Settings;
 		labelMap: Map<string, Label>;
@@ -67,7 +69,7 @@
 	<article
 		use:sortableItem={{
 			dragData: task,
-			container: `board-${task.status}`,
+			container,
 			onDrop: (state: DragDropState<Task>) => onBoardDrop(state, task)
 		}}
 		class="group/card flex cursor-grab flex-col gap-2 rounded-lg border border-border bg-muted/20 p-2.5 transition-all hover:border-border/60 hover:bg-muted/40 active:cursor-grabbing {selectedIds.has(

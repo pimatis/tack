@@ -41,7 +41,7 @@ export const SHORTCUTS: ShortcutDefinition[] = [
 	},
 	{
 		id: 'toggle-view',
-		label: 'Toggle list / board view',
+		label: 'Cycle task view',
 		keys: [{ key: '\\', mod: metaOrCtrl }]
 	},
 	{
